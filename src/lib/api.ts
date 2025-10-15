@@ -281,6 +281,13 @@ class APIClient {
     return response.data.data!.image_url;
   }
 
+  async deleteItemImage(id: string, imageUrl: string): Promise<Item> {
+    const response = await this.client.delete<APIResponse<{ item: Item }>>(`/api/v1/items/${id}/image`, {
+      data: { image_url: imageUrl }
+    });
+    return response.data.data!.item;
+  }
+
   async generateItemBarcode(id: string): Promise<Item> {
     const response = await this.client.post<APIResponse<Item>>(`/api/v1/items/${id}/generate-barcode`);
     return this.handleResponse<Item>(response);
