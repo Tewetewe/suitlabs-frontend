@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/Button';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { formatCurrency } from '@/lib/currency';
+import { formatDate, formatDateTime } from '@/lib/date';
 import { Rental } from '@/types';
 import { 
   Calendar, 
@@ -75,23 +77,6 @@ export function RentalDetailsModal({
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   const totalAmount = rental.total_cost + rental.late_fee + rental.damage_charges;
   const refundableDeposit = rental.security_deposit - rental.damage_charges;
@@ -102,11 +87,32 @@ export function RentalDetailsModal({
       <div className="space-y-6">
         {/* Status Header */}
         <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-          <div className="flex items-center gap-3">
-            {getStatusIcon(rental.status)}
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(rental.status)}`}>
-              {rental.status.charAt(0).toUpperCase() + rental.status.slice(1)}
-            </span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              {getStatusIcon(rental.status)}
+              <div>
+                <div className="text-sm text-gray-600">Rental Status</div>
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(rental.status)}`}>
+                  {rental.status.charAt(0).toUpperCase() + rental.status.slice(1)}
+                </span>
+              </div>
+            </div>
+            {rental.status === 'active' && (
+              <div className="text-sm text-gray-600">
+                <div className="font-medium">Days Remaining</div>
+                <div className="text-lg font-semibold text-blue-600">
+                  {Math.max(0, Math.ceil((new Date(rental.return_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))}
+                </div>
+              </div>
+            )}
+            {rental.status === 'overdue' && (
+              <div className="text-sm text-gray-600">
+                <div className="font-medium">Days Overdue</div>
+                <div className="text-lg font-semibold text-red-600">
+                  {Math.max(0, Math.ceil((new Date().getTime() - new Date(rental.return_date).getTime()) / (1000 * 60 * 60 * 24)))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="text-right">
             <div className="text-lg font-semibold text-gray-900">
@@ -129,13 +135,27 @@ export function RentalDetailsModal({
             </div>
             <div>
               <div className="text-gray-500">Start</div>
-              <div className="font-medium">{new Date(rental.rental_date).toLocaleDateString()}</div>
+              <div className="font-medium">{formatDate(rental.rental_date)}</div>
             </div>
             <div>
               <div className="text-gray-500">Return</div>
-              <div className="font-medium">{new Date(rental.return_date).toLocaleDateString()}</div>
+              <div className="font-medium">{formatDate(rental.return_date)}</div>
             </div>
           </div>
+          
+          {/* User Tracking Information */}
+          {(rental.creator || rental.updater) && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="text-xs text-gray-500 space-y-1">
+                {rental.creator && (
+                  <div>Staff created: {rental.creator.first_name} {rental.creator.last_name}</div>
+                )}
+                {rental.updater && (
+                  <div>Staff updated: {rental.updater.first_name} {rental.updater.last_name}</div>
+                )}
+              </div>
+            </div>
+          )}
           <div className="flex justify-end mt-3">
             <Button variant="ghost" size="sm" onClick={() => setShowDetails(!showDetails)}>
               {showDetails ? 'Hide details' : 'Show details'}
@@ -157,16 +177,16 @@ export function RentalDetailsModal({
               <div>
                 <div className="text-sm font-medium text-gray-500">Name</div>
                 <div className="text-sm text-gray-900">
-                  {rental.user?.first_name} {rental.user?.last_name}
+                  {rental.customer?.first_name} {rental.customer?.last_name}
                 </div>
               </div>
               <div>
                 <div className="text-sm font-medium text-gray-500">Email</div>
-                <div className="text-sm text-gray-900">{rental.user?.email}</div>
+                <div className="text-sm text-gray-900">{rental.customer?.email}</div>
               </div>
               <div>
                 <div className="text-sm font-medium text-gray-500">Phone</div>
-                <div className="text-sm text-gray-900">{rental.user?.phone}</div>
+                <div className="text-sm text-gray-900">{rental.customer?.phone}</div>
               </div>
               <div>
                 <div className="text-sm font-medium text-gray-500">User ID</div>
@@ -242,6 +262,12 @@ export function RentalDetailsModal({
                 <div className="text-sm font-medium text-gray-500">Planned Return</div>
                 <div className="text-sm text-gray-900">{formatDate(rental.return_date)}</div>
               </div>
+              {rental.actual_pickup_date && (
+                <div>
+                  <div className="text-sm font-medium text-gray-500">Actual Pickup</div>
+                  <div className="text-sm text-gray-900">{formatDateTime(rental.actual_pickup_date)}</div>
+                </div>
+              )}
               {rental.actual_return_date && (
                 <div>
                   <div className="text-sm font-medium text-gray-500">Actual Return</div>
@@ -257,6 +283,40 @@ export function RentalDetailsModal({
             </div>
           </div>
         </div>
+
+        {/* Identity Card */}
+        {rental.identity_card_url && (
+          <div className="no-break print-section">
+            <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
+              <FileText className="h-5 w-5 mr-2" />
+              Identity Card
+            </h3>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="text-sm text-gray-600 mb-3">
+                Customer identity card uploaded during pickup
+              </div>
+              <div className="flex justify-center">
+                <div className="relative max-w-full max-h-96">
+                  <Image
+                    src={rental.identity_card_url}
+                    alt="Customer Identity Card"
+                    width={400}
+                    height={400}
+                    className="max-w-full h-auto max-h-96 rounded-lg border border-gray-200 shadow-sm object-contain"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = '<div class="text-sm text-red-500">Failed to load identity card image</div>';
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Financial Information */}
         <div className="no-break print-section">

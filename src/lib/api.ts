@@ -177,6 +177,11 @@ class APIClient {
     return 'item' in payload.data ? (payload.data as { item: Item }).item : (payload.data as Item);
   }
 
+  async getItemRentals(id: string): Promise<{ rentals: Rental[]; bookings: Booking[] }> {
+    const response = await this.client.get<APIResponse<{ rentals: Rental[]; bookings: Booking[] }>>(`/api/v1/items/${id}/rentals`);
+    return response.data.data!;
+  }
+
   async createItem(item: CreateItemRequest): Promise<Item> {
     const response = await this.client.post<CreateResponse<Item>>('/api/v1/items', item);
     return response.data.data;
@@ -208,7 +213,7 @@ class APIClient {
         if (value !== undefined && value !== null && value !== '') params.append(key, String(value));
       });
     }
-    const response = await this.client.get<ItemPaginatedResponse>(`/api/v1/items/available${params.toString() ? `?${params}` : ''}`);
+    const response = await this.client.get<ItemPaginatedResponse>(`/api/v1/items/available${params.toString() ? `?${params.toString()}` : ''}`);
     return response.data;
   }
 
@@ -279,6 +284,15 @@ class APIClient {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
     return response.data.data!.image_url;
+  }
+
+  async uploadIdentityCard(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('image', file);
+    const response = await this.client.post<APIResponse<{ url: string }>>('/api/v1/upload/identity-card', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data!.url;
   }
 
   async deleteItemImage(id: string, imageUrl: string): Promise<Item> {
@@ -511,8 +525,12 @@ class APIClient {
     return response.data.data!;
   }
 
-  async createRentalFromBooking(bookingId: string): Promise<Rental> {
-    const response = await this.client.post<APIResponse<Rental>>(`/api/v1/rentals/from-booking/${bookingId}`);
+  async createRentalFromBooking(bookingId: string, userId: string): Promise<Rental> {
+    const response = await this.client.post<APIResponse<Rental>>(`/api/v1/rentals/from-booking/${bookingId}`, {}, {
+      headers: {
+        'X-User-ID': userId
+      }
+    });
     return response.data.data!;
   }
 
@@ -521,27 +539,36 @@ class APIClient {
     return response.data.data!;
   }
 
-  async activateRental(rentalId: string): Promise<Rental> {
-    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/activate`);
+  async activateRental(rentalId: string, userId: string, identityCardUrl?: string): Promise<Rental> {
+    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/activate`, {
+      user_id: userId,
+      identity_card_url: identityCardUrl
+    });
     return response.data.data!;
   }
 
-  async completeRental(rentalId: string, actualReturnDate?: string, damageCharges?: number, damageNotes?: string): Promise<Rental> {
-    const body: Record<string, unknown> = {};
+  async completeRental(rentalId: string, userId: string, actualReturnDate?: string, damageCharges?: number, damageNotes?: string): Promise<Rental> {
+    const body: Record<string, unknown> = {
+      user_id: userId
+    };
     if (actualReturnDate) body.actual_return_date = actualReturnDate;
     if (typeof damageCharges === 'number') body.damage_charges = damageCharges;
     if (damageNotes) body.damage_notes = damageNotes;
-    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/complete`, Object.keys(body).length ? body : undefined);
+    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/complete`, body);
     return response.data.data!;
   }
 
-  async cancelRental(rentalId: string): Promise<Rental> {
-    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/cancel`);
+  async cancelRental(rentalId: string, userId: string, reason?: string): Promise<Rental> {
+    const body: Record<string, unknown> = {
+      user_id: userId
+    };
+    if (reason) body.reason = reason;
+    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/cancel`, body);
     return response.data.data!;
   }
 
-  async cancelRentalWithReason(rentalId: string, reason: string): Promise<Rental> {
-    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/cancel-with-reason`, { reason });
+  async cancelRentalWithReason(rentalId: string, reason: string, userId: string): Promise<Rental> {
+    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/cancel-with-reason`, { reason, user_id: userId });
     return response.data.data!;
   }
 

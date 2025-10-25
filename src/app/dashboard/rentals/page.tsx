@@ -8,14 +8,18 @@ import { Input } from '@/components/ui/Input';
 import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
+import { formatDate, formatDateTime } from '@/lib/date';
 import { Rental } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Edit, FileText, User, Calendar, DollarSign, Eye } from 'lucide-react';
 import { CreateRentalModal } from '@/components/modals/CreateRentalModal';
 import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
 import { RentalDetailsModal } from '@/components/modals/RentalDetailsModal';
 import { EditRentalModal } from '@/components/modals/EditRentalModal';
+import { PickupRentalModal } from '@/components/modals/PickupRentalModal';
 
 export default function RentalsPage() {
+  const { user } = useAuth();
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,6 +31,7 @@ export default function RentalsPage() {
   const [showChangeDatesModal, setShowChangeDatesModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showPickupModal, setShowPickupModal] = useState(false);
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [damageCharges, setDamageCharges] = useState<string>('');
@@ -88,9 +93,7 @@ export default function RentalsPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
+
 
   const handleViewRental = (rental: Rental) => {
     setSelectedRental(rental);
@@ -99,12 +102,22 @@ export default function RentalsPage() {
 
   const handleActivateRental = async (rentalId: string) => {
     try {
-      await apiClient.activateRental(rentalId);
+      if (!user?.id) {
+        alert('User not authenticated. Please login again.');
+        return;
+      }
+      await apiClient.activateRental(rentalId, user.id);
       await loadRentals();
       setShowDetailsModal(false);
     } catch (error) {
       console.error('Failed to activate rental:', error);
     }
+  };
+
+  const handlePickupRental = (rentalId: string) => {
+    const rental = rentals.find(r => r.id === rentalId) || null;
+    setSelectedRental(rental);
+    setShowPickupModal(true);
   };
 
   const handleCompleteRental = (rentalId: string) => {
@@ -125,7 +138,11 @@ export default function RentalsPage() {
         const dt = new Date(actualReturnDate);
         if (!isNaN(dt.getTime())) isoActual = dt.toISOString();
       }
-      await apiClient.completeRental(selectedRental.id, isoActual, parsedCharge, damageNotes || undefined);
+      if (!user?.id) {
+        alert('User not authenticated. Please login again.');
+        return;
+      }
+      await apiClient.completeRental(selectedRental.id, user.id, isoActual, parsedCharge, damageNotes || undefined);
       // Optionally send all rented items to maintenance
       if (sendToMaintenance && Array.isArray(selectedRental.items)) {
         for (const it of selectedRental.items) {
@@ -200,9 +217,14 @@ export default function RentalsPage() {
       return;
     }
 
+    if (!user?.id) {
+      alert('User not authenticated. Please login again.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await apiClient.cancelRentalWithReason(selectedRental.id, cancellationReason);
+      await apiClient.cancelRentalWithReason(selectedRental.id, cancellationReason, user.id);
       await loadRentals();
       setShowCancelModal(false);
       setSelectedRental(null);
@@ -221,6 +243,9 @@ export default function RentalsPage() {
     rental.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (rental.items?.some(item => item.item?.name?.toLowerCase().includes(searchTerm.toLowerCase())) || false)
   ) : [];
+
+  // Filter out cancelled rentals for statistics
+  const activeRentals = filteredRentals.filter(r => r.status !== 'cancelled');
 
   return (
     <DashboardLayout>
@@ -324,6 +349,9 @@ export default function RentalsPage() {
                       <div>
                         <div>Start: {formatDate(rental.rental_date)}</div>
                         <div>Planned Return: {formatDate(rental.return_date)}</div>
+                        {rental.actual_pickup_date && (
+                          <div>Picked up: {formatDateTime(rental.actual_pickup_date)}</div>
+                        )}
                         {rental.actual_return_date && (
                           <div>Returned: {formatDate(rental.actual_return_date)}</div>
                         )}
@@ -335,8 +363,27 @@ export default function RentalsPage() {
                     </div>
                     <div className="flex items-center text-sm text-gray-600">
                       <User className="h-4 w-4 mr-2" />
-                      <span>User ID: {rental.user_id.slice(-8)}</span>
+                      <div>
+                        <div className="font-medium">
+                          {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : `Customer ID: ${rental.user_id.slice(-8)}`}
+                        </div>
+                        {rental.customer && (
+                          <div className="text-xs text-gray-500">{rental.customer.email}</div>
+                        )}
+                      </div>
                     </div>
+                    <div className="flex items-center text-xs text-gray-500">
+                      <User className="h-3 w-3 mr-1" />
+                      <span>
+                        Staff created: {rental.creator ? `${rental.creator.first_name} ${rental.creator.last_name}` : 'Unknown'}
+                      </span>
+                    </div>
+                    {rental.updater && (
+                      <div className="flex items-center text-xs text-gray-500">
+                        <User className="h-3 w-3 mr-1" />
+                        <span>Staff updated: {rental.updater.first_name} {rental.updater.last_name}</span>
+                      </div>
+                    )}
                   </div>
 
                   {rental.items && rental.items.length > 0 && (
@@ -368,6 +415,11 @@ export default function RentalsPage() {
                       <Button variant="ghost" size="sm" onClick={() => handleEditRental(rental)}>
                         <Edit className="h-4 w-4" />
                       </Button>
+                      {rental.status === 'pending' && (
+                        <Button variant="primary" size="sm" onClick={() => handlePickupRental(rental.id)}>
+                          Pickup
+                        </Button>
+                      )}
                       {rental.status === 'active' && (
                         <Button variant="secondary" size="sm" onClick={() => handleCompleteRental(rental.id)}>
                           Complete Rental
@@ -392,12 +444,12 @@ export default function RentalsPage() {
         </div>
 
         {/* Summary Stats */}
-        {!loading && filteredRentals.length > 0 && (
+        {!loading && activeRentals.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <Card>
               <CardContent className="text-center">
                 <div className="text-2xl font-bold text-gray-900">
-                  {filteredRentals.length}
+                  {activeRentals.length}
                 </div>
                 <div className="text-sm text-gray-500">Total Rentals</div>
               </CardContent>
@@ -405,7 +457,7 @@ export default function RentalsPage() {
             <Card>
               <CardContent className="text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {filteredRentals.filter(r => r.status === 'active').length}
+                  {activeRentals.filter(r => r.status === 'active').length}
                 </div>
                 <div className="text-sm text-gray-500">Active</div>
               </CardContent>
@@ -413,7 +465,7 @@ export default function RentalsPage() {
             <Card>
               <CardContent className="text-center">
                 <div className="text-2xl font-bold text-gray-600">
-                  {filteredRentals.filter(r => r.status === 'completed').length}
+                  {activeRentals.filter(r => r.status === 'completed').length}
                 </div>
                 <div className="text-sm text-gray-500">Completed</div>
               </CardContent>
@@ -422,7 +474,7 @@ export default function RentalsPage() {
               <CardContent className="text-center">
                 <div className="text-2xl font-bold text-blue-600">
                   {formatCurrency(
-                    filteredRentals.reduce((sum, rental) => sum + ((rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0)), 0)
+                    activeRentals.reduce((sum, rental) => sum + ((rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0)), 0)
                   )}
                 </div>
                 <div className="text-sm text-gray-500">Total Revenue</div>
@@ -671,6 +723,16 @@ export default function RentalsPage() {
             </div>
           </div>
         )}
+
+        <PickupRentalModal
+          isOpen={showPickupModal}
+          onClose={() => {
+            setShowPickupModal(false);
+            setSelectedRental(null);
+          }}
+          onSuccess={() => loadRentals()}
+          rental={selectedRental}
+        />
       </div>
     </DashboardLayout>
   );

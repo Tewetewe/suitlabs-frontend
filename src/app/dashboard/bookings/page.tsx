@@ -10,11 +10,14 @@ import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { formatCurrency } from '@/lib/currency';
+import { formatDate } from '@/lib/date';
 import { Booking, BookingFilters, InvoiceData, Customer, Item, PackagePricing } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
-import { Plus, Edit, Calendar, User, DollarSign, Clock, Filter, Eye, FileText, Download } from 'lucide-react';
+import { Plus, Edit, Calendar, User, DollarSign, Clock, Filter, Eye, FileText, Download, Shirt } from 'lucide-react';
 
 export default function BookingsPage() {
+  const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<BookingFilters>({});
@@ -133,6 +136,11 @@ export default function BookingsPage() {
 
     try {
       setCreating(true);
+      if (!user?.id) {
+        alert('User not authenticated. Please login again.');
+        return;
+      }
+
       const payload = {
         customer_id: bookingForm.customer_id,
         booking_date: new Date(bookingForm.booking_date).toISOString(),
@@ -147,6 +155,7 @@ export default function BookingsPage() {
         paid_amount: downPayment,
         discount_amount: bookingDiscount,
         remaining_amount: remainingAmount,
+        created_by: user.id, // Add the current user ID
         items: validItems.map(it => ({
           item_id: it.item_id,
           quantity: it.quantity,
@@ -394,13 +403,7 @@ export default function BookingsPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
+
 
   const statusOptions = [
     { value: '', label: 'All Status' },
@@ -544,8 +547,8 @@ export default function BookingsPage() {
         <div class="invoice-info">
           <h2>Invoice #${invoice.invoice_number || 'N/A'}</h2>
           <p><strong>Invoice Type:</strong> ${(invoice.invoice_type || 'Unknown').toUpperCase()}</p>
-          <p><strong>Date:</strong> ${invoice.generated_at ? new Date(invoice.generated_at).toLocaleDateString() : 'N/A'}</p>
-          <p><strong>Due Date:</strong> ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}</p>
+          <p><strong>Date:</strong> ${invoice.generated_at ? formatDate(invoice.generated_at) : 'N/A'}</p>
+          <p><strong>Due Date:</strong> ${invoice.due_date ? formatDate(invoice.due_date) : 'N/A'}</p>
         </div>
         
         <div class="customer-info">
@@ -736,6 +739,18 @@ export default function BookingsPage() {
                           </div>
                         </div>
                       )}
+                      <div className="flex items-center text-xs text-gray-500 mt-1">
+                        <User className="h-3 w-3 mr-1" />
+                        <span>
+                          Staff created: {booking.creator ? `${booking.creator.first_name} ${booking.creator.last_name}` : 'Unknown'}
+                        </span>
+                      </div>
+                      {booking.updater && (
+                        <div className="flex items-center text-xs text-gray-500">
+                          <User className="h-3 w-3 mr-1" />
+                          <span>Staff updated: {booking.updater.first_name} {booking.updater.last_name}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-semibold text-gray-900">
@@ -777,6 +792,66 @@ export default function BookingsPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Rental Information */}
+                  {booking.rental && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between text-sm text-blue-800 mb-3">
+                        <div className="flex items-center">
+                          <Shirt className="h-4 w-4 mr-2 flex-shrink-0" />
+                          <span className="font-medium">Rental Details</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-blue-700 font-medium">Status:</span>
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            booking.rental.status === 'active' ? 'bg-green-100 text-green-800' :
+                            booking.rental.status === 'completed' ? 'bg-gray-100 text-gray-800' :
+                            booking.rental.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                            booking.rental.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {booking.rental.status.charAt(0).toUpperCase() + booking.rental.status.slice(1)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-blue-700 font-medium">Rental Period:</span>
+                          <div className="text-blue-600 mt-1">
+                            {formatDate(booking.rental.rental_date)} - {formatDate(booking.rental.return_date)}
+                          </div>
+                        </div>
+                        {booking.rental.status === 'active' && (
+                          <div>
+                            <span className="text-blue-700 font-medium">Days Remaining:</span>
+                            <div className="text-blue-600 font-semibold mt-1">
+                              {Math.max(0, Math.ceil((new Date(booking.rental.return_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} days
+                            </div>
+                          </div>
+                        )}
+                        {booking.rental.status === 'overdue' && (
+                          <div>
+                            <span className="text-red-700 font-medium">Days Overdue:</span>
+                            <div className="text-red-600 font-semibold mt-1">
+                              {Math.max(0, Math.ceil((new Date().getTime() - new Date(booking.rental.return_date).getTime()) / (1000 * 60 * 60 * 24)))} days
+                            </div>
+                          </div>
+                        )}
+                        {booking.rental.actual_pickup_date && (
+                          <div>
+                            <span className="text-blue-700 font-medium">Picked Up:</span>
+                            <div className="text-blue-600 mt-1">{formatDate(booking.rental.actual_pickup_date)}</div>
+                          </div>
+                        )}
+                        {booking.rental.actual_return_date && (
+                          <div>
+                            <span className="text-blue-700 font-medium">Returned:</span>
+                            <div className="text-blue-600 mt-1">{formatDate(booking.rental.actual_return_date)}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Items Summary */}
                   {booking.items && booking.items.length > 0 && (
@@ -1047,7 +1122,7 @@ export default function BookingsPage() {
             <div><strong>ID:</strong> {activeBooking?.id}</div>
             <div><strong>Customer:</strong> {activeBooking?.customer?.first_name} {activeBooking?.customer?.last_name} ({activeBooking?.customer?.email})</div>
             <div><strong>Status:</strong> {activeBooking?.status} • <strong>Payment:</strong> {activeBooking?.payment_status}</div>
-            <div><strong>Dates:</strong> {activeBooking?.booking_date && new Date(activeBooking.booking_date).toLocaleDateString()} {activeBooking?.appointment_date && `→ ${new Date(activeBooking.appointment_date).toLocaleDateString()}`}</div>
+            <div><strong>Dates:</strong> {activeBooking?.booking_date && formatDate(activeBooking.booking_date)} {activeBooking?.appointment_date && `→ ${formatDate(activeBooking.appointment_date)}`}</div>
             {!activeBooking?.package_pricing_id && (
               <div><strong>Total:</strong> {formatCurrency((activeBooking?.total_amount || 0) - (activeBooking?.discount_amount || 0))}</div>
             )}

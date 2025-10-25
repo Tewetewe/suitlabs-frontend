@@ -9,8 +9,9 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { BarcodeLabel } from '@/components/ui/BarcodeLabel';
 import { apiClient } from '@/lib/api';
-import { Item } from '@/types';
+import { Item, Rental, Booking } from '@/types';
 import { formatCurrency } from '@/lib/currency';
+import { formatDate } from '@/lib/date';
 
 export default function ItemDetailPage() {
   const routeParams = useParams<{ id: string }>();
@@ -25,6 +26,22 @@ export default function ItemDetailPage() {
   const [isZoomed, setIsZoomed] = useState(false);
   const [generatingBarcode, setGeneratingBarcode] = useState(false);
   const [labelImageUrl, setLabelImageUrl] = useState<string | null>(null);
+  const [rentals, setRentals] = useState<Rental[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loadingRentals, setLoadingRentals] = useState(false);
+
+  const loadRentalsAndBookings = async () => {
+    try {
+      setLoadingRentals(true);
+      const data = await apiClient.getItemRentals(id);
+      setRentals(data.rentals);
+      setBookings(data.bookings);
+    } catch (e) {
+      console.error('Error loading rentals and bookings:', e);
+    } finally {
+      setLoadingRentals(false);
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -33,6 +50,8 @@ export default function ItemDetailPage() {
         // Load item (category is preloaded by backend)
         const itemData = await apiClient.getItem(id);
         setItem(itemData);
+        // Load rental and booking information
+        await loadRentalsAndBookings();
       } catch (e) {
         console.error('Error loading item:', e);
         setError('Failed to load item');
@@ -41,6 +60,7 @@ export default function ItemDetailPage() {
       }
     };
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
 
@@ -197,6 +217,7 @@ export default function ItemDetailPage() {
         ) : !item ? (
           <div className="text-gray-500">Item not found</div>
         ) : (
+          <>
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -531,6 +552,91 @@ export default function ItemDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Rental and Booking Information */}
+          {(rentals.length > 0 || bookings.length > 0) && (
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Current Rentals & Bookings</h2>
+                
+                {/* Active Rentals */}
+                {rentals.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-md font-medium text-gray-700 mb-3">Active Rentals ({rentals.length})</h3>
+                    <div className="space-y-3">
+                      {rentals.map((rental) => (
+                        <div key={rental.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="font-medium text-red-900">
+                                Rental #{rental.id.slice(-8)}
+                              </div>
+                              <div className="text-sm text-red-700">
+                                Customer: {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : 'Unknown'}
+                              </div>
+                              <div className="text-sm text-red-700">
+                                Dates: {formatDate(rental.rental_date)} - {formatDate(rental.return_date)}
+                              </div>
+                              <div className="text-sm text-red-700">
+                                Status: <span className="font-medium">{rental.status}</span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-medium text-red-900">
+                                {formatCurrency(rental.total_cost)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Bookings */}
+                {bookings.length > 0 && (
+                  <div>
+                    <h3 className="text-md font-medium text-gray-700 mb-3">Active Bookings ({bookings.length})</h3>
+                    <div className="space-y-3">
+                      {bookings.map((booking) => (
+                        <div key={booking.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="font-medium text-yellow-900">
+                                Booking #{booking.id.slice(-8)}
+                              </div>
+                              <div className="text-sm text-yellow-700">
+                                Customer: {booking.customer ? `${booking.customer.first_name} ${booking.customer.last_name}` : 'Unknown'}
+                              </div>
+                              <div className="text-sm text-yellow-700">
+                                Date: {formatDate(booking.booking_date)}
+                                {booking.appointment_date && ` → ${formatDate(booking.appointment_date)}`}
+                              </div>
+                              <div className="text-sm text-yellow-700">
+                                Status: <span className="font-medium">{booking.status}</span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-medium text-yellow-900">
+                                {formatCurrency((booking.total_amount || 0) - (booking.discount_amount || 0))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {loadingRentals && (
+                  <div className="text-center text-gray-500 py-4">
+                    Loading rental and booking information...
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </>
         )}
       </div>
     </DashboardLayout>

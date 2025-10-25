@@ -209,6 +209,10 @@ export interface Booking {
   rental_id?: string; // Link to rental
   rental?: Rental; // Link to rental details
   notes?: string;
+  created_by: string; // User who created the booking
+  updated_by?: string; // User who last updated the booking
+  creator?: User; // User who created this booking
+  updater?: User; // User who last updated this booking
   created_at: string;
   updated_at: string;
   items?: BookingItem[];
@@ -232,18 +236,24 @@ export interface Rental {
   id: string;
   user_id: string;
   booking_id?: string; // Link to source booking
-  user?: User;
+  customer?: Customer; // Customer who rented (user_id actually stores customer ID)
   items?: RentalItem[]; // Rental items
   booking?: Booking; // Link to booking details
   rental_date: string; // ISO
   return_date: string; // ISO
-  actual_return_date?: string;
+  actual_pickup_date?: string; // ISO
+  actual_return_date?: string; // ISO
   status: 'pending' | 'active' | 'completed' | 'cancelled' | 'overdue';
   total_cost: number;
   security_deposit: number;
   late_fee: number;
   damage_charges: number;
+  identity_card_url?: string; // URL to uploaded identity card image
   notes?: string;
+  created_by: string; // User who created the rental
+  updated_by?: string; // User who last updated the rental
+  creator?: User; // User who created this rental
+  updater?: User; // User who last updated this rental
   created_at: string;
   updated_at: string;
 }

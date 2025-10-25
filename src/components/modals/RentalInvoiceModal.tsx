@@ -3,6 +3,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/currency';
+import { formatDate } from '@/lib/date';
 import { Rental } from '@/types';
 
 interface RentalInvoiceModalProps {
@@ -32,14 +33,61 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
           </div>
         </div>
 
-        <div className="space-y-2 text-sm text-gray-700">
-          <div><span className="font-medium">Rental ID:</span> {rental.id}</div>
-          <div><span className="font-medium">Customer:</span> {rental.user_id.slice(-8)}</div>
-          <div><span className="font-medium">Rental Date:</span> {new Date(rental.rental_date).toLocaleDateString()}</div>
-          <div><span className="font-medium">Return Date:</span> {new Date(rental.return_date).toLocaleDateString()}</div>
-          {rental.actual_return_date && (
-            <div><span className="font-medium">Actual Return:</span> {new Date(rental.actual_return_date).toLocaleDateString()}</div>
-          )}
+        <div className="space-y-3 text-sm text-gray-700">
+          <div className="flex justify-between items-center">
+            <div><span className="font-medium">Rental ID:</span> {rental.id}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Status:</span>
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                rental.status === 'active' ? 'bg-green-100 text-green-800' :
+                rental.status === 'completed' ? 'bg-gray-100 text-gray-800' :
+                rental.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                rental.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                'bg-yellow-100 text-yellow-800'
+              }`}>
+                {rental.status.charAt(0).toUpperCase() + rental.status.slice(1)}
+              </span>
+            </div>
+          </div>
+          <div><span className="font-medium">Customer:</span> {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : rental.user_id.slice(-8)}</div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <span className="font-medium">Rental Date:</span> {formatDate(rental.rental_date)}
+            </div>
+            <div>
+              <span className="font-medium">Return Date:</span> {formatDate(rental.return_date)}
+            </div>
+            {rental.actual_pickup_date && (
+              <div>
+                <span className="font-medium">Actual Pickup:</span> {formatDate(rental.actual_pickup_date)}
+              </div>
+            )}
+            {rental.actual_return_date && (
+              <div>
+                <span className="font-medium">Actual Return:</span> {formatDate(rental.actual_return_date)}
+              </div>
+            )}
+            <div>
+              <span className="font-medium">Duration:</span> {Math.ceil((new Date(rental.return_date).getTime() - new Date(rental.rental_date).getTime()) / (1000 * 60 * 60 * 24))} days
+            </div>
+            {rental.status === 'active' && (
+              <div>
+                <span className="font-medium text-blue-700">Days Remaining:</span>
+                <span className="ml-1 text-blue-600 font-semibold">
+                  {Math.max(0, Math.ceil((new Date(rental.return_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} days
+                </span>
+              </div>
+            )}
+            {rental.status === 'overdue' && (
+              <div>
+                <span className="font-medium text-red-700">Days Overdue:</span>
+                <span className="ml-1 text-red-600 font-semibold">
+                  {Math.max(0, Math.ceil((new Date().getTime() - new Date(rental.return_date).getTime()) / (1000 * 60 * 60 * 24)))} days
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="mt-6">

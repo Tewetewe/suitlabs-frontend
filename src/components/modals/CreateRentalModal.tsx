@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/Select';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { apiClient } from '@/lib/api';
 import { Booking, CreateRentalRequest } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 import { Calendar, AlertCircle, FileText } from 'lucide-react';
 
 interface CreateRentalModalProps {
@@ -16,6 +17,7 @@ interface CreateRentalModalProps {
 }
 
 export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalModalProps) {
+  const { user } = useAuth();
   const [form, setForm] = useState<CreateRentalRequest>({
     user_id: '',
     suit_id: '',
@@ -93,9 +95,14 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
       setErrors({ submit: 'Rental and Return dates are required' });
       return;
     }
+    if (!user?.id) {
+      setErrors({ submit: 'User not authenticated. Please login again.' });
+      return;
+    }
+
     try {
       setLoading(true);
-      const rental = await apiClient.createRentalFromBooking(selectedBookingId);
+      const rental = await apiClient.createRentalFromBooking(selectedBookingId, user.id);
       // Normalize input dates to ISO (YYYY-MM-DD)
       const toISOStartOfDay = (d: string) => {
         if (!d) return '';
