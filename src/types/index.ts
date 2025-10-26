@@ -431,7 +431,7 @@ export interface CreateCustomerRequest {
   first_name: string;
   last_name: string;
   phone: string;
-  address?: Address;
+  address?: string;
   notes?: string;
 }
 

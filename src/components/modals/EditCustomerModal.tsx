@@ -19,13 +19,7 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
     first_name: '',
     last_name: '',
     phone: '',
-    address: {
-      street: '',
-      city: '',
-      state: '',
-      postal_code: '',
-      country: ''
-    },
+    address: '',
     notes: ''
   });
   const [loading, setLoading] = useState(false);
@@ -40,13 +34,7 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
         first_name: customer.first_name || '',
         last_name: customer.last_name || '',
         phone: customer.phone || '',
-        address: {
-          street: '',
-          city: '',
-          state: '',
-          postal_code: '',
-          country: ''
-        },
+        address: customer.address || '',
         notes: ''
       });
     }
@@ -92,7 +80,7 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
       }
       
       // Always include address and notes if they have values
-      if (formData.address && (formData.address.street || formData.address.city || formData.address.state || formData.address.postal_code || formData.address.country)) {
+      if (formData.address) {
         updateData.address = formData.address;
       }
       if (formData.notes) {
@@ -115,13 +103,6 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
-  };
-
-  const handleAddressChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      address: { ...prev.address, [field]: value }
-    }));
   };
 
   if (!isOpen || !customer) return null;
@@ -196,59 +177,13 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Street Address
+              Address
             </label>
             <Input
-              value={formData.address?.street || ''}
-              onChange={(e) => handleAddressChange('street', e.target.value)}
-              placeholder="123 Main St"
+              value={formData.address || ''}
+              onChange={(e) => handleInputChange('address', e.target.value)}
+              placeholder="123 Main St, City, State, Postal Code, Country"
             />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                City
-              </label>
-              <Input
-                value={formData.address?.city || ''}
-                onChange={(e) => handleAddressChange('city', e.target.value)}
-                placeholder="City"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                State
-              </label>
-              <Input
-                value={formData.address?.state || ''}
-                onChange={(e) => handleAddressChange('state', e.target.value)}
-                placeholder="State"
-              />
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Postal Code
-              </label>
-              <Input
-                value={formData.address?.postal_code || ''}
-                onChange={(e) => handleAddressChange('postal_code', e.target.value)}
-                placeholder="12345"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Country
-              </label>
-              <Input
-                value={formData.address?.country || ''}
-                onChange={(e) => handleAddressChange('country', e.target.value)}
-                placeholder="Country"
-              />
-            </div>
           </div>
           
           <div>
