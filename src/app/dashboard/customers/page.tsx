@@ -129,13 +129,7 @@ export default function CustomersPage() {
         first_name: '',
         last_name: '',
         phone: '',
-        address: {
-          street: '',
-          city: '',
-          state: '',
-          postal_code: '',
-          country: ''
-        },
+        address: '',
         notes: ''
       });
       setShowCreateModal(false);
