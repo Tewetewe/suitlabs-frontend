@@ -4,63 +4,42 @@ import React from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
-import { Rental } from '@/types';
+import { InvoiceData } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-interface RentalInvoiceModalProps {
+interface BookingInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  rental: Rental | null;
+  invoice: InvoiceData | null;
 }
 
-export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceModalProps) {
-  if (!isOpen || !rental) return null;
+export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoiceModalProps) {
+  if (!isOpen || !invoice) return null;
 
-  const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
-  const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
-
-  // Get items from rental or booking
-  const items = (rental.items || rental.booking?.items || []) as Array<{
-    item?: { name?: string; size?: { label?: string } };
-    quantity: number;
-    unit_price: number;
-    total_price: number;
-    discount_amount?: number;
-  }>;
-  
-  // Generate invoice number
-  const invoiceNumber = `INV-${rental.id.slice(-8).toUpperCase()}`;
-  
   // Format date and time
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const printInvoice = () => {
-    if (!rental) return;
+    if (!invoice) return;
 
     // Build invoice HTML content
     const buildInvoiceHTML = () => {
-      const itemsHTML = items.length > 0 ? (
-        items.map((item) => {
-          const itemName = item.item?.name || 'Item';
-          const itemSize = item.item?.size?.label || '';
-          const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
-          const quantity = item.quantity || 1;
-          const unitPrice = item.unit_price || item.total_price || 0;
-          const itemTotal = item.total_price || unitPrice * quantity;
-          const discount = item.discount_amount ?? 0;
-          
+      const itemsHTML = invoice.items && invoice.items.length > 0 ? (
+        invoice.items.map((item) => {
+          if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+            return `<div class="receipt-item"><div class="receipt-line">${item.description}</div></div>`;
+          }
           return `
             <div class="receipt-item">
-              <div class="receipt-line">${description}</div>
-              <div class="receipt-line">${quantity} PCS × ${formatCurrency(unitPrice)} = ${formatCurrency(itemTotal)}</div>
-              ${discount > 0 ? `<div class="receipt-line receipt-discount">Discount: (${formatCurrency(discount)})</div>` : ''}
+              <div class="receipt-line">${item.description}</div>
+              <div class="receipt-line">${item.quantity} PCS × ${formatCurrency(item.unit_price || 0)} = ${formatCurrency(item.total || 0)}</div>
             </div>
           `;
-        }).join('')
-      ) : '<div class="receipt-line">Rental Package</div>';
+        }).join('') + (isPackagePricing ? `<div class="receipt-item"><div class="receipt-line receipt-bold">Package Total: ${formatCurrency(invoice.total_amount || 0)}</div></div>` : '')
+      ) : `<div class="receipt-line">${invoice.product_name || 'Booking Package'}</div>`;
 
       return `
         <div class="thermal-receipt-container">
@@ -68,49 +47,42 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             <div class="receipt-center">
               <div class="receipt-title">SUITLABS</div>
               <div class="receipt-subtitle">Suit Rental System</div>
-              <div class="receipt-line">Jl. Example Street No. 123</div>
-              <div class="receipt-line">City, Country</div>
-              <div class="receipt-line">TEL: +62 123 456 7890</div>
-              <div class="receipt-line">Email: info@suitlabs.com</div>
+              <div class="receipt-line">${invoice.company?.address || 'Jl. Example Street No. 123'}</div>
+              <div class="receipt-line">${invoice.company?.phone ? `TEL: ${invoice.company.phone}` : 'TEL: +62 123 456 7890'}</div>
+              <div class="receipt-line">${invoice.company?.email ? `Email: ${invoice.company.email}` : 'Email: info@suitlabs.com'}</div>
             </div>
             <div class="receipt-divider"></div>
-            <div class="receipt-line">Invoice: ${invoiceNumber}</div>
+            <div class="receipt-line">Invoice: ${invoice.invoice_number}</div>
             <div class="receipt-line">Date: ${dateStr} ${timeStr}</div>
-            <div class="receipt-line">Rental ID: ${rental.id.slice(-8)}</div>
-            <div class="receipt-line">Status: ${rental.status.toUpperCase()}</div>
-            ${rental.customer ? `
-              <div class="receipt-line">Customer: ${rental.customer.first_name} ${rental.customer.last_name}</div>
-              <div class="receipt-line">Phone: ${rental.customer.phone}</div>
-            ` : ''}
+            <div class="receipt-line">Booking ID: ${invoice.booking_id.slice(-8)}</div>
+            <div class="receipt-line">Type: ${invoice.invoice_type?.toUpperCase() || 'FULL'}</div>
+            ${invoice.due_date ? `<div class="receipt-line">Due Date: ${formatDate(invoice.due_date)}</div>` : ''}
+            <div class="receipt-divider"></div>
+            <div class="receipt-label">CUSTOMER:</div>
+            <div class="receipt-line">${invoice.customer_name}</div>
+            <div class="receipt-line">Email: ${invoice.customer_email}</div>
+            <div class="receipt-line">Phone: ${invoice.customer_phone}</div>
             <div class="receipt-divider"></div>
             <div class="receipt-label">ITEMS:</div>
             ${itemsHTML}
             <div class="receipt-divider"></div>
-            <div class="receipt-line">Subtotal: ${formatCurrency(itemsSubtotal || rental.total_cost || 0)}</div>
-            ${itemsDiscount > 0 ? `<div class="receipt-line receipt-discount">Discount: (${formatCurrency(itemsDiscount)})</div>` : ''}
-            ${rental.late_fee > 0 ? `<div class="receipt-line">Late Fee: ${formatCurrency(rental.late_fee)}</div>` : ''}
-            ${rental.damage_charges > 0 ? `<div class="receipt-line">Damage: ${formatCurrency(rental.damage_charges)}</div>` : ''}
-            <div class="receipt-total">GRAND TOTAL: ${formatCurrency(total)}</div>
-            ${rental.security_deposit > 0 ? `
-              <div class="receipt-divider"></div>
-              <div class="receipt-line">Security Deposit: ${formatCurrency(rental.security_deposit)}</div>
-              ${rental.damage_charges > 0 ? `<div class="receipt-line receipt-discount">Damage Deduction: (${formatCurrency(rental.damage_charges)})</div>` : ''}
-              <div class="receipt-line receipt-bold">Refundable: ${formatCurrency(refundableDeposit)}</div>
-            ` : ''}
+            <div class="receipt-line">Subtotal: ${formatCurrency(invoice.total_amount || 0)}</div>
+            ${(invoice.discount_amount || 0) > 0 ? `<div class="receipt-line receipt-discount">Discount: (${formatCurrency(invoice.discount_amount || 0)})</div>` : ''}
+            <div class="receipt-total">TOTAL AMOUNT: ${formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
             <div class="receipt-divider"></div>
-            <div class="receipt-line">Rental Date: ${formatDate(rental.rental_date)}</div>
-            <div class="receipt-line">Return Date: ${formatDate(rental.return_date)}</div>
-            ${rental.actual_pickup_date ? `<div class="receipt-line">Pickup: ${formatDate(rental.actual_pickup_date)}</div>` : ''}
-            ${rental.actual_return_date ? `<div class="receipt-line">Returned: ${formatDate(rental.actual_return_date)}</div>` : ''}
-            ${rental.notes ? `
+            ${invoice.invoice_type === 'dp' ? `
+              <div class="receipt-line">Down Payment: ${formatCurrency(invoice.due_amount || 0)}</div>
+              <div class="receipt-line">Remaining: ${formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}</div>
+            ` : `<div class="receipt-line">Due Amount: ${formatCurrency(invoice.due_amount || 0)}</div>`}
+            <div class="receipt-line receipt-bold">Payment Status: ${invoice.payment_status?.toUpperCase() || 'PENDING'}</div>
+            ${invoice.booking_date ? `
               <div class="receipt-divider"></div>
-              <div class="receipt-label">NOTE:</div>
-              <div class="receipt-line">${rental.notes}</div>
+              <div class="receipt-line">Booking Date: ${formatDate(invoice.booking_date)}</div>
             ` : ''}
             <div class="receipt-divider"></div>
             <div class="receipt-center">
               <div class="receipt-line">Thank you for using SuitLabs!</div>
-              <div class="receipt-line receipt-small">All rentals subject to T&C</div>
+              <div class="receipt-line receipt-small">All bookings subject to T&C</div>
               <div class="receipt-line receipt-small">6-Month Warranty. T&C apply.</div>
               <div class="receipt-line receipt-small">www.suitlabs.com</div>
             </div>
@@ -131,7 +103,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Invoice ${invoiceNumber}</title>
+        <title>Invoice ${invoice.invoice_number}</title>
         <meta charset="utf-8">
         <style>
           @page {
@@ -240,7 +212,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
         <script>
           window.onload = function() {
             setTimeout(function() {
-    window.print();
+              window.print();
             }, 250);
           };
         </script>
@@ -253,7 +225,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
   };
 
   const downloadInvoice = async () => {
-    if (!rental) return;
+    if (!invoice) return;
     
     // Get the receipt element
     const receiptElement = document.querySelector('.thermal-receipt') as HTMLElement;
@@ -286,19 +258,17 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
       pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
 
       // Save PDF with invoice number as filename
-      pdf.save(`invoice_${invoiceNumber}.pdf`);
+      pdf.save(`invoice_${invoice.invoice_number}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF. Please try again.');
     }
   };
 
-  // Calculate totals
-  const itemsSubtotal = items.reduce((sum, item) => {
-    const itemTotal = item.total_price || (item.unit_price || 0) * (item.quantity || 1);
-    return sum + itemTotal;
-  }, 0);
-  const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
+  // Check if package pricing (items with zero prices)
+  const isPackagePricing = invoice.items && invoice.items.length > 0 && 
+    invoice.items.every((it) => (it.unit_price || 0) <= 0 && (it.total || 0) <= 0) && 
+    (invoice.total_amount || 0) > 0;
 
   return (
     <>
@@ -310,112 +280,104 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             <div className="receipt-center">
               <div className="receipt-title">SUITLABS</div>
               <div className="receipt-subtitle">Suit Rental System</div>
-              <div className="receipt-line">Jl. Example Street No. 123</div>
-              <div className="receipt-line">City, Country</div>
-              <div className="receipt-line">TEL: +62 123 456 7890</div>
-              <div className="receipt-line">Email: info@suitlabs.com</div>
+              <div className="receipt-line">{invoice.company?.address || 'Jl. Example Street No. 123'}</div>
+              <div className="receipt-line">{invoice.company?.phone ? `TEL: ${invoice.company.phone}` : 'TEL: +62 123 456 7890'}</div>
+              <div className="receipt-line">{invoice.company?.email ? `Email: ${invoice.company.email}` : 'Email: info@suitlabs.com'}</div>
             </div>
 
             <div className="receipt-divider"></div>
 
             {/* Invoice Info */}
-            <div className="receipt-line">Invoice: {invoiceNumber}</div>
+            <div className="receipt-line">Invoice: {invoice.invoice_number}</div>
             <div className="receipt-line">Date: {dateStr} {timeStr}</div>
-            <div className="receipt-line">Rental ID: {rental.id.slice(-8)}</div>
-            <div className="receipt-line">Status: {rental.status.toUpperCase()}</div>
-            {rental.customer && (
-              <>
-                <div className="receipt-line">Customer: {rental.customer.first_name} {rental.customer.last_name}</div>
-                <div className="receipt-line">Phone: {rental.customer.phone}</div>
-              </>
+            <div className="receipt-line">Booking ID: {invoice.booking_id.slice(-8)}</div>
+            <div className="receipt-line">Type: {invoice.invoice_type?.toUpperCase() || 'FULL'}</div>
+            {invoice.due_date && (
+              <div className="receipt-line">Due Date: {formatDate(invoice.due_date)}</div>
             )}
+
+            <div className="receipt-divider"></div>
+
+            {/* Customer Info */}
+            <div className="receipt-label">CUSTOMER:</div>
+            <div className="receipt-line">{invoice.customer_name}</div>
+            <div className="receipt-line">Email: {invoice.customer_email}</div>
+            <div className="receipt-line">Phone: {invoice.customer_phone}</div>
 
             <div className="receipt-divider"></div>
 
             {/* Items */}
             <div className="receipt-label">ITEMS:</div>
-            {items.length > 0 ? (
-              items.map((item, idx) => {
-                const itemName = item.item?.name || 'Item';
-                const itemSize = item.item?.size?.label || '';
-                const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
-                const quantity = item.quantity || 1;
-                const unitPrice = item.unit_price || item.total_price || 0;
-                const itemTotal = item.total_price || unitPrice * quantity;
-                const discount = item.discount_amount ?? 0;
-                
-                return (
-                  <div key={idx} className="receipt-item">
-                    <div className="receipt-line">{description}</div>
-                    <div className="receipt-line">
-                      {quantity} PCS × {formatCurrency(unitPrice)} = {formatCurrency(itemTotal)}
-                    </div>
-                    {discount > 0 && (
-                      <div className="receipt-line receipt-discount">
-                        Discount: ({formatCurrency(discount)})
+            {invoice.items && invoice.items.length > 0 ? (
+              <>
+                {invoice.items.map((item, idx) => {
+                  if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+                    return (
+                      <div key={idx} className="receipt-item">
+                        <div className="receipt-line">{item.description}</div>
                       </div>
-                    )}
+                    );
+                  }
+                  
+                  return (
+                    <div key={idx} className="receipt-item">
+                      <div className="receipt-line">{item.description}</div>
+                      <div className="receipt-line">
+                        {item.quantity} PCS × {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}
+                      </div>
+                    </div>
+                  );
+                })}
+                {isPackagePricing && (
+                  <div className="receipt-item">
+                    <div className="receipt-line receipt-bold">Package Total: {formatCurrency(invoice.total_amount || 0)}</div>
                   </div>
-                );
-              })
+                )}
+              </>
             ) : (
-              <div className="receipt-line">Rental Package</div>
+              <div className="receipt-line">{invoice.product_name || 'Booking Package'}</div>
             )}
 
             <div className="receipt-divider"></div>
 
             {/* Summary */}
             <div className="receipt-line">
-              Subtotal: {formatCurrency(itemsSubtotal || rental.total_cost || 0)}
+              Subtotal: {formatCurrency(invoice.total_amount || 0)}
             </div>
-            {itemsDiscount > 0 && (
+            {(invoice.discount_amount || 0) > 0 && (
               <div className="receipt-line receipt-discount">
-                Discount: ({formatCurrency(itemsDiscount)})
+                Discount: ({formatCurrency(invoice.discount_amount || 0)})
               </div>
             )}
-            {rental.late_fee > 0 && (
-              <div className="receipt-line">Late Fee: {formatCurrency(rental.late_fee)}</div>
-            )}
-            {rental.damage_charges > 0 && (
-              <div className="receipt-line">Damage: {formatCurrency(rental.damage_charges)}</div>
-            )}
             <div className="receipt-total">
-              GRAND TOTAL: {formatCurrency(total)}
+              TOTAL AMOUNT: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}
             </div>
 
-            {/* Deposit */}
-            {rental.security_deposit > 0 && (
+            {/* Payment Info */}
+            <div className="receipt-divider"></div>
+            {invoice.invoice_type === 'dp' ? (
               <>
-                <div className="receipt-divider"></div>
-                <div className="receipt-line">Security Deposit: {formatCurrency(rental.security_deposit)}</div>
-                {rental.damage_charges > 0 && (
-                  <div className="receipt-line receipt-discount">
-                    Damage Deduction: ({formatCurrency(rental.damage_charges)})
-                  </div>
-                )}
-                <div className="receipt-line receipt-bold">
-                  Refundable: {formatCurrency(refundableDeposit)}
+                <div className="receipt-line">
+                  Down Payment: {formatCurrency(invoice.due_amount || 0)}
+                </div>
+                <div className="receipt-line">
+                  Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}
                 </div>
               </>
+            ) : (
+              <div className="receipt-line">
+                Due Amount: {formatCurrency(invoice.due_amount || 0)}
+              </div>
             )}
+            <div className="receipt-line receipt-bold">
+              Payment Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}
+            </div>
 
-            {/* Dates */}
-            <div className="receipt-divider"></div>
-            <div className="receipt-line">Rental Date: {formatDate(rental.rental_date)}</div>
-            <div className="receipt-line">Return Date: {formatDate(rental.return_date)}</div>
-            {rental.actual_pickup_date && (
-              <div className="receipt-line">Pickup: {formatDate(rental.actual_pickup_date)}</div>
-            )}
-            {rental.actual_return_date && (
-              <div className="receipt-line">Returned: {formatDate(rental.actual_return_date)}</div>
-            )}
-
-            {/* Notes */}
-            {rental.notes && (
+            {/* Booking Date */}
+            {invoice.booking_date && (
               <>
                 <div className="receipt-divider"></div>
-                <div className="receipt-label">NOTE:</div>
-                <div className="receipt-line">{rental.notes}</div>
+                <div className="receipt-line">Booking Date: {formatDate(invoice.booking_date)}</div>
               </>
             )}
 
@@ -423,7 +385,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             <div className="receipt-divider"></div>
             <div className="receipt-center">
               <div className="receipt-line">Thank you for using SuitLabs!</div>
-              <div className="receipt-line receipt-small">All rentals subject to T&C</div>
+              <div className="receipt-line receipt-small">All bookings subject to T&C</div>
               <div className="receipt-line receipt-small">6-Month Warranty. T&C apply.</div>
               <div className="receipt-line receipt-small">www.suitlabs.com</div>
             </div>
@@ -433,9 +395,9 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
 
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 print:hidden">
         <div className="bg-white rounded-lg p-4 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Rental Invoice</h3>
-          <div className="flex gap-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Booking Invoice</h3>
+            <div className="flex gap-2">
               <Button variant="ghost" onClick={onClose} className="text-xs px-3 py-1">Close</Button>
               <Button onClick={downloadInvoice} className="text-xs px-3 py-1">Download</Button>
               <Button onClick={printInvoice} className="text-xs px-3 py-1">Print</Button>
@@ -449,112 +411,105 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             <div className="receipt-center">
               <div className="receipt-title">SUITLABS</div>
               <div className="receipt-subtitle">Suit Rental System</div>
-              <div className="receipt-line">Jl. Example Street No. 123</div>
-              <div className="receipt-line">City, Country</div>
-              <div className="receipt-line">TEL: +62 123 456 7890</div>
-              <div className="receipt-line">Email: info@suitlabs.com</div>
+              <div className="receipt-line">{invoice.company?.address || 'Jl. Example Street No. 123'}</div>
+              <div className="receipt-line">{invoice.company?.phone ? `TEL: ${invoice.company.phone}` : 'TEL: +62 123 456 7890'}</div>
+              <div className="receipt-line">{invoice.company?.email ? `Email: ${invoice.company.email}` : 'Email: info@suitlabs.com'}</div>
             </div>
 
             <div className="receipt-divider"></div>
 
             {/* Invoice Info */}
-            <div className="receipt-line">Invoice: {invoiceNumber}</div>
+            <div className="receipt-line">Invoice: {invoice.invoice_number}</div>
             <div className="receipt-line">Date: {dateStr} {timeStr}</div>
-            <div className="receipt-line">Rental ID: {rental.id.slice(-8)}</div>
-            <div className="receipt-line">Status: {rental.status.toUpperCase()}</div>
-            {rental.customer && (
-              <>
-                <div className="receipt-line">Customer: {rental.customer.first_name} {rental.customer.last_name}</div>
-                <div className="receipt-line">Phone: {rental.customer.phone}</div>
-              </>
+            <div className="receipt-line">Booking ID: {invoice.booking_id.slice(-8)}</div>
+            <div className="receipt-line">Type: {invoice.invoice_type?.toUpperCase() || 'FULL'}</div>
+            {invoice.due_date && (
+              <div className="receipt-line">Due Date: {formatDate(invoice.due_date)}</div>
             )}
+
+            <div className="receipt-divider"></div>
+
+            {/* Customer Info */}
+            <div className="receipt-label">CUSTOMER:</div>
+            <div className="receipt-line">{invoice.customer_name}</div>
+            <div className="receipt-line">Email: {invoice.customer_email}</div>
+            <div className="receipt-line">Phone: {invoice.customer_phone}</div>
 
             <div className="receipt-divider"></div>
 
             {/* Items */}
             <div className="receipt-label">ITEMS:</div>
-            {items.length > 0 ? (
-              items.map((item, idx) => {
-                const itemName = item.item?.name || 'Item';
-                const itemSize = item.item?.size?.label || '';
-                const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
-                const quantity = item.quantity || 1;
-                const unitPrice = item.unit_price || item.total_price || 0;
-                const itemTotal = item.total_price || unitPrice * quantity;
-                const discount = item.discount_amount ?? 0;
-                
-                return (
-                  <div key={idx} className="receipt-item">
-                    <div className="receipt-line">{description}</div>
-                    <div className="receipt-line">
-                      {quantity} PCS × {formatCurrency(unitPrice)} = {formatCurrency(itemTotal)}
-            </div>
-                    {discount > 0 && (
-                      <div className="receipt-line receipt-discount">
-                        Discount: ({formatCurrency(discount)})
-              </div>
-            )}
-              </div>
-                );
-              })
+            {invoice.items && invoice.items.length > 0 ? (
+              <>
+                {invoice.items.map((item, idx) => {
+                  // Skip items with zero prices (sub-items in package)
+                  if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+                    return (
+                      <div key={idx} className="receipt-item">
+                        <div className="receipt-line">{item.description}</div>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div key={idx} className="receipt-item">
+                      <div className="receipt-line">{item.description}</div>
+                      <div className="receipt-line">
+                        {item.quantity} PCS × {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}
+                      </div>
+                    </div>
+                  );
+                })}
+                {isPackagePricing && (
+                  <div className="receipt-item">
+                    <div className="receipt-line receipt-bold">Package Total: {formatCurrency(invoice.total_amount || 0)}</div>
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="receipt-line">Rental Package</div>
+              <div className="receipt-line">{invoice.product_name || 'Booking Package'}</div>
             )}
 
             <div className="receipt-divider"></div>
 
             {/* Summary */}
             <div className="receipt-line">
-              Subtotal: {formatCurrency(itemsSubtotal || rental.total_cost || 0)}
+              Subtotal: {formatCurrency(invoice.total_amount || 0)}
             </div>
-            {itemsDiscount > 0 && (
+            {(invoice.discount_amount || 0) > 0 && (
               <div className="receipt-line receipt-discount">
-                Discount: ({formatCurrency(itemsDiscount)})
+                Discount: ({formatCurrency(invoice.discount_amount || 0)})
               </div>
             )}
-            {rental.late_fee > 0 && (
-              <div className="receipt-line">Late Fee: {formatCurrency(rental.late_fee)}</div>
-            )}
-            {rental.damage_charges > 0 && (
-              <div className="receipt-line">Damage: {formatCurrency(rental.damage_charges)}</div>
-            )}
             <div className="receipt-total">
-              GRAND TOTAL: {formatCurrency(total)}
+              TOTAL AMOUNT: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}
             </div>
 
-            {/* Deposit */}
-            {rental.security_deposit > 0 && (
-              <>
-                <div className="receipt-divider"></div>
-                <div className="receipt-line">Security Deposit: {formatCurrency(rental.security_deposit)}</div>
-                {rental.damage_charges > 0 && (
-                  <div className="receipt-line receipt-discount">
-                    Damage Deduction: ({formatCurrency(rental.damage_charges)})
-            </div>
-                )}
-                <div className="receipt-line receipt-bold">
-                  Refundable: {formatCurrency(refundableDeposit)}
-            </div>
-              </>
-            )}
-
-            {/* Dates */}
+            {/* Payment Info */}
             <div className="receipt-divider"></div>
-            <div className="receipt-line">Rental Date: {formatDate(rental.rental_date)}</div>
-            <div className="receipt-line">Return Date: {formatDate(rental.return_date)}</div>
-            {rental.actual_pickup_date && (
-              <div className="receipt-line">Pickup: {formatDate(rental.actual_pickup_date)}</div>
+            {invoice.invoice_type === 'dp' ? (
+              <>
+                <div className="receipt-line">
+                  Down Payment: {formatCurrency(invoice.due_amount || 0)}
+                </div>
+                <div className="receipt-line">
+                  Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}
+                </div>
+              </>
+            ) : (
+              <div className="receipt-line">
+                Due Amount: {formatCurrency(invoice.due_amount || 0)}
+              </div>
             )}
-            {rental.actual_return_date && (
-              <div className="receipt-line">Returned: {formatDate(rental.actual_return_date)}</div>
-            )}
+            <div className="receipt-line receipt-bold">
+              Payment Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}
+            </div>
 
-            {/* Notes */}
-            {rental.notes && (
+            {/* Booking Date */}
+            {invoice.booking_date && (
               <>
                 <div className="receipt-divider"></div>
-                <div className="receipt-label">NOTE:</div>
-                <div className="receipt-line">{rental.notes}</div>
+                <div className="receipt-line">Booking Date: {formatDate(invoice.booking_date)}</div>
               </>
             )}
 
@@ -562,17 +517,17 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             <div className="receipt-divider"></div>
             <div className="receipt-center">
               <div className="receipt-line">Thank you for using SuitLabs!</div>
-              <div className="receipt-line receipt-small">All rentals subject to T&C</div>
+              <div className="receipt-line receipt-small">All bookings subject to T&C</div>
               <div className="receipt-line receipt-small">6-Month Warranty. T&C apply.</div>
               <div className="receipt-line receipt-small">www.suitlabs.com</div>
             </div>
-            </div>
+          </div>
           </div>
         </div>
       </div>
 
       {/* Thermal Receipt Styles */}
-      <style jsx global>{`
+      <style jsx global data-thermal-receipt>{`
         .thermal-receipt-container {
           width: 100%;
           display: flex;
@@ -745,4 +700,5 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
   );
 }
 
-export default RentalInvoiceModal;
+export default BookingInvoiceModal;
+

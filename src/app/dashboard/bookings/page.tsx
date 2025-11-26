@@ -15,6 +15,7 @@ import { Booking, BookingFilters, InvoiceData, Customer, Item, PackagePricing } 
 import { useAuth } from '@/contexts/AuthContext';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
 import { Plus, Edit, Calendar, User, DollarSign, Clock, Filter, Eye, FileText, Download, Shirt } from 'lucide-react';
+import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 
 export default function BookingsPage() {
   const { user } = useAuth();
@@ -37,6 +38,8 @@ export default function BookingsPage() {
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [discountCode, setDiscountCode] = useState('');
   const [downPayment, setDownPayment] = useState(0);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   // Previous static options states no longer used; keeping for future caching if needed
   const [bookingForm, setBookingForm] = useState<{
     customer_id: string;
@@ -438,20 +441,9 @@ export default function BookingsPage() {
         invoice.items = [];
       }
       
-      // Create a simple HTML invoice and convert to PDF
-      const invoiceHtml = generateInvoiceHTML(invoice);
-      const newWindow = window.open('', '_blank', 'width=800,height=600');
-      if (newWindow) {
-        newWindow.document.write(invoiceHtml);
-        newWindow.document.close();
-        
-        // Wait for content to load, then trigger print dialog
-        newWindow.onload = () => {
-          setTimeout(() => {
-            newWindow.print();
-          }, 100);
-        };
-      }
+      // Show invoice in thermal printer modal
+      setInvoiceData(invoice);
+      setShowInvoiceModal(true);
     } catch (error) {
       console.error('Failed to generate invoice:', error);
       alert('Failed to generate invoice. Please try again.');
@@ -498,117 +490,6 @@ export default function BookingsPage() {
   };
 
   // Rental creation is handled exclusively from the Rentals menu for UI simplicity
-
-  const generateInvoiceHTML = (invoice: InvoiceData) => {
-    // If all invoice item monetary fields are zero but total_amount > 0, we assume package pricing
-    const isPackagePricingInvoice = (Array.isArray(invoice.items) && invoice.items.length > 0)
-      ? invoice.items.every((it) => (it.unit_price || 0) <= 0 && (it.total || 0) <= 0) && (invoice.total_amount || 0) > 0
-      : false;
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Invoice ${invoice.invoice_number}</title>
-        <style>
-          @page { 
-            size: A4 portrait; 
-            margin: 1in; 
-          }
-          @media print {
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 0; 
-              padding: 0;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            .no-print { display: none !important; }
-          }
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
-          .company-info { text-align: left; margin-bottom: 20px; }
-          .invoice-info { text-align: right; margin-bottom: 20px; }
-          .customer-info { margin-bottom: 20px; }
-          .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          .items-table th, .items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          .items-table th { background-color: #f2f2f2; }
-          .total { text-align: right; font-weight: bold; font-size: 18px; }
-          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>SuitLabs</h1>
-          <p>Jl. Suit Rental No. 123, Bali, Indonesia</p>
-          <p>Phone: +62 361 123 4567 | Email: info@suitlabs.com</p>
-        </div>
-        
-        <div class="invoice-info">
-          <h2>Invoice #${invoice.invoice_number || 'N/A'}</h2>
-          <p><strong>Invoice Type:</strong> ${(invoice.invoice_type || 'Unknown').toUpperCase()}</p>
-          <p><strong>Date:</strong> ${invoice.generated_at ? formatDate(invoice.generated_at) : 'N/A'}</p>
-          <p><strong>Due Date:</strong> ${invoice.due_date ? formatDate(invoice.due_date) : 'N/A'}</p>
-        </div>
-        
-        <div class="customer-info">
-          <h3>Bill To:</h3>
-          <p><strong>${invoice.customer_name || 'N/A'}</strong></p>
-          <p>Email: ${invoice.customer_email || 'N/A'}</p>
-          <p>Phone: ${invoice.customer_phone || 'N/A'}</p>
-        </div>
-        
-        <table class="items-table">
-          <thead>
-            <tr>
-              <th>Description</th>
-              <th>Quantity</th>
-              <th>Unit Price</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-            <tbody>
-              ${(invoice.items || []).map((item) => `
-                <tr>
-                  <td>${item.description}</td>
-                  <td>${item.quantity > 0 ? item.quantity : '-'}</td>
-                  <td>${item.unit_price > 0 ? 'Rp ' + item.unit_price.toLocaleString('id-ID') : '-'}</td>
-                  <td>${item.total > 0 ? 'Rp ' + item.total.toLocaleString('id-ID') : '-'}</td>
-                </tr>
-              `).join('')}
-              ${isPackagePricingInvoice ? `
-                <tr>
-                  <td><strong>Package Total</strong></td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td><strong>Rp ${(invoice.total_amount || 0).toLocaleString('id-ID')}</strong></td>
-                </tr>
-              ` : ''}
-            </tbody>
-        </table>
-        
-        <div class="total">
-          <p>Subtotal: Rp ${(invoice.total_amount || 0).toLocaleString('id-ID')}</p>
-          ${(invoice.discount_amount || 0) > 0 ? 
-            `<p>Discount: -Rp ${(invoice.discount_amount || 0).toLocaleString('id-ID')}</p>` : ''
-          }
-          <p>Total Amount: Rp ${(invoice.final_amount || invoice.total_amount || 0).toLocaleString('id-ID')}</p>
-          ${invoice.invoice_type === 'dp' ? 
-            `<p>Down Payment Amount: Rp ${(invoice.due_amount || 0).toLocaleString('id-ID')}</p>
-             <p>Remaining Amount: Rp ${((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0)).toLocaleString('id-ID')}</p>` :
-            `<p>Due Amount: Rp ${(invoice.due_amount || 0).toLocaleString('id-ID')}</p>`
-          }
-          <p>Payment Status: ${(invoice.payment_status || 'Unknown').toUpperCase()}</p>
-        </div>
-        
-        <div class="footer">
-          <p>Thank you for your business!</p>
-          <p>This invoice was generated on ${invoice.generated_at ? new Date(invoice.generated_at).toLocaleString() : 'Unknown date'}</p>
-        </div>
-      </body>
-      </html>
-    `;
-  };
 
   return (
     <DashboardLayout>
@@ -1257,6 +1138,16 @@ export default function BookingsPage() {
             </div>
           </div>
         )}
+
+        {/* Booking Invoice Modal */}
+        <BookingInvoiceModal
+          isOpen={showInvoiceModal}
+          onClose={() => {
+            setShowInvoiceModal(false);
+            setInvoiceData(null);
+          }}
+          invoice={invoiceData}
+        />
       </div>
     </DashboardLayout>
   );
