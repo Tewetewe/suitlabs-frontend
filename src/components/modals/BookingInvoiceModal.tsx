@@ -107,14 +107,14 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
         <meta charset="utf-8">
         <style>
           @page {
-            size: 80mm auto;
+            size: 58mm auto;
             margin: 0;
           }
           @media print {
             @page {
-              size: 80mm auto;
+              size: 58mm auto;
               margin: 0;
-              width: 80mm;
+              width: 58mm;
             }
           }
           * {
@@ -125,66 +125,66 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
             print-color-adjust: exact;
           }
           html, body {
-            width: 80mm !important;
-            max-width: 80mm !important;
+            width: 58mm !important;
+            max-width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: white;
             font-family: 'Courier New', monospace;
           }
           .thermal-receipt-container {
-            width: 80mm !important;
-            max-width: 80mm !important;
+            width: 58mm !important;
+            max-width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
           }
           .thermal-receipt {
-            width: 80mm !important;
-            max-width: 80mm !important;
+            width: 58mm !important;
+            max-width: 58mm !important;
             padding: 8mm 6mm !important;
             margin: 0 !important;
             background: white !important;
             font-family: 'Courier New', monospace !important;
-            font-size: 11px !important;
-            line-height: 1.5 !important;
+            font-size: 9px !important;
+            line-height: 1.4 !important;
             color: #000 !important;
           }
           .receipt-center {
             text-align: center;
-            margin-bottom: 8px;
-          }
-          .receipt-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 4px;
-            letter-spacing: 1px;
-          }
-          .receipt-subtitle {
-            font-size: 10px;
-            color: #666;
             margin-bottom: 6px;
           }
+          .receipt-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 3px;
+            letter-spacing: 0.5px;
+          }
+          .receipt-subtitle {
+            font-size: 8px;
+            color: #666;
+            margin-bottom: 4px;
+          }
           .receipt-line {
-            font-size: 11px;
-            line-height: 1.5;
+            font-size: 9px;
+            line-height: 1.4;
             margin-bottom: 2px;
             word-wrap: break-word;
           }
           .receipt-label {
             font-weight: bold;
-            font-size: 11px;
-            margin-bottom: 4px;
+            font-size: 9px;
+            margin-bottom: 3px;
           }
           .receipt-small {
-            font-size: 9px;
+            font-size: 7px;
             color: #666;
           }
           .receipt-divider {
             border-top: 1px dashed #999;
-            margin: 8px 0;
+            margin: 6px 0;
           }
           .receipt-item {
-            margin-bottom: 6px;
+            margin-bottom: 4px;
           }
           .receipt-discount {
             color: #d32f2f;
@@ -194,14 +194,14 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
           }
           .receipt-total {
             font-weight: bold;
-            font-size: 12px;
-            margin-top: 6px;
-            padding-top: 6px;
+            font-size: 10px;
+            margin-top: 4px;
+            padding-top: 4px;
             border-top: 1px solid #333;
           }
           .receipt-footer {
             text-align: center;
-            font-size: 9px;
+            font-size: 7px;
             color: #666;
             margin-top: 10px;
           }
@@ -227,23 +227,74 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
   const downloadInvoice = async () => {
     if (!invoice) return;
     
-    // Get the receipt element
-    const receiptElement = document.querySelector('.thermal-receipt') as HTMLElement;
-    if (!receiptElement) return;
+    // Get the receipt container - prefer the visible one in the modal
+    let receiptContainer = document.querySelector('.thermal-receipt-container') as HTMLElement;
+    if (!receiptContainer) {
+      receiptContainer = document.querySelector('.print-only-invoice .thermal-receipt-container') as HTMLElement;
+    }
+    
+    if (!receiptContainer) {
+      alert('Invoice element not found. Please try again.');
+      return;
+    }
+
+    // Clone the entire container to preserve all styles
+    const clone = receiptContainer.cloneNode(true) as HTMLElement;
+    
+    // Create a temporary visible container for html2canvas
+    const tempContainer = document.createElement('div');
+    tempContainer.style.position = 'fixed';
+    tempContainer.style.left = '-9999px';
+    tempContainer.style.top = '0';
+    tempContainer.style.width = '58mm';
+    tempContainer.style.maxWidth = '58mm';
+    tempContainer.style.backgroundColor = '#ffffff';
+    tempContainer.style.zIndex = '99999';
+    tempContainer.style.visibility = 'visible';
+    tempContainer.style.display = 'block';
+    
+    // Copy computed styles to ensure proper rendering
+    const computedStyle = window.getComputedStyle(receiptContainer);
+    tempContainer.style.fontFamily = computedStyle.fontFamily || "'Courier New', monospace";
+    
+    tempContainer.appendChild(clone);
+    document.body.appendChild(tempContainer);
 
     try {
-      // Convert HTML to canvas
-      const canvas = await html2canvas(receiptElement, {
-        scale: 2,
+      // Wait for the clone to be fully rendered
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Get the cloned receipt element
+      const clonedReceipt = tempContainer.querySelector('.thermal-receipt') as HTMLElement;
+      if (!clonedReceipt) {
+        throw new Error('Cloned receipt element not found');
+      }
+
+      // Get dimensions from the original or use defaults
+      const width = receiptContainer.offsetWidth || 219; // 58mm ≈ 219px at 96dpi
+      const height = clonedReceipt.scrollHeight || clonedReceipt.offsetHeight || 800;
+
+      // Convert HTML to canvas with optimized settings for quality
+      const canvas = await html2canvas(clonedReceipt, {
+        scale: 1.8, // Increased for better quality while keeping file size reasonable
         backgroundColor: '#ffffff',
         useCORS: true,
         logging: false,
-        width: receiptElement.scrollWidth,
-        height: receiptElement.scrollHeight,
+        width: width,
+        height: height,
+        allowTaint: false,
       });
 
-      // Calculate PDF dimensions (80mm width)
-      const imgWidth = 80; // 80mm in mm
+      // Remove temporary container
+      document.body.removeChild(tempContainer);
+
+      // Validate canvas
+      if (!canvas || canvas.width === 0 || canvas.height === 0) {
+        throw new Error('Canvas is empty or invalid. Please ensure the invoice is visible.');
+      }
+
+      // Calculate PDF dimensions (58mm width)
+      const imgWidth = 58; // 58mm in mm
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       
       // Create PDF
@@ -251,17 +302,30 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
         orientation: 'portrait',
         unit: 'mm',
         format: [imgWidth, imgHeight],
+        compress: true, // Enable PDF compression
       });
 
-      // Add image to PDF
-      const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      // Convert canvas to JPEG with optimized quality
+      // JPEG quality 0.92 provides better quality while maintaining reasonable file size
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      
+      // Validate data URL
+      if (!imgData || !imgData.startsWith('data:image/jpeg;base64,')) {
+        throw new Error('Invalid image data generated');
+      }
+
+      // Add image to PDF (JPEG format is much smaller than PNG)
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
 
       // Save PDF with invoice number as filename
       pdf.save(`invoice_${invoice.invoice_number}.pdf`);
     } catch (error) {
+      // Clean up temp container if it still exists
+      if (tempContainer.parentNode) {
+        document.body.removeChild(tempContainer);
+      }
       console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
+      alert(`Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     }
   };
 
@@ -535,60 +599,60 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
         }
 
         .thermal-receipt {
-          width: 80mm;
-          max-width: 80mm;
+          width: 58mm;
+          max-width: 58mm;
           margin: 0 auto;
-          padding: 10px 8px;
+          padding: 8px 6px;
           background: white;
           font-family: 'Courier New', monospace;
-          font-size: 11px;
-          line-height: 1.5;
+          font-size: 9px;
+          line-height: 1.4;
           color: #000;
         }
 
         .receipt-center {
           text-align: center;
-          margin-bottom: 8px;
-        }
-
-        .receipt-title {
-          font-size: 18px;
-          font-weight: bold;
-          margin-bottom: 4px;
-          letter-spacing: 1px;
-        }
-
-        .receipt-subtitle {
-          font-size: 10px;
-          color: #666;
           margin-bottom: 6px;
         }
 
+        .receipt-title {
+          font-size: 14px;
+          font-weight: bold;
+          margin-bottom: 3px;
+          letter-spacing: 0.5px;
+        }
+
+        .receipt-subtitle {
+          font-size: 8px;
+          color: #666;
+          margin-bottom: 4px;
+        }
+
         .receipt-line {
-          font-size: 11px;
-          line-height: 1.5;
+          font-size: 9px;
+          line-height: 1.4;
           margin-bottom: 2px;
           word-wrap: break-word;
         }
 
         .receipt-label {
           font-weight: bold;
-          font-size: 11px;
-          margin-bottom: 4px;
+          font-size: 9px;
+          margin-bottom: 3px;
         }
 
         .receipt-small {
-          font-size: 9px;
+          font-size: 7px;
           color: #666;
         }
 
         .receipt-divider {
           border-top: 1px dashed #999;
-          margin: 8px 0;
+          margin: 6px 0;
         }
 
         .receipt-item {
-          margin-bottom: 6px;
+          margin-bottom: 4px;
         }
 
         .receipt-discount {
@@ -601,9 +665,9 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
 
         .receipt-total {
           font-weight: bold;
-          font-size: 12px;
-          margin-top: 6px;
-          padding-top: 6px;
+          font-size: 10px;
+          margin-top: 4px;
+          padding-top: 4px;
           border-top: 1px solid #333;
         }
 
@@ -614,7 +678,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
 
         @media print {
           @page {
-            size: 80mm auto;
+            size: 58mm auto;
             margin: 0;
           }
           
@@ -626,14 +690,14 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
           html {
             margin: 0 !important;
             padding: 0 !important;
-            width: 80mm !important;
+            width: 58mm !important;
             height: auto !important;
           }
           
           body {
             margin: 0 !important;
             padding: 0 !important;
-            width: 80mm !important;
+            width: 58mm !important;
             height: auto !important;
             min-height: 0 !important;
             background: white !important;
@@ -653,7 +717,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
-            width: 80mm !important;
+            width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
@@ -666,7 +730,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
             position: relative !important;
             top: 0 !important;
             left: 0 !important;
-            width: 80mm !important;
+            width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
@@ -676,8 +740,8 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
             position: relative !important;
             left: 0 !important;
             top: 0 !important;
-            width: 80mm !important;
-            max-width: 80mm !important;
+            width: 58mm !important;
+            max-width: 58mm !important;
             padding: 8mm 6mm !important;
             margin: 0 !important;
             background: white !important;
