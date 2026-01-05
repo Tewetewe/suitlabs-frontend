@@ -261,6 +261,9 @@ export default function ItemsPage() {
     { value: 'shoes', label: 'Shoes' },
     { value: 'tie', label: 'Tie' },
     { value: 'belt', label: 'Belt' },
+    { value: 'trousers', label: 'Trousers' },
+    { value: 'shirts', label: 'Shirts' },
+    { value: 'vest', label: 'Vest' },
   ];
 
   const statusOptions = [

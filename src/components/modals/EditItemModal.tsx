@@ -98,6 +98,9 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
     { value: 'shoes', label: 'Shoes' },
     { value: 'tie', label: 'Tie' },
     { value: 'belt', label: 'Belt' },
+    { value: 'trousers', label: 'Trousers' },
+    { value: 'shirts', label: 'Shirts' },
+    { value: 'vest', label: 'Vest' },
   ];
 
   const conditionOptions = [
@@ -174,7 +177,7 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
         code: formData.code.trim(),
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
-        type: formData.type as 'suit' | 'accessory' | 'shoes' | 'tie' | 'belt',
+        type: formData.type as 'suit' | 'accessory' | 'shoes' | 'tie' | 'belt' | 'trousers' | 'shirts' | 'vest',
         brand: formData.brand.trim() || undefined,
         color: formData.color.trim() || undefined,
         size: formData.size_label.trim() ? { label: formData.size_label.trim() } : undefined,

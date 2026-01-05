@@ -156,7 +156,7 @@ export interface Item {
   code: string;
   name: string;
   description?: string;
-  type: 'suit' | 'accessory' | 'shoes' | 'tie' | 'belt';
+  type: 'suit' | 'accessory' | 'shoes' | 'tie' | 'belt' | 'trousers' | 'shirts' | 'vest';
   brand?: string;
   color?: string;
   size: { label: string };
@@ -380,7 +380,7 @@ export interface CreateItemRequest {
   code: string;
   name: string;
   description?: string;
-  type: 'suit' | 'accessory' | 'shoes' | 'tie' | 'belt';
+  type: 'suit' | 'accessory' | 'shoes' | 'tie' | 'belt' | 'trousers' | 'shirts' | 'vest';
   brand?: string;
   color?: string;
   size: { label: string };
