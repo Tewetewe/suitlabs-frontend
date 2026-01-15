@@ -16,10 +16,10 @@ interface RentalInvoiceModalProps {
 }
 
 export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceModalProps) {
-  if (!isOpen || !rental) return null;
-
   const [isPrinting, setIsPrinting] = useState(false);
   const [printerStatus, setPrinterStatus] = useState<string>('');
+
+  if (!isOpen || !rental) return null;
 
   const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
   const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
@@ -285,10 +285,11 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
           const deviceName = thermalPrinter.getDeviceName();
           setPrinterStatus(`Connected to ${deviceName}`);
           console.log(`Successfully connected to ${deviceName}`);
-        } catch (connectError: any) {
+        } catch (connectError: unknown) {
           console.error('Connection error:', connectError);
-          setPrinterStatus(`Connection failed: ${connectError.message}`);
-          alert(`Failed to connect: ${connectError.message}\n\nTroubleshooting:\n1. Make sure printer is powered on\n2. Put printer in pairing mode\n3. Make sure printer is not connected to another device\n4. Check browser console (F12) for details`);
+          const errorMessage = connectError instanceof Error ? connectError.message : 'Unknown error';
+          setPrinterStatus(`Connection failed: ${errorMessage}`);
+          alert(`Failed to connect: ${errorMessage}\n\nTroubleshooting:\n1. Make sure printer is powered on\n2. Put printer in pairing mode\n3. Make sure printer is not connected to another device\n4. Check browser console (F12) for details`);
           return;
         }
       } else {
@@ -309,19 +310,20 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
           setPrinterStatus('');
         }, 2000);
         alert('Invoice printed successfully!');
-      } catch (printError: any) {
+      } catch (printError: unknown) {
         console.error('Print error:', printError);
-        setPrinterStatus(`Print failed: ${printError.message}`);
-        alert(`Failed to print: ${printError.message}\n\nPlease check:\n1. Printer has paper\n2. Printer is not jammed\n3. Printer is within range\n4. Try reconnecting`);
+        const errorMessage = printError instanceof Error ? printError.message : 'Unknown error';
+        setPrinterStatus(`Print failed: ${errorMessage}`);
+        alert(`Failed to print: ${errorMessage}\n\nPlease check:\n1. Printer has paper\n2. Printer is not jammed\n3. Printer is within range\n4. Try reconnecting`);
         throw printError;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Thermal printer error:', error);
-      const errorMsg = error.message || 'Unknown error occurred';
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
       setPrinterStatus(`Error: ${errorMsg}`);
       
       // Don't show alert if we already showed one
-      if (!error.message?.includes('Failed to print') && !error.message?.includes('Failed to connect')) {
+      if (error instanceof Error && !error.message.includes('Failed to print') && !error.message.includes('Failed to connect')) {
         alert(`Error: ${errorMsg}\n\nCheck browser console (F12) for details.`);
       }
     } finally {
