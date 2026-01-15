@@ -1,12 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
 import { Rental } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { thermalPrinter } from '@/lib/thermal-printer';
 
 interface RentalInvoiceModalProps {
   isOpen: boolean;
@@ -16,6 +17,9 @@ interface RentalInvoiceModalProps {
 
 export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceModalProps) {
   if (!isOpen || !rental) return null;
+
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printerStatus, setPrinterStatus] = useState<string>('');
 
   const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
   const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
@@ -135,14 +139,14 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
         <meta charset="utf-8">
         <style>
           @page {
-            size: 80mm auto;
+            size: 58mm auto;
             margin: 0;
           }
           @media print {
             @page {
-              size: 80mm auto;
+              size: 58mm auto;
               margin: 0;
-              width: 80mm;
+              width: 58mm;
             }
           }
           * {
@@ -153,22 +157,22 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             print-color-adjust: exact;
           }
           html, body {
-            width: 80mm !important;
-            max-width: 80mm !important;
+            width: 58mm !important;
+            max-width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: white;
             font-family: 'Courier New', monospace;
           }
           .thermal-receipt-container {
-            width: 80mm !important;
-            max-width: 80mm !important;
+            width: 58mm !important;
+            max-width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
           }
           .thermal-receipt {
-            width: 80mm !important;
-            max-width: 80mm !important;
+            width: 58mm !important;
+            max-width: 58mm !important;
             padding: 8mm 6mm !important;
             margin: 0 !important;
             background: white !important;
@@ -252,6 +256,79 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
     printWindow.document.close();
   };
 
+  const printToThermalPrinter = async () => {
+    if (!rental) return;
+
+    setIsPrinting(true);
+    setPrinterStatus('');
+
+    try {
+      // Check if Web Bluetooth is available
+      if (!thermalPrinter.isAvailable()) {
+        const errorMsg = 'Web Bluetooth is not available in this browser. Please use Chrome, Edge, or Opera.';
+        setPrinterStatus(errorMsg);
+        alert(errorMsg);
+        return;
+      }
+
+      // Check connection status
+      const status = thermalPrinter.getConnectionStatus();
+      console.log('Printer connection status:', status);
+
+      // Connect to printer if not already connected
+      if (!thermalPrinter.isConnected()) {
+        setPrinterStatus('Connecting to printer...');
+        console.log('Attempting to connect to printer...');
+        
+        try {
+          await thermalPrinter.connect();
+          const deviceName = thermalPrinter.getDeviceName();
+          setPrinterStatus(`Connected to ${deviceName}`);
+          console.log(`Successfully connected to ${deviceName}`);
+        } catch (connectError: any) {
+          console.error('Connection error:', connectError);
+          setPrinterStatus(`Connection failed: ${connectError.message}`);
+          alert(`Failed to connect: ${connectError.message}\n\nTroubleshooting:\n1. Make sure printer is powered on\n2. Put printer in pairing mode\n3. Make sure printer is not connected to another device\n4. Check browser console (F12) for details`);
+          return;
+        }
+      } else {
+        setPrinterStatus(`Already connected to ${thermalPrinter.getDeviceName()}`);
+      }
+
+      // Print invoice
+      setPrinterStatus('Printing invoice...');
+      console.log('Starting to print invoice...');
+      
+      try {
+        await thermalPrinter.printRentalInvoice(rental);
+        setPrinterStatus('Invoice printed successfully!');
+        console.log('Invoice printed successfully');
+        
+        // Show success message
+        setTimeout(() => {
+          setPrinterStatus('');
+        }, 2000);
+        alert('Invoice printed successfully!');
+      } catch (printError: any) {
+        console.error('Print error:', printError);
+        setPrinterStatus(`Print failed: ${printError.message}`);
+        alert(`Failed to print: ${printError.message}\n\nPlease check:\n1. Printer has paper\n2. Printer is not jammed\n3. Printer is within range\n4. Try reconnecting`);
+        throw printError;
+      }
+    } catch (error: any) {
+      console.error('Thermal printer error:', error);
+      const errorMsg = error.message || 'Unknown error occurred';
+      setPrinterStatus(`Error: ${errorMsg}`);
+      
+      // Don't show alert if we already showed one
+      if (!error.message?.includes('Failed to print') && !error.message?.includes('Failed to connect')) {
+        alert(`Error: ${errorMsg}\n\nCheck browser console (F12) for details.`);
+      }
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   const downloadInvoice = async () => {
     if (!rental) return;
     
@@ -270,8 +347,8 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
         height: receiptElement.scrollHeight,
       });
 
-      // Calculate PDF dimensions (80mm width)
-      const imgWidth = 80; // 80mm in mm
+      // Calculate PDF dimensions (58mm width)
+      const imgWidth = 58; // 58mm in mm
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       
       // Create PDF
@@ -435,12 +512,24 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
         <div className="bg-white rounded-lg p-4 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Rental Invoice</h3>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
               <Button variant="ghost" onClick={onClose} className="text-xs px-3 py-1">Close</Button>
               <Button onClick={downloadInvoice} className="text-xs px-3 py-1">Download</Button>
               <Button onClick={printInvoice} className="text-xs px-3 py-1">Print</Button>
+              <Button 
+                onClick={printToThermalPrinter} 
+                disabled={isPrinting}
+                className="text-xs px-3 py-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {isPrinting ? 'Printing...' : 'Print to Thermal'}
+              </Button>
             </div>
+            {printerStatus && (
+              <div className="text-xs text-gray-600 mt-1">{printerStatus}</div>
+            )}
           </div>
+        </div>
 
           {/* Simple Thermal Receipt */}
           <div className="thermal-receipt-container">
@@ -580,8 +669,8 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
         }
 
         .thermal-receipt {
-          width: 80mm;
-          max-width: 80mm;
+          width: 58mm;
+          max-width: 58mm;
           margin: 0 auto;
           padding: 10px 8px;
           background: white;
@@ -659,7 +748,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
 
         @media print {
           @page {
-            size: 80mm auto;
+            size: 58mm auto;
             margin: 0;
           }
           
@@ -671,14 +760,14 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
           html {
             margin: 0 !important;
             padding: 0 !important;
-            width: 80mm !important;
+            width: 58mm !important;
             height: auto !important;
           }
           
           body {
             margin: 0 !important;
             padding: 0 !important;
-            width: 80mm !important;
+            width: 58mm !important;
             height: auto !important;
             min-height: 0 !important;
             background: white !important;
@@ -698,7 +787,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
-            width: 80mm !important;
+            width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
@@ -711,7 +800,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             position: relative !important;
             top: 0 !important;
             left: 0 !important;
-            width: 80mm !important;
+            width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
@@ -721,8 +810,8 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             position: relative !important;
             left: 0 !important;
             top: 0 !important;
-            width: 80mm !important;
-            max-width: 80mm !important;
+            width: 58mm !important;
+            max-width: 58mm !important;
             padding: 8mm 6mm !important;
             margin: 0 !important;
             background: white !important;
