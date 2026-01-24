@@ -12,7 +12,6 @@ import { apiClient } from '@/lib/api';
 import { Item, Rental, Booking } from '@/types';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
-import { thermalPrinter } from '@/lib/thermal-printer';
 import { getBprintProductLabelUrl } from '@/lib/bprint';
 
 export default function ItemDetailPage() {
@@ -31,9 +30,6 @@ export default function ItemDetailPage() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingRentals, setLoadingRentals] = useState(false);
-  const [printingLabel, setPrintingLabel] = useState(false);
-  const [printerStatus, setPrinterStatus] = useState<string>('');
-
   const loadRentalsAndBookings = async () => {
     try {
       setLoadingRentals(true);
@@ -91,88 +87,6 @@ export default function ItemDetailPage() {
       link.download = `${item?.code || 'item'}-barcode-label.png`;
       link.href = labelImageUrl;
       link.click();
-    }
-  };
-
-  const printLabelToThermal = async () => {
-    if (!item || !item.barcode) return;
-
-    setPrintingLabel(true);
-    setPrinterStatus('');
-
-    try {
-      // Check if Web Bluetooth is available
-      if (!thermalPrinter.isAvailable()) {
-        const errorMsg = 'Web Bluetooth is not available in this browser. Please use Chrome, Edge, or Opera.';
-        setPrinterStatus(errorMsg);
-        alert(errorMsg);
-        return;
-      }
-
-      // Check connection status
-      const status = thermalPrinter.getConnectionStatus();
-      console.log('Printer connection status:', status);
-
-      // Connect to printer if not already connected
-      if (!thermalPrinter.isConnected()) {
-        setPrinterStatus('Connecting to printer...');
-        console.log('Attempting to connect to printer...');
-        
-        try {
-          await thermalPrinter.connect();
-          const deviceName = thermalPrinter.getDeviceName();
-          setPrinterStatus(`Connected to ${deviceName}`);
-          console.log(`Successfully connected to ${deviceName}`);
-        } catch (connectError: unknown) {
-          console.error('Connection error:', connectError);
-          const errorMessage = connectError instanceof Error ? connectError.message : 'Unknown error';
-          setPrinterStatus(`Connection failed: ${errorMessage}`);
-          alert(`Failed to connect: ${errorMessage}\n\nTroubleshooting:\n1. Make sure printer is powered on\n2. Put printer in pairing mode\n3. Make sure printer is not connected to another device\n4. Check browser console (F12) for details`);
-          return;
-        }
-      } else {
-        setPrinterStatus(`Already connected to ${thermalPrinter.getDeviceName()}`);
-      }
-
-      // Print label
-      setPrinterStatus('Printing label...');
-      console.log('Starting to print product label...');
-      
-      try {
-        await thermalPrinter.printProductLabel({
-          name: item.name,
-          code: item.code,
-          barcode: item.barcode,
-          brand: item.brand,
-          color: item.color,
-          size: item.size,
-        });
-        setPrinterStatus('Label printed successfully!');
-        console.log('Product label printed successfully');
-        
-        // Show success message
-        setTimeout(() => {
-          setPrinterStatus('');
-        }, 2000);
-        alert('Product label printed successfully!');
-      } catch (printError: unknown) {
-        console.error('Print error:', printError);
-        const errorMessage = printError instanceof Error ? printError.message : 'Unknown error';
-        setPrinterStatus(`Print failed: ${errorMessage}`);
-        alert(`Failed to print: ${errorMessage}\n\nPlease check:\n1. Printer has paper\n2. Printer is not jammed\n3. Printer is within range\n4. Try reconnecting`);
-        throw printError;
-      }
-    } catch (error: unknown) {
-      console.error('Thermal printer error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
-      setPrinterStatus(`Error: ${errorMsg}`);
-      
-      // Don't show alert if we already showed one
-      if (error instanceof Error && !error.message.includes('Failed to print') && !error.message.includes('Failed to connect')) {
-        alert(`Error: ${errorMsg}\n\nCheck browser console (F12) for details.`);
-      }
-    } finally {
-      setPrintingLabel(false);
     }
   };
 
@@ -389,29 +303,17 @@ export default function ItemDetailPage() {
                                 Download Label
                               </Button>
                             )}
-                            {item.barcode && (
-                              <Button
-                                onClick={printLabelToThermal}
-                                disabled={printingLabel}
-                                className="px-3 py-1 text-xs bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                              >
-                                {printingLabel ? 'Printing...' : 'Print Label'}
-                              </Button>
-                            )}
                             <a
                               href={getBprintProductLabelUrl(item.id)}
-                              className="inline-flex items-center px-3 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
-                              title="Tap this link in Safari on iPhone. Do not paste the URL into the address bar. On iPhone, set NEXT_PUBLIC_API_URL to your computer IP (e.g. http://192.168.1.x:8081), not localhost."
+                              className="inline-flex items-center px-3 py-1 text-xs rounded-md bg-green-600 text-white hover:bg-green-700"
+                              title="Opens Thermer app to print. On iPhone: tap in Safari; set NEXT_PUBLIC_API_URL to your computer IP, not localhost."
                             >
-                              Print via Bluetooth Print app
+                              Print
                             </a>
                           </div>
                           <p className="text-[10px] text-gray-500 mt-1 text-center">
-                            iPhone: tap the link in Safari (don’t paste in address bar). Use your computer’s IP for the API, not localhost.
+                            Tap Print to open the Thermer app. On iPhone use Safari; set API URL to your computer IP, not localhost.
                           </p>
-                          {printerStatus && (
-                            <div className="mt-2 text-xs text-gray-600 text-center">{printerStatus}</div>
-                          )}
                         </div>
                       )}
                     </div>

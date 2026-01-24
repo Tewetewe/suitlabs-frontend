@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
 import { InvoiceData } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { thermalPrinter } from '@/lib/thermal-printer';
+import { getBprintBookingInvoiceUrl } from '@/lib/bprint';
 
 interface BookingInvoiceModalProps {
   isOpen: boolean;
@@ -16,9 +16,6 @@ interface BookingInvoiceModalProps {
 }
 
 export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoiceModalProps) {
-  const [isPrinting, setIsPrinting] = useState(false);
-  const [printerStatus, setPrinterStatus] = useState<string>('');
-
   if (!isOpen || !invoice) return null;
 
   // Format date and time
@@ -26,80 +23,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
   const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  const printToThermalPrinter = async () => {
-    if (!invoice) return;
-
-    setIsPrinting(true);
-    setPrinterStatus('');
-
-    try {
-      // Check if Web Bluetooth is available
-      if (!thermalPrinter.isAvailable()) {
-        const errorMsg = 'Web Bluetooth is not available in this browser. Please use Chrome, Edge, or Opera.';
-        setPrinterStatus(errorMsg);
-        alert(errorMsg);
-        return;
-      }
-
-      // Check connection status
-      const status = thermalPrinter.getConnectionStatus();
-      console.log('Printer connection status:', status);
-
-      // Connect to printer if not already connected
-      if (!thermalPrinter.isConnected()) {
-        setPrinterStatus('Connecting to printer...');
-        console.log('Attempting to connect to printer...');
-        
-        try {
-          await thermalPrinter.connect();
-          const deviceName = thermalPrinter.getDeviceName();
-          setPrinterStatus(`Connected to ${deviceName}`);
-          console.log(`Successfully connected to ${deviceName}`);
-        } catch (connectError: unknown) {
-          console.error('Connection error:', connectError);
-          const errorMessage = connectError instanceof Error ? connectError.message : 'Unknown error';
-          setPrinterStatus(`Connection failed: ${errorMessage}`);
-          alert(`Failed to connect: ${errorMessage}\n\nTroubleshooting:\n1. Make sure printer is powered on\n2. Put printer in pairing mode\n3. Make sure printer is not connected to another device\n4. Check browser console (F12) for details`);
-          return;
-        }
-      } else {
-        setPrinterStatus(`Already connected to ${thermalPrinter.getDeviceName()}`);
-      }
-
-      // Print invoice
-      setPrinterStatus('Printing invoice...');
-      console.log('Starting to print invoice...');
-      
-      try {
-        await thermalPrinter.printBookingInvoice(invoice);
-        setPrinterStatus('Invoice printed successfully!');
-        console.log('Invoice printed successfully');
-        
-        // Show success message
-        setTimeout(() => {
-          setPrinterStatus('');
-        }, 2000);
-        alert('Invoice printed successfully!');
-      } catch (printError: unknown) {
-        console.error('Print error:', printError);
-        const errorMessage = printError instanceof Error ? printError.message : 'Unknown error';
-        setPrinterStatus(`Print failed: ${errorMessage}`);
-        alert(`Failed to print: ${errorMessage}\n\nPlease check:\n1. Printer has paper\n2. Printer is not jammed\n3. Printer is within range\n4. Try reconnecting`);
-        throw printError;
-      }
-    } catch (error: unknown) {
-      console.error('Thermal printer error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
-      setPrinterStatus(`Error: ${errorMsg}`);
-      
-      // Don't show alert if we already showed one
-      if (error instanceof Error && !error.message.includes('Failed to print') && !error.message.includes('Failed to connect')) {
-        alert(`Error: ${errorMsg}\n\nCheck browser console (F12) for details.`);
-      }
-    } finally {
-      setIsPrinting(false);
-    }
-  };
+  const bprintUrl = getBprintBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full');
 
   const downloadInvoice = async () => {
     if (!invoice) return;
@@ -323,17 +247,13 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={onClose} className="text-xs px-3 py-1">Close</Button>
                 <Button onClick={downloadInvoice} className="text-xs px-3 py-1">Download</Button>
-                <Button 
-                  onClick={printToThermalPrinter} 
-                  disabled={isPrinting}
-                  className="text-xs px-3 py-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                <a
+                  href={bprintUrl}
+                  className="inline-flex items-center text-xs px-3 py-1 rounded-md bg-green-600 text-white hover:bg-green-700"
                 >
-                  {isPrinting ? 'Printing...' : 'Print'}
-                </Button>
+                  Print
+                </a>
               </div>
-              {printerStatus && (
-                <div className="text-xs text-gray-600 mt-1">{printerStatus}</div>
-              )}
             </div>
           </div>
 
@@ -552,10 +472,13 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
             overflow: visible !important;
           }
           
-          /* Hide everything */
-          body > * {
-            display: none !important;
+          /* Hide everything; show only the receipt (works when .print-only-invoice is nested in the DOM) */
+          body * {
             visibility: hidden !important;
+          }
+          .print-only-invoice,
+          .print-only-invoice * {
+            visibility: visible !important;
           }
           
           /* Show only the print-only invoice */
