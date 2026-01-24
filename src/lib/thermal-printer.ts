@@ -296,7 +296,7 @@ export class ThermalPrinterService {
       .lineFeed()
       .setFontSize(1, 1)
       .setBold(false)
-      .text('Sewa Jas Jimbaran & Nusadua')
+      .text('Sewa Jas Jimbaran & Nusa Dua')
       .lineFeed(2);
 
     // Company Info (optimized for 58mm paper width)
@@ -462,13 +462,6 @@ export class ThermalPrinterService {
     generator
       .setAlign('center')
       .text('Thank you for using SuitLabs!')
-      .lineFeed()
-      .setFontSize(1, 1)
-      .text('All bookings subject to T&C')
-      .lineFeed()
-      .text('6-Month Warranty. T&C apply.')
-      .lineFeed()
-      .text('www.suitlabs.com')
       .lineFeed(2);
 
     // Print QR Code with invoice details
@@ -533,18 +526,22 @@ export class ThermalPrinterService {
       .lineFeed()
       .setFontSize(1, 1)
       .setBold(false)
-      .text('Sewa Jas Jimbaran & Nusadua')
+      .text('Sewa Jas Jimbaran & Nusa Dua')
       .lineFeed(2);
 
-    // Company Info (optimized for 58mm paper width)
+    // Company Info (same as booking)
     generator
       .setFontSize(1, 1)
-      .text('Jl. Taman Kebo Iwa No.1D')
+      .text('Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362')
       .lineFeed()
       .text('Benoa, Kec. Kuta Sel., Kab. Badung')
       .lineFeed()
       .text('Bali 80362')
-      .lineFeed(2);
+      .lineFeed()
+      .text('TEL: +62 361 123 4567')
+      .lineFeed()
+      .text('Email: suitlabsbali@gmail.com')
+      .lineFeed();
 
     // Separator
     generator.separator();
@@ -562,15 +559,17 @@ export class ThermalPrinterService {
       .text(`Status: ${rental.status.toUpperCase()}`)
       .lineFeed();
 
-    if (rental.customer) {
-      generator
-        .text(`Customer: ${rental.customer.first_name} ${rental.customer.last_name}`)
-        .lineFeed()
-        .text(`Phone: ${rental.customer.phone}`)
-        .lineFeed();
-    }
-
     generator.lineFeed();
+    generator.separator();
+
+    // Customer (name only, same as booking)
+    generator.text('CUSTOMER:').lineFeed();
+    const rentalCustomerName = rental.customer
+      ? `${rental.customer.first_name || ''} ${rental.customer.last_name || ''}`.trim() || '-'
+      : '-';
+    generator.text(rentalCustomerName).lineFeed();
+    generator.lineFeed(2);
+    generator.separator();
 
     // Print Invoice Number as Barcode
     generator
@@ -702,13 +701,6 @@ export class ThermalPrinterService {
     generator
       .setAlign('center')
       .text('Thank you for using SuitLabs!')
-      .lineFeed()
-      .setFontSize(1, 1)
-      .text('All rentals subject to T&C')
-      .lineFeed()
-      .text('6-Month Warranty. T&C apply.')
-      .lineFeed()
-      .text('www.suitlabs.com')
       .lineFeed(2);
 
     // Print QR Code with rental details

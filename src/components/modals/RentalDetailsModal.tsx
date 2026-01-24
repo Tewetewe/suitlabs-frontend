@@ -28,6 +28,7 @@ interface RentalDetailsModalProps {
   onActivate?: () => void;
   onComplete?: () => void;
   onCancel?: () => void;
+  onInvoice?: () => void;
 }
 
 export function RentalDetailsModal({ 
@@ -37,7 +38,8 @@ export function RentalDetailsModal({
   onEdit, 
   onActivate, 
   onComplete, 
-  onCancel 
+  onCancel,
+  onInvoice 
 }: RentalDetailsModalProps) {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -419,6 +421,13 @@ export function RentalDetailsModal({
             <Button variant="ghost" onClick={onEdit}>
               <Edit className="h-4 w-4 mr-2" />
               Edit
+            </Button>
+          )}
+
+          {onInvoice && (
+            <Button variant="secondary" onClick={onInvoice}>
+              <FileText className="h-4 w-4 mr-2" />
+              Invoice
             </Button>
           )}
         </div>

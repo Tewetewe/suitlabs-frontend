@@ -524,6 +524,10 @@ export default function RentalsPage() {
           onActivate={() => selectedRental && handleActivateRental(selectedRental.id)}
           onComplete={() => selectedRental && handleCompleteRental(selectedRental.id)}
           onCancel={() => selectedRental && handleCancelRental(selectedRental)}
+          onInvoice={() => {
+            setShowDetailsModal(false);
+            setShowInvoiceModal(true);
+          }}
         />
 
         <EditRentalModal

@@ -8,8 +8,6 @@ import { Rental } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { thermalPrinter } from '@/lib/thermal-printer';
-import { getBprintRentalInvoiceUrl } from '@/lib/bprint';
-
 interface RentalInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,221 +39,6 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-  const printInvoice = () => {
-    if (!rental) return;
-
-    // Build invoice HTML content
-    const buildInvoiceHTML = () => {
-      const itemsHTML = items.length > 0 ? (
-        items.map((item) => {
-          const itemName = item.item?.name || 'Item';
-          const itemSize = item.item?.size?.label || '';
-          const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
-          const quantity = item.quantity || 1;
-          const unitPrice = item.unit_price || item.total_price || 0;
-          const itemTotal = item.total_price || unitPrice * quantity;
-          const discount = item.discount_amount ?? 0;
-          
-          return `
-            <div class="receipt-item">
-              <div class="receipt-line">${description}</div>
-              <div class="receipt-line">${quantity} PCS × ${formatCurrency(unitPrice)} = ${formatCurrency(itemTotal)}</div>
-              ${discount > 0 ? `<div class="receipt-line receipt-discount">Discount: (${formatCurrency(discount)})</div>` : ''}
-            </div>
-          `;
-        }).join('')
-      ) : '<div class="receipt-line">Rental Package</div>';
-
-      return `
-        <div class="thermal-receipt-container">
-          <div class="thermal-receipt">
-            <div class="receipt-center">
-              <div class="receipt-title">SUITLABS</div>
-              <div class="receipt-subtitle">Suit Rental System</div>
-              <div class="receipt-line">Jl. Example Street No. 123</div>
-              <div class="receipt-line">City, Country</div>
-              <div class="receipt-line">TEL: +62 123 456 7890</div>
-              <div class="receipt-line">Email: info@suitlabs.com</div>
-            </div>
-            <div class="receipt-divider"></div>
-            <div class="receipt-line">Invoice: ${invoiceNumber}</div>
-            <div class="receipt-line">Date: ${dateStr} ${timeStr}</div>
-            <div class="receipt-line">Rental ID: ${rental.id.slice(-8)}</div>
-            <div class="receipt-line">Status: ${rental.status.toUpperCase()}</div>
-            ${rental.customer ? `
-              <div class="receipt-line">Customer: ${rental.customer.first_name} ${rental.customer.last_name}</div>
-              <div class="receipt-line">Phone: ${rental.customer.phone}</div>
-            ` : ''}
-            <div class="receipt-divider"></div>
-            <div class="receipt-label">ITEMS:</div>
-            ${itemsHTML}
-            <div class="receipt-divider"></div>
-            <div class="receipt-line">Subtotal: ${formatCurrency(itemsSubtotal || rental.total_cost || 0)}</div>
-            ${itemsDiscount > 0 ? `<div class="receipt-line receipt-discount">Discount: (${formatCurrency(itemsDiscount)})</div>` : ''}
-            ${rental.late_fee > 0 ? `<div class="receipt-line">Late Fee: ${formatCurrency(rental.late_fee)}</div>` : ''}
-            ${rental.damage_charges > 0 ? `<div class="receipt-line">Damage: ${formatCurrency(rental.damage_charges)}</div>` : ''}
-            <div class="receipt-total">GRAND TOTAL: ${formatCurrency(total)}</div>
-            ${rental.security_deposit > 0 ? `
-              <div class="receipt-divider"></div>
-              <div class="receipt-line">Security Deposit: ${formatCurrency(rental.security_deposit)}</div>
-              ${rental.damage_charges > 0 ? `<div class="receipt-line receipt-discount">Damage Deduction: (${formatCurrency(rental.damage_charges)})</div>` : ''}
-              <div class="receipt-line receipt-bold">Refundable: ${formatCurrency(refundableDeposit)}</div>
-            ` : ''}
-            <div class="receipt-divider"></div>
-            <div class="receipt-line">Rental Date: ${formatDate(rental.rental_date)}</div>
-            <div class="receipt-line">Return Date: ${formatDate(rental.return_date)}</div>
-            ${rental.actual_pickup_date ? `<div class="receipt-line">Pickup: ${formatDate(rental.actual_pickup_date)}</div>` : ''}
-            ${rental.actual_return_date ? `<div class="receipt-line">Returned: ${formatDate(rental.actual_return_date)}</div>` : ''}
-            ${rental.notes ? `
-              <div class="receipt-divider"></div>
-              <div class="receipt-label">NOTE:</div>
-              <div class="receipt-line">${rental.notes}</div>
-            ` : ''}
-            <div class="receipt-divider"></div>
-            <div class="receipt-center">
-              <div class="receipt-line">Thank you for using SuitLabs!</div>
-              <div class="receipt-line receipt-small">All rentals subject to T&C</div>
-              <div class="receipt-line receipt-small">6-Month Warranty. T&C apply.</div>
-              <div class="receipt-line receipt-small">www.suitlabs.com</div>
-            </div>
-          </div>
-        </div>
-      `;
-    };
-
-    // Create a new window with only the invoice
-    const printWindow = window.open('', '_blank', 'width=300,height=600');
-    if (!printWindow) {
-      alert('Please allow popups to print invoice');
-      return;
-    }
-
-    // Complete HTML with all styles
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Invoice ${invoiceNumber}</title>
-        <meta charset="utf-8">
-        <style>
-          @page {
-            size: 58mm auto;
-            margin: 0;
-          }
-          @media print {
-            @page {
-              size: 58mm auto;
-              margin: 0;
-              width: 58mm;
-            }
-          }
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          html, body {
-            width: 58mm !important;
-            max-width: 58mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white;
-            font-family: 'Courier New', monospace;
-          }
-          .thermal-receipt-container {
-            width: 58mm !important;
-            max-width: 58mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .thermal-receipt {
-            width: 58mm !important;
-            max-width: 58mm !important;
-            padding: 8mm 6mm !important;
-            margin: 0 !important;
-            background: white !important;
-            font-family: 'Courier New', monospace !important;
-            font-size: 11px !important;
-            line-height: 1.5 !important;
-            color: #000 !important;
-          }
-          .receipt-center {
-            text-align: center;
-            margin-bottom: 8px;
-          }
-          .receipt-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 4px;
-            letter-spacing: 1px;
-          }
-          .receipt-subtitle {
-            font-size: 10px;
-            color: #666;
-            margin-bottom: 6px;
-          }
-          .receipt-line {
-            font-size: 11px;
-            line-height: 1.5;
-            margin-bottom: 2px;
-            word-wrap: break-word;
-          }
-          .receipt-label {
-            font-weight: bold;
-            font-size: 11px;
-            margin-bottom: 4px;
-          }
-          .receipt-small {
-            font-size: 9px;
-            color: #666;
-          }
-          .receipt-divider {
-            border-top: 1px dashed #999;
-            margin: 8px 0;
-          }
-          .receipt-item {
-            margin-bottom: 6px;
-          }
-          .receipt-discount {
-            color: #d32f2f;
-          }
-          .receipt-bold {
-            font-weight: bold;
-          }
-          .receipt-total {
-            font-weight: bold;
-            font-size: 12px;
-            margin-top: 6px;
-            padding-top: 6px;
-            border-top: 1px solid #333;
-          }
-          .receipt-footer {
-            text-align: center;
-            font-size: 9px;
-            color: #666;
-            margin-top: 10px;
-          }
-        </style>
-      </head>
-      <body>
-        ${buildInvoiceHTML()}
-        <script>
-          window.onload = function() {
-            setTimeout(function() {
-    window.print();
-            }, 250);
-          };
-        </script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-  };
 
   const printToThermalPrinter = async () => {
     if (!rental) return;
@@ -388,12 +171,11 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
           <div className="thermal-receipt">
             {/* Company Header */}
             <div className="receipt-center">
-              <div className="receipt-title">SUITLABS</div>
-              <div className="receipt-subtitle">Suit Rental System</div>
-              <div className="receipt-line">Jl. Example Street No. 123</div>
-              <div className="receipt-line">City, Country</div>
-              <div className="receipt-line">TEL: +62 123 456 7890</div>
-              <div className="receipt-line">Email: info@suitlabs.com</div>
+              <div className="receipt-title">SUITLABS BALI</div>
+              <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusa Dua</div>
+              <div className="receipt-line">Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362</div>
+              <div className="receipt-line">TEL: +62 361 123 4567</div>
+              <div className="receipt-line">Email: suitlabsbali@gmail.com</div>
             </div>
 
             <div className="receipt-divider"></div>
@@ -403,12 +185,11 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             <div className="receipt-line">Date: {dateStr} {timeStr}</div>
             <div className="receipt-line">Rental ID: {rental.id.slice(-8)}</div>
             <div className="receipt-line">Status: {rental.status.toUpperCase()}</div>
-            {rental.customer && (
-              <>
-                <div className="receipt-line">Customer: {rental.customer.first_name} {rental.customer.last_name}</div>
-                <div className="receipt-line">Phone: {rental.customer.phone}</div>
-              </>
-            )}
+            <div className="receipt-divider"></div>
+
+            {/* Customer (name only) */}
+            <div className="receipt-label">CUSTOMER:</div>
+            <div className="receipt-line">{rental.customer ? `${rental.customer.first_name || ''} ${rental.customer.last_name || ''}`.trim() || '-' : '-'}</div>
 
             <div className="receipt-divider"></div>
 
@@ -503,9 +284,6 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             <div className="receipt-divider"></div>
             <div className="receipt-center">
               <div className="receipt-line">Thank you for using SuitLabs!</div>
-              <div className="receipt-line receipt-small">All rentals subject to T&C</div>
-              <div className="receipt-line receipt-small">6-Month Warranty. T&C apply.</div>
-              <div className="receipt-line receipt-small">www.suitlabs.com</div>
             </div>
           </div>
         </div>
@@ -513,48 +291,36 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
 
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 print:hidden">
         <div className="bg-white rounded-lg p-4 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Rental Invoice</h3>
-          <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={onClose} className="text-xs px-3 py-1">Close</Button>
-              <Button onClick={downloadInvoice} className="text-xs px-3 py-1">Download</Button>
-              <Button onClick={printInvoice} className="text-xs px-3 py-1">Print</Button>
-              <Button 
-                onClick={printToThermalPrinter} 
-                disabled={isPrinting}
-                className="text-xs px-3 py-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-              >
-                {isPrinting ? 'Printing...' : 'Print to Thermal'}
-              </Button>
-              <a
-                href={getBprintRentalInvoiceUrl(rental.id)}
-                className="text-xs px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
-                title="Tap this link in Safari on iPhone. Do not paste the URL into the address bar. On iPhone, set NEXT_PUBLIC_API_URL to your computer IP (e.g. http://192.168.1.x:8081), not localhost."
-              >
-                Print via Bluetooth Print app
-              </a>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Rental Invoice</h3>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={onClose} className="text-xs px-3 py-1">Close</Button>
+                <Button onClick={downloadInvoice} className="text-xs px-3 py-1">Download</Button>
+                <Button 
+                  onClick={printToThermalPrinter} 
+                  disabled={isPrinting}
+                  className="text-xs px-3 py-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isPrinting ? 'Printing...' : 'Print'}
+                </Button>
+              </div>
+              {printerStatus && (
+                <div className="text-xs text-gray-600 mt-1">{printerStatus}</div>
+              )}
             </div>
-            <p className="text-[10px] text-gray-500 mt-1">
-              iPhone: tap the link in Safari (don’t paste in address bar). Use your computer’s IP for the API, not localhost.
-            </p>
-            {printerStatus && (
-              <div className="text-xs text-gray-600 mt-1">{printerStatus}</div>
-            )}
           </div>
-        </div>
 
           {/* Simple Thermal Receipt */}
           <div className="thermal-receipt-container">
             <div className="thermal-receipt">
             {/* Company Header */}
             <div className="receipt-center">
-              <div className="receipt-title">SUITLABS</div>
-              <div className="receipt-subtitle">Suit Rental System</div>
-              <div className="receipt-line">Jl. Example Street No. 123</div>
-              <div className="receipt-line">City, Country</div>
-              <div className="receipt-line">TEL: +62 123 456 7890</div>
-              <div className="receipt-line">Email: info@suitlabs.com</div>
+              <div className="receipt-title">SUITLABS BALI</div>
+              <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusa Dua</div>
+              <div className="receipt-line">Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362</div>
+              <div className="receipt-line">TEL: +62 361 123 4567</div>
+              <div className="receipt-line">Email: suitlabsbali@gmail.com</div>
             </div>
 
             <div className="receipt-divider"></div>
@@ -564,12 +330,11 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             <div className="receipt-line">Date: {dateStr} {timeStr}</div>
             <div className="receipt-line">Rental ID: {rental.id.slice(-8)}</div>
             <div className="receipt-line">Status: {rental.status.toUpperCase()}</div>
-            {rental.customer && (
-              <>
-                <div className="receipt-line">Customer: {rental.customer.first_name} {rental.customer.last_name}</div>
-                <div className="receipt-line">Phone: {rental.customer.phone}</div>
-              </>
-            )}
+            <div className="receipt-divider"></div>
+
+            {/* Customer (name only) */}
+            <div className="receipt-label">CUSTOMER:</div>
+            <div className="receipt-line">{rental.customer ? `${rental.customer.first_name || ''} ${rental.customer.last_name || ''}`.trim() || '-' : '-'}</div>
 
             <div className="receipt-divider"></div>
 
@@ -664,9 +429,6 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             <div className="receipt-divider"></div>
             <div className="receipt-center">
               <div className="receipt-line">Thank you for using SuitLabs!</div>
-              <div className="receipt-line receipt-small">All rentals subject to T&C</div>
-              <div className="receipt-line receipt-small">6-Month Warranty. T&C apply.</div>
-              <div className="receipt-line receipt-small">www.suitlabs.com</div>
             </div>
             </div>
           </div>
