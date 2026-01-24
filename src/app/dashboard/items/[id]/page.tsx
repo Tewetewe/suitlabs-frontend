@@ -13,6 +13,7 @@ import { Item, Rental, Booking } from '@/types';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
 import { thermalPrinter } from '@/lib/thermal-printer';
+import { getBprintProductLabelUrl } from '@/lib/bprint';
 
 export default function ItemDetailPage() {
   const routeParams = useParams<{ id: string }>();
@@ -397,7 +398,17 @@ export default function ItemDetailPage() {
                                 {printingLabel ? 'Printing...' : 'Print Label'}
                               </Button>
                             )}
+                            <a
+                              href={getBprintProductLabelUrl(item.id)}
+                              className="inline-flex items-center px-3 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
+                              title="Tap this link in Safari on iPhone. Do not paste the URL into the address bar. On iPhone, set NEXT_PUBLIC_API_URL to your computer IP (e.g. http://192.168.1.x:8081), not localhost."
+                            >
+                              Print via Bluetooth Print app
+                            </a>
                           </div>
+                          <p className="text-[10px] text-gray-500 mt-1 text-center">
+                            iPhone: tap the link in Safari (don’t paste in address bar). Use your computer’s IP for the API, not localhost.
+                          </p>
                           {printerStatus && (
                             <div className="mt-2 text-xs text-gray-600 text-center">{printerStatus}</div>
                           )}

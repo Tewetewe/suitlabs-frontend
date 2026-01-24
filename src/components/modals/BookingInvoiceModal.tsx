@@ -8,6 +8,7 @@ import { InvoiceData } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { thermalPrinter } from '@/lib/thermal-printer';
+import { getBprintBookingInvoiceUrl } from '@/lib/bprint';
 
 interface BookingInvoiceModalProps {
   isOpen: boolean;
@@ -552,7 +553,17 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
                 >
                   {isPrinting ? 'Printing...' : 'Print to Thermal'}
                 </Button>
+                <a
+                  href={getBprintBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full')}
+                  className="text-xs px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
+                  title="Tap this link in Safari on iPhone. Do not paste the URL into the address bar. On iPhone, set NEXT_PUBLIC_API_URL to your computer IP (e.g. http://192.168.1.x:8081), not localhost."
+                >
+                  Print via Bluetooth Print app
+                </a>
               </div>
+              <p className="text-[10px] text-gray-500 mt-1">
+                iPhone: tap the link in Safari (don’t paste in address bar). Use your computer’s IP for the API, not localhost.
+              </p>
               {printerStatus && (
                 <div className="text-xs text-gray-600 mt-1">{printerStatus}</div>
               )}
