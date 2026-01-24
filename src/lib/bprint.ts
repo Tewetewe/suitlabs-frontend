@@ -9,17 +9,20 @@ function getApiBase(): string {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081').replace(/\/$/, '');
 }
 
-export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full'): string {
+export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
   const base = getApiBase();
-  return `bprint://${base}/api/v1/bprint/booking-invoice?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}`;
+  const fmt = format ? `&format=${format}` : '';
+  return `bprint://${base}/api/v1/bprint/booking-invoice?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`;
 }
 
-export function getBprintRentalInvoiceUrl(rentalId: string): string {
+export function getBprintRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
   const base = getApiBase();
-  return `bprint://${base}/api/v1/bprint/rental-invoice?rental_id=${encodeURIComponent(rentalId)}`;
+  const fmt = format ? `&format=${format}` : '';
+  return `bprint://${base}/api/v1/bprint/rental-invoice?rental_id=${encodeURIComponent(rentalId)}${fmt}`;
 }
 
-export function getBprintProductLabelUrl(itemId: string): string {
+export function getBprintProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {
   const base = getApiBase();
-  return `bprint://${base}/api/v1/bprint/product-label?item_id=${encodeURIComponent(itemId)}`;
+  const fmt = format ? `&format=${format}` : '';
+  return `bprint://${base}/api/v1/bprint/product-label?item_id=${encodeURIComponent(itemId)}${fmt}`;
 }
