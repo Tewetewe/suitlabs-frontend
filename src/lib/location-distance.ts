@@ -9,7 +9,7 @@ export const OFFICE_LOCATION = {
 /**
  * Maximum acceptable distance from office in kilometers
  */
-export const MAX_DISTANCE_KM = 1.0;
+export const MAX_DISTANCE_KM = 0.1; // 100 meters
 
 /**
  * Calculate distance between two coordinates using Haversine formula
