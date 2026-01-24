@@ -139,6 +139,12 @@ export default function AdminAttendancePage() {
         >
           Backdate Requests
         </Button>
+        <Button
+          onClick={() => router.push("/admin/attendance/time-off-requests")}
+          className="bg-purple-600 hover:bg-purple-700"
+        >
+          Time Off Requests
+        </Button>
       </div>
 
       {error && <div className="bg-red-100 text-red-700 p-4 rounded mb-4">{error}</div>}

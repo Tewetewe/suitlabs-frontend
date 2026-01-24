@@ -198,6 +198,12 @@ export default function StaffAttendancePage() {
           >
             View Log
           </Button>
+          <Button
+            onClick={() => router.push("/attendance/time-off")}
+            className="bg-purple-600 hover:bg-purple-700"
+          >
+            Time Off
+          </Button>
         </div>
       </div>
     </div>
