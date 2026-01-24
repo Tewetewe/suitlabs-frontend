@@ -17,7 +17,8 @@ import {
   CheckCircle,
   XCircle,
   Edit,
-  FileText
+  FileText,
+  Printer
 } from 'lucide-react';
 
 interface RentalDetailsModalProps {
@@ -28,6 +29,7 @@ interface RentalDetailsModalProps {
   onActivate?: () => void;
   onComplete?: () => void;
   onCancel?: () => void;
+  onInvoice?: () => void;
 }
 
 export function RentalDetailsModal({ 
@@ -37,7 +39,8 @@ export function RentalDetailsModal({
   onEdit, 
   onActivate, 
   onComplete, 
-  onCancel 
+  onCancel,
+  onInvoice
 }: RentalDetailsModalProps) {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -396,6 +399,13 @@ export function RentalDetailsModal({
           <Button variant="ghost" onClick={onClose}>
             Close
           </Button>
+
+          {rental.status !== 'cancelled' && onInvoice && (
+            <Button variant="ghost" onClick={onInvoice}>
+              <Printer className="h-4 w-4 mr-2" />
+              Invoice
+            </Button>
+          )}
           
           {rental.status === 'pending' && onActivate && (
             <Button variant="secondary" onClick={onActivate}>

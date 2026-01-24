@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/currency';
-import { formatDate } from '@/lib/date';
 import { InvoiceData } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -22,10 +21,14 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
 
   if (!isOpen || !invoice) return null;
 
-  // Format date and time
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
-  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  // Bprint-style date formats (match backend bprint)
+  const bprintDate = (d: string | Date) =>
+    new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const bprintDateTime = (d: string | Date) => {
+    const x = new Date(d);
+    return x.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
+      ' ' + x.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
 
   const printInvoice = () => {
     if (!invoice) return;
@@ -35,61 +38,52 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
       const itemsHTML = invoice.items && invoice.items.length > 0 ? (
         invoice.items.map((item) => {
           if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
-            return `<div class="receipt-item"><div class="receipt-line">${item.description}</div></div>`;
+            return `<div class="receipt-item"><div class="receipt-line">  ${item.description}</div></div>`;
           }
           return `
             <div class="receipt-item">
-              <div class="receipt-line">${item.description}</div>
-              <div class="receipt-line">${item.quantity} PCS × ${formatCurrency(item.unit_price || 0)} = ${formatCurrency(item.total || 0)}</div>
+              <div class="receipt-line">  ${item.description}</div>
+              <div class="receipt-line">    ${item.quantity} x ${formatCurrency(item.unit_price || 0)} = ${formatCurrency(item.total || 0)}</div>
             </div>
           `;
-        }).join('') + (isPackagePricing ? `<div class="receipt-item"><div class="receipt-line receipt-bold">Package Total: ${formatCurrency(invoice.total_amount || 0)}</div></div>` : '')
+        }).join('') + (isPackagePricing && (invoice.total_amount || 0) > 0 ? `<div class="receipt-line">Package: ${formatCurrency(invoice.total_amount || 0)}</div>` : '')
       ) : `<div class="receipt-line">${invoice.product_name || 'Booking Package'}</div>`;
 
       return `
         <div class="thermal-receipt-container">
           <div class="thermal-receipt">
             <div class="receipt-center">
-              <div class="receipt-title">SUITLABS</div>
-              <div class="receipt-subtitle">Suit Rental System</div>
-              <div class="receipt-line">${invoice.company?.address || 'Jl. Example Street No. 123'}</div>
-              <div class="receipt-line">${invoice.company?.phone ? `TEL: ${invoice.company.phone}` : 'TEL: +62 123 456 7890'}</div>
-              <div class="receipt-line">${invoice.company?.email ? `Email: ${invoice.company.email}` : 'Email: info@suitlabs.com'}</div>
+              <div class="receipt-title">SUITLABS BALI</div>
+              <div class="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
+              <div class="receipt-line">${invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362'}</div>
+              ${invoice.company?.phone ? `<div class="receipt-line">TEL: ${invoice.company.phone}</div>` : ''}
             </div>
             <div class="receipt-divider"></div>
             <div class="receipt-line">Invoice: ${invoice.invoice_number}</div>
-            <div class="receipt-line">Date: ${dateStr} ${timeStr}</div>
+            <div class="receipt-line">Date: ${bprintDateTime(invoice.generated_at || new Date())}</div>
             <div class="receipt-line">Booking ID: ${invoice.booking_id.slice(-8)}</div>
             <div class="receipt-line">Type: ${invoice.invoice_type?.toUpperCase() || 'FULL'}</div>
-            ${invoice.due_date ? `<div class="receipt-line">Due Date: ${formatDate(invoice.due_date)}</div>` : ''}
+            ${invoice.due_date ? `<div class="receipt-line">Due: ${bprintDate(invoice.due_date)}</div>` : ''}
+            <div class="receipt-line">Status: ${invoice.payment_status?.toUpperCase() || 'PENDING'}</div>
+            ${invoice.booking_date ? `<div class="receipt-line">Booking: ${bprintDate(invoice.booking_date)}</div>` : ''}
             <div class="receipt-divider"></div>
             <div class="receipt-label">CUSTOMER:</div>
             <div class="receipt-line">${invoice.customer_name}</div>
-            <div class="receipt-line">Email: ${invoice.customer_email}</div>
-            <div class="receipt-line">Phone: ${invoice.customer_phone}</div>
             <div class="receipt-divider"></div>
             <div class="receipt-label">ITEMS:</div>
             ${itemsHTML}
             <div class="receipt-divider"></div>
             <div class="receipt-line">Subtotal: ${formatCurrency(invoice.total_amount || 0)}</div>
             ${(invoice.discount_amount || 0) > 0 ? `<div class="receipt-line receipt-discount">Discount: (${formatCurrency(invoice.discount_amount || 0)})</div>` : ''}
-            <div class="receipt-total">TOTAL AMOUNT: ${formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
-            <div class="receipt-divider"></div>
+            <div class="receipt-total">TOTAL: ${formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
             ${invoice.invoice_type === 'dp' ? `
-              <div class="receipt-line">Down Payment: ${formatCurrency(invoice.due_amount || 0)}</div>
+              <div class="receipt-line">DP: ${formatCurrency(invoice.due_amount || 0)}</div>
               <div class="receipt-line">Remaining: ${formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}</div>
-            ` : `<div class="receipt-line">Due Amount: ${formatCurrency(invoice.due_amount || 0)}</div>`}
-            <div class="receipt-line receipt-bold">Payment Status: ${invoice.payment_status?.toUpperCase() || 'PENDING'}</div>
-            ${invoice.booking_date ? `
-              <div class="receipt-divider"></div>
-              <div class="receipt-line">Booking Date: ${formatDate(invoice.booking_date)}</div>
-            ` : ''}
+            ` : `<div class="receipt-line">Due: ${formatCurrency(invoice.due_amount || 0)}</div>`}
             <div class="receipt-divider"></div>
             <div class="receipt-center">
               <div class="receipt-line">Thank you for using SuitLabs!</div>
-              <div class="receipt-line receipt-small">All bookings subject to T&C</div>
-              <div class="receipt-line receipt-small">6-Month Warranty. T&C apply.</div>
-              <div class="receipt-line receipt-small">suitlabs.id</div>
+              <div class="receipt-line receipt-small">suitlabs.bali</div>
             </div>
           </div>
         </div>
@@ -420,37 +414,34 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
       <div className="print-only-invoice" style={{ display: 'none' }}>
         <div className="thermal-receipt-container">
           <div className="thermal-receipt">
-            {/* Company Header */}
+            {/* Company Header - same as bprint */}
             <div className="receipt-center">
-              <div className="receipt-title">SUITLABS</div>
-              <div className="receipt-subtitle">Suit Rental System</div>
-              <div className="receipt-line">{invoice.company?.address || 'Jl. Example Street No. 123'}</div>
-              <div className="receipt-line">{invoice.company?.phone ? `TEL: ${invoice.company.phone}` : 'TEL: +62 123 456 7890'}</div>
-              <div className="receipt-line">{invoice.company?.email ? `Email: ${invoice.company.email}` : 'Email: info@suitlabs.com'}</div>
+              <div className="receipt-title">SUITLABS BALI</div>
+              <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
+              <div className="receipt-line">{invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362'}</div>
+              {invoice.company?.phone && <div className="receipt-line">TEL: {invoice.company.phone}</div>}
             </div>
 
             <div className="receipt-divider"></div>
 
-            {/* Invoice Info */}
+            {/* Invoice & booking info - same as bprint */}
             <div className="receipt-line">Invoice: {invoice.invoice_number}</div>
-            <div className="receipt-line">Date: {dateStr} {timeStr}</div>
+            <div className="receipt-line">Date: {bprintDateTime(invoice.generated_at || new Date())}</div>
             <div className="receipt-line">Booking ID: {invoice.booking_id.slice(-8)}</div>
             <div className="receipt-line">Type: {invoice.invoice_type?.toUpperCase() || 'FULL'}</div>
-            {invoice.due_date && (
-              <div className="receipt-line">Due Date: {formatDate(invoice.due_date)}</div>
-            )}
+            {invoice.due_date && <div className="receipt-line">Due: {bprintDate(invoice.due_date)}</div>}
+            <div className="receipt-line">Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}</div>
+            {invoice.booking_date && <div className="receipt-line">Booking: {bprintDate(invoice.booking_date)}</div>}
 
             <div className="receipt-divider"></div>
 
-            {/* Customer Info */}
+            {/* Customer - name only, same as bprint */}
             <div className="receipt-label">CUSTOMER:</div>
             <div className="receipt-line">{invoice.customer_name}</div>
-            <div className="receipt-line">Email: {invoice.customer_email}</div>
-            <div className="receipt-line">Phone: {invoice.customer_phone}</div>
 
             <div className="receipt-divider"></div>
 
-            {/* Items */}
+            {/* Items - same as bprint */}
             <div className="receipt-label">ITEMS:</div>
             {invoice.items && invoice.items.length > 0 ? (
               <>
@@ -458,24 +449,19 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
                   if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
                     return (
                       <div key={idx} className="receipt-item">
-                        <div className="receipt-line">{item.description}</div>
+                        <div className="receipt-line">  {item.description}</div>
                       </div>
                     );
                   }
-                  
                   return (
                     <div key={idx} className="receipt-item">
-                      <div className="receipt-line">{item.description}</div>
-                      <div className="receipt-line">
-                        {item.quantity} PCS × {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}
-                      </div>
+                      <div className="receipt-line">  {item.description}</div>
+                      <div className="receipt-line">    {item.quantity} x {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}</div>
                     </div>
                   );
                 })}
-                {isPackagePricing && (
-                  <div className="receipt-item">
-                    <div className="receipt-line receipt-bold">Package Total: {formatCurrency(invoice.total_amount || 0)}</div>
-                  </div>
+                {isPackagePricing && (invoice.total_amount || 0) > 0 && (
+                  <div className="receipt-line">Package: {formatCurrency(invoice.total_amount || 0)}</div>
                 )}
               </>
             ) : (
@@ -484,54 +470,26 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
 
             <div className="receipt-divider"></div>
 
-            {/* Summary */}
-            <div className="receipt-line">
-              Subtotal: {formatCurrency(invoice.total_amount || 0)}
-            </div>
+            {/* Summary - same as bprint */}
+            <div className="receipt-line">Subtotal: {formatCurrency(invoice.total_amount || 0)}</div>
             {(invoice.discount_amount || 0) > 0 && (
-              <div className="receipt-line receipt-discount">
-                Discount: ({formatCurrency(invoice.discount_amount || 0)})
-              </div>
+              <div className="receipt-line receipt-discount">Discount: ({formatCurrency(invoice.discount_amount || 0)})</div>
             )}
-            <div className="receipt-total">
-              TOTAL AMOUNT: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}
-            </div>
-
-            {/* Payment Info */}
-            <div className="receipt-divider"></div>
+            <div className="receipt-total">TOTAL: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
             {invoice.invoice_type === 'dp' ? (
               <>
-                <div className="receipt-line">
-                  Down Payment: {formatCurrency(invoice.due_amount || 0)}
-                </div>
-                <div className="receipt-line">
-                  Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}
-                </div>
+                <div className="receipt-line">DP: {formatCurrency(invoice.due_amount || 0)}</div>
+                <div className="receipt-line">Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}</div>
               </>
             ) : (
-              <div className="receipt-line">
-                Due Amount: {formatCurrency(invoice.due_amount || 0)}
-              </div>
-            )}
-            <div className="receipt-line receipt-bold">
-              Payment Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}
-            </div>
-
-            {/* Booking Date */}
-            {invoice.booking_date && (
-              <>
-                <div className="receipt-divider"></div>
-                <div className="receipt-line">Booking Date: {formatDate(invoice.booking_date)}</div>
-              </>
+              <div className="receipt-line">Due: {formatCurrency(invoice.due_amount || 0)}</div>
             )}
 
-            {/* Footer */}
+            {/* Footer - same as bprint */}
             <div className="receipt-divider"></div>
             <div className="receipt-center">
               <div className="receipt-line">Thank you for using SuitLabs!</div>
-              <div className="receipt-line receipt-small">All bookings subject to T&C</div>
-              <div className="receipt-line receipt-small">6-Month Warranty. T&C apply.</div>
-              <div className="receipt-line receipt-small">suitlabs.id</div>
+              <div className="receipt-line receipt-small">suitlabs.bali</div>
             </div>
           </div>
         </div>
@@ -570,66 +528,57 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
             </div>
           </div>
 
-          {/* Simple Thermal Receipt */}
+          {/* Thermal Receipt - same structure as bprint */}
           <div className="thermal-receipt-container">
             <div className="thermal-receipt">
-            {/* Company Header */}
+            {/* Company Header - same as bprint */}
             <div className="receipt-center">
-              <div className="receipt-title">SUITLABS</div>
-              <div className="receipt-subtitle">Suit Rental System</div>
-              <div className="receipt-line">{invoice.company?.address || 'Jl. Example Street No. 123'}</div>
-              <div className="receipt-line">{invoice.company?.phone ? `TEL: ${invoice.company.phone}` : 'TEL: +62 123 456 7890'}</div>
-              <div className="receipt-line">{invoice.company?.email ? `Email: ${invoice.company.email}` : 'Email: info@suitlabs.com'}</div>
+              <div className="receipt-title">SUITLABS BALI</div>
+              <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
+              <div className="receipt-line">{invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362'}</div>
+              {invoice.company?.phone && <div className="receipt-line">TEL: {invoice.company.phone}</div>}
             </div>
 
             <div className="receipt-divider"></div>
 
-            {/* Invoice Info */}
+            {/* Invoice & booking info - same as bprint */}
             <div className="receipt-line">Invoice: {invoice.invoice_number}</div>
-            <div className="receipt-line">Date: {dateStr} {timeStr}</div>
+            <div className="receipt-line">Date: {bprintDateTime(invoice.generated_at || new Date())}</div>
             <div className="receipt-line">Booking ID: {invoice.booking_id.slice(-8)}</div>
             <div className="receipt-line">Type: {invoice.invoice_type?.toUpperCase() || 'FULL'}</div>
-            {invoice.due_date && (
-              <div className="receipt-line">Due Date: {formatDate(invoice.due_date)}</div>
-            )}
+            {invoice.due_date && <div className="receipt-line">Due: {bprintDate(invoice.due_date)}</div>}
+            <div className="receipt-line">Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}</div>
+            {invoice.booking_date && <div className="receipt-line">Booking: {bprintDate(invoice.booking_date)}</div>}
 
             <div className="receipt-divider"></div>
 
-            {/* Customer Info */}
+            {/* Customer - name only, same as bprint */}
             <div className="receipt-label">CUSTOMER:</div>
             <div className="receipt-line">{invoice.customer_name}</div>
-            <div className="receipt-line">Email: {invoice.customer_email}</div>
-            <div className="receipt-line">Phone: {invoice.customer_phone}</div>
 
             <div className="receipt-divider"></div>
 
-            {/* Items */}
+            {/* Items - same as bprint */}
             <div className="receipt-label">ITEMS:</div>
             {invoice.items && invoice.items.length > 0 ? (
               <>
                 {invoice.items.map((item, idx) => {
-                  // Skip items with zero prices (sub-items in package)
                   if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
                     return (
                       <div key={idx} className="receipt-item">
-                        <div className="receipt-line">{item.description}</div>
+                        <div className="receipt-line">  {item.description}</div>
                       </div>
                     );
                   }
-                  
                   return (
                     <div key={idx} className="receipt-item">
-                      <div className="receipt-line">{item.description}</div>
-                      <div className="receipt-line">
-                        {item.quantity} PCS × {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}
-                      </div>
+                      <div className="receipt-line">  {item.description}</div>
+                      <div className="receipt-line">    {item.quantity} x {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}</div>
                     </div>
                   );
                 })}
-                {isPackagePricing && (
-                  <div className="receipt-item">
-                    <div className="receipt-line receipt-bold">Package Total: {formatCurrency(invoice.total_amount || 0)}</div>
-                  </div>
+                {isPackagePricing && (invoice.total_amount || 0) > 0 && (
+                  <div className="receipt-line">Package: {formatCurrency(invoice.total_amount || 0)}</div>
                 )}
               </>
             ) : (
@@ -638,54 +587,26 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
 
             <div className="receipt-divider"></div>
 
-            {/* Summary */}
-            <div className="receipt-line">
-              Subtotal: {formatCurrency(invoice.total_amount || 0)}
-            </div>
+            {/* Summary - same as bprint */}
+            <div className="receipt-line">Subtotal: {formatCurrency(invoice.total_amount || 0)}</div>
             {(invoice.discount_amount || 0) > 0 && (
-              <div className="receipt-line receipt-discount">
-                Discount: ({formatCurrency(invoice.discount_amount || 0)})
-              </div>
+              <div className="receipt-line receipt-discount">Discount: ({formatCurrency(invoice.discount_amount || 0)})</div>
             )}
-            <div className="receipt-total">
-              TOTAL AMOUNT: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}
-            </div>
-
-            {/* Payment Info */}
-            <div className="receipt-divider"></div>
+            <div className="receipt-total">TOTAL: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
             {invoice.invoice_type === 'dp' ? (
               <>
-                <div className="receipt-line">
-                  Down Payment: {formatCurrency(invoice.due_amount || 0)}
-                </div>
-                <div className="receipt-line">
-                  Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}
-                </div>
+                <div className="receipt-line">DP: {formatCurrency(invoice.due_amount || 0)}</div>
+                <div className="receipt-line">Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}</div>
               </>
             ) : (
-              <div className="receipt-line">
-                Due Amount: {formatCurrency(invoice.due_amount || 0)}
-              </div>
-            )}
-            <div className="receipt-line receipt-bold">
-              Payment Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}
-            </div>
-
-            {/* Booking Date */}
-            {invoice.booking_date && (
-              <>
-                <div className="receipt-divider"></div>
-                <div className="receipt-line">Booking Date: {formatDate(invoice.booking_date)}</div>
-              </>
+              <div className="receipt-line">Due: {formatCurrency(invoice.due_amount || 0)}</div>
             )}
 
-            {/* Footer */}
+            {/* Footer - same as bprint */}
             <div className="receipt-divider"></div>
             <div className="receipt-center">
               <div className="receipt-line">Thank you for using SuitLabs!</div>
-              <div className="receipt-line receipt-small">All bookings subject to T&C</div>
-              <div className="receipt-line receipt-small">6-Month Warranty. T&C apply.</div>
-              <div className="receipt-line receipt-small">suitlabs.id</div>
+              <div className="receipt-line receipt-small">suitlabs.bali</div>
             </div>
           </div>
           </div>

@@ -11,7 +11,7 @@ import { formatCurrency } from '@/lib/currency';
 import { formatDate, formatDateTime } from '@/lib/date';
 import { Rental } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Edit, FileText, User, Calendar, DollarSign, Eye } from 'lucide-react';
+import { Plus, Edit, FileText, User, Calendar, DollarSign, Eye, Printer } from 'lucide-react';
 import { CreateRentalModal } from '@/components/modals/CreateRentalModal';
 import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
 import { RentalDetailsModal } from '@/components/modals/RentalDetailsModal';
@@ -415,6 +415,19 @@ export default function RentalsPage() {
                       <Button variant="ghost" size="sm" onClick={() => handleEditRental(rental)}>
                         <Edit className="h-4 w-4" />
                       </Button>
+                      {rental.status !== 'cancelled' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedRental(rental);
+                            setShowInvoiceModal(true);
+                          }}
+                          title="Print / Invoice"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                      )}
                       {rental.status === 'pending' && (
                         <Button variant="primary" size="sm" onClick={() => handlePickupRental(rental.id)}>
                           Pickup
@@ -524,6 +537,10 @@ export default function RentalsPage() {
           onActivate={() => selectedRental && handleActivateRental(selectedRental.id)}
           onComplete={() => selectedRental && handleCompleteRental(selectedRental.id)}
           onCancel={() => selectedRental && handleCancelRental(selectedRental)}
+          onInvoice={() => {
+            setShowDetailsModal(false);
+            setShowInvoiceModal(true);
+          }}
         />
 
         <EditRentalModal

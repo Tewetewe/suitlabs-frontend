@@ -302,11 +302,7 @@ export class ThermalPrinterService {
     // Company Info (optimized for 58mm paper width)
     generator
       .setFontSize(1, 1)
-      .text(invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D')
-      .lineFeed()
-      .text('Benoa, Kec. Kuta Sel., Kab. Badung')
-      .lineFeed()
-      .text('Bali 80362')
+      .text(invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362')
       .lineFeed();
     
     if (invoice.company?.phone) {
@@ -468,7 +464,7 @@ export class ThermalPrinterService {
       .lineFeed()
       .text('6-Month Warranty. T&C apply.')
       .lineFeed()
-      .text('suitlabs.id')
+      .text('suitlabs.bali')
       .lineFeed(2);
 
     // Print QR Code with invoice details
@@ -539,11 +535,7 @@ export class ThermalPrinterService {
     // Company Info (optimized for 58mm paper width)
     generator
       .setFontSize(1, 1)
-      .text('Jl. Taman Kebo Iwa No.1D')
-      .lineFeed()
-      .text('Benoa, Kec. Kuta Sel., Kab. Badung')
-      .lineFeed()
-      .text('Bali 80362')
+      .text('Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kab. Badung, Bali 80362')
       .lineFeed(2);
 
     // Separator
@@ -708,7 +700,7 @@ export class ThermalPrinterService {
       .lineFeed()
       .text('6-Month Warranty. T&C apply.')
       .lineFeed()
-      .text('suitlabs.id')
+      .text('suitlabs.bali')
       .lineFeed(2);
 
     // Print QR Code with rental details
