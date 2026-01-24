@@ -11,18 +11,18 @@ function getApiBase(): string {
 
 export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
   const base = getApiBase();
-  const fmt = format ? `&format=${format}` : '';
+  const fmt = `&format=${format ?? 'array'}`;
   return `bprint://${base}/api/v1/bprint/booking-invoice?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`;
 }
 
 export function getBprintRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
   const base = getApiBase();
-  const fmt = format ? `&format=${format}` : '';
+  const fmt = `&format=${format ?? 'array'}`;
   return `bprint://${base}/api/v1/bprint/rental-invoice?rental_id=${encodeURIComponent(rentalId)}${fmt}`;
 }
 
 export function getBprintProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {
   const base = getApiBase();
-  const fmt = format ? `&format=${format}` : '';
+  const fmt = `&format=${format ?? 'array'}`;
   return `bprint://${base}/api/v1/bprint/product-label?item_id=${encodeURIComponent(itemId)}${fmt}`;
 }
