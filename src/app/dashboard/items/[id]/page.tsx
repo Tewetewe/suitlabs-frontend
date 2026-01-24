@@ -12,6 +12,7 @@ import { apiClient } from '@/lib/api';
 import { Item, Rental, Booking } from '@/types';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
+import { thermalPrinter } from '@/lib/thermal-printer';
 import { getBprintProductLabelUrl } from '@/lib/bprint';
 
 export default function ItemDetailPage() {
@@ -30,6 +31,35 @@ export default function ItemDetailPage() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingRentals, setLoadingRentals] = useState(false);
+  const [printingLabel, setPrintingLabel] = useState(false);
+  const [printerStatus, setPrinterStatus] = useState<string>('');
+
+  const printLabelDirect = async () => {
+    if (!item || !item.barcode) return;
+    if (!thermalPrinter.isAvailable()) {
+      alert('Use Print via Thermer in Safari. Chrome/Edge for Bluetooth.');
+      return;
+    }
+    setPrintingLabel(true);
+    setPrinterStatus('');
+    try {
+      if (!thermalPrinter.isConnected()) {
+        setPrinterStatus('Connecting...');
+        await thermalPrinter.connect();
+      }
+      setPrinterStatus('Printing...');
+      await thermalPrinter.printProductLabel({ name: item.name, code: item.code, barcode: item.barcode, brand: item.brand, color: item.color, size: item.size });
+      setPrinterStatus('Done');
+      setTimeout(() => setPrinterStatus(''), 2000);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      setPrinterStatus(`Error: ${msg}`);
+      alert(`Print failed: ${msg}`);
+    } finally {
+      setPrintingLabel(false);
+    }
+  };
+
   const loadRentalsAndBookings = async () => {
     try {
       setLoadingRentals(true);
@@ -303,16 +333,24 @@ export default function ItemDetailPage() {
                                 Download Label
                               </Button>
                             )}
+                            <Button
+                              onClick={printLabelDirect}
+                              disabled={printingLabel}
+                              className="px-3 py-1 text-xs bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                            >
+                              {printingLabel ? 'Printing…' : 'Print'}
+                            </Button>
                             <a
                               href={getBprintProductLabelUrl(item.id)}
-                              className="inline-flex items-center px-3 py-1 text-xs rounded-md bg-green-600 text-white hover:bg-green-700"
-                              title="Opens Thermer app to print. On iPhone: tap in Safari; set NEXT_PUBLIC_API_URL to your computer IP, not localhost."
+                              className="inline-flex items-center px-3 py-1 text-xs rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                              title="One tap: opens Thermer and prints. No need to press anything in Thermer. Enable Browser Print in the app."
                             >
-                              Print
+                              Print via Thermer
                             </a>
                           </div>
+                          {printerStatus ? <p className="text-[10px] text-gray-500 mt-1 text-center">{printerStatus}</p> : null}
                           <p className="text-[10px] text-gray-500 mt-1 text-center">
-                            Tap Print to open the Thermer app. On iPhone use Safari; set API URL to your computer IP, not localhost.
+                            Print: Bluetooth (Chrome/Edge). Print via Thermer: one tap, no need to press anything in Thermer — enable Browser Print in the app.
                           </p>
                         </div>
                       )}

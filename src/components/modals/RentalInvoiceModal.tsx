@@ -1,12 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
 import { Rental } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { thermalPrinter } from '@/lib/thermal-printer';
 import { getBprintRentalInvoiceUrl } from '@/lib/bprint';
 
 interface RentalInvoiceModalProps {
@@ -16,9 +17,40 @@ interface RentalInvoiceModalProps {
 }
 
 export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceModalProps) {
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printerStatus, setPrinterStatus] = useState<string>('');
+
   if (!isOpen || !rental) return null;
 
   const bprintUrl = getBprintRentalInvoiceUrl(rental.id);
+
+  const printDirect = async () => {
+    if (!rental) return;
+    if (thermalPrinter.isAvailable()) {
+      setIsPrinting(true);
+      setPrinterStatus('');
+      try {
+        if (!thermalPrinter.isConnected()) {
+          setPrinterStatus('Connecting...');
+          await thermalPrinter.connect();
+          setPrinterStatus(`Connected to ${thermalPrinter.getDeviceName()}`);
+        }
+        setPrinterStatus('Printing...');
+        await thermalPrinter.printRentalInvoice(rental);
+        setPrinterStatus('Done');
+        setTimeout(() => setPrinterStatus(''), 2000);
+        alert('Printed.');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        setPrinterStatus(`Error: ${msg}`);
+        alert(`Print failed: ${msg}`);
+      } finally {
+        setIsPrinting(false);
+      }
+    } else {
+      window.print();
+    }
+  };
 
   const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
   const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
@@ -219,16 +251,28 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Rental Invoice</h3>
             <div className="flex flex-col gap-2">
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap items-center">
                 <Button variant="ghost" onClick={onClose} className="text-xs px-3 py-1">Close</Button>
                 <Button onClick={downloadInvoice} className="text-xs px-3 py-1">Download</Button>
+                <Button
+                  onClick={printDirect}
+                  disabled={isPrinting}
+                  className="text-xs px-3 py-1 rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isPrinting ? 'Printing…' : 'Print'}
+                </Button>
                 <a
                   href={bprintUrl}
-                  className="inline-flex items-center text-xs px-3 py-1 rounded-md bg-green-600 text-white hover:bg-green-700"
+                  className="inline-flex items-center text-xs px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  title="One tap: opens Thermer and prints. No need to press anything in Thermer. Enable Browser Print in the app."
                 >
-                  Print
+                  Print via Thermer
                 </a>
               </div>
+              {printerStatus ? <p className="text-[10px] text-gray-500 text-right">{printerStatus}</p> : null}
+              <p className="text-[10px] text-gray-500 text-right">
+                Print: Bluetooth/browser. Print via Thermer: one tap, no need to press anything in Thermer — enable Browser Print in the app.
+              </p>
             </div>
           </div>
 
