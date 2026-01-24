@@ -511,13 +511,16 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
                 >
                   {isPrinting ? 'Printing...' : 'Print to Thermal'}
                 </Button>
-                <a
-                  href={getBprintBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full')}
-                  className="text-xs px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
-                  title="Tap this link in Safari on iPhone. Do not paste the URL into the address bar. On iPhone, set NEXT_PUBLIC_API_URL to your computer IP (e.g. http://192.168.1.x:8081), not localhost."
+                <Button 
+                  onClick={() => {
+                    const bprintUrl = getBprintBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full');
+                    window.location.href = bprintUrl;
+                  }}
+                  className="text-xs px-3 py-1 border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md"
+                  title="Opens Bluetooth Print app to print invoice"
                 >
                   Print via Bluetooth Print app
-                </a>
+                </Button>
               </div>
               <p className="text-[10px] text-gray-500 mt-1">
                 iPhone: tap the link in Safari (don’t paste in address bar). Use your computer’s IP for the API, not localhost.
