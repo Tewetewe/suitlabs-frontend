@@ -13,7 +13,7 @@ import { Item, Rental, Booking } from '@/types';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
 import { thermalPrinter } from '@/lib/thermal-printer';
-import { getBprintProductLabelUrl } from '@/lib/bprint';
+import { getAndroidBluetoothProductLabelUrl, getBprintProductLabelUrl } from '@/lib/bprint';
 
 export default function ItemDetailPage() {
   const routeParams = useParams<{ id: string }>();
@@ -373,7 +373,7 @@ export default function ItemDetailPage() {
                             onImageGenerated={setLabelImageUrl}
                             className="max-w-full"
                           />
-                          <div className="mt-3 text-center space-x-2">
+                          <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-center">
                             <Button
                               onClick={generateBarcode}
                               disabled={generatingBarcode}
@@ -404,13 +404,23 @@ export default function ItemDetailPage() {
                                 window.location.href = bprintUrl;
                               }}
                               className="inline-flex items-center px-3 py-1 text-xs border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md"
-                              title="Opens Bluetooth Print app to print label"
+                              title="iOS: opens Bluetooth Print app (bprint://) to print label"
                             >
-                              Print via Bluetooth Print app
+                              iOS Bluetooth Print
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                const androidUrl = getAndroidBluetoothProductLabelUrl(item.id);
+                                window.location.href = androidUrl;
+                              }}
+                              className="inline-flex items-center px-3 py-1 text-xs border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md"
+                              title="Android: opens Bluetooth Print app (my.bluetoothprint.scheme) to print label"
+                            >
+                              Android Bluetooth Print
                             </Button>
                           </div>
                           <p className="text-[10px] text-gray-500 mt-1 text-center">
-                            iPhone: tap the link in Safari (don’t paste in address bar). Use your computer’s IP for the API, not localhost.
+                            iPhone (bprint://): open in Safari and use your computer’s IP (not localhost). Android (my.bluetoothprint.scheme://): install "Bluetooth Print", enable Browser Print, then tap the button.
                           </p>
                           {printerStatus && (
                             <div className="mt-2 text-xs text-gray-600 text-center">{printerStatus}</div>

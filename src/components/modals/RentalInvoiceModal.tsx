@@ -7,7 +7,7 @@ import { Rental } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { thermalPrinter } from '@/lib/thermal-printer';
-import { getBprintRentalInvoiceUrl } from '@/lib/bprint';
+import { getAndroidBluetoothRentalInvoiceUrl, getBprintRentalInvoiceUrl } from '@/lib/bprint';
 
 interface RentalInvoiceModalProps {
   isOpen: boolean;
@@ -549,7 +549,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Rental Invoice</h3>
           <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="ghost" onClick={onClose} className="text-xs px-3 py-1">Close</Button>
               <Button onClick={downloadInvoice} className="text-xs px-3 py-1">Download</Button>
               <Button onClick={printInvoice} className="text-xs px-3 py-1">Print</Button>
@@ -566,13 +566,23 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
                   window.location.href = bprintUrl;
                 }}
                 className="text-xs px-3 py-1 border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md"
-                title="Opens Bluetooth Print app to print invoice"
+                title="iOS: opens Bluetooth Print app (bprint://) to print invoice"
               >
-                Print via Bluetooth Print app
+                iOS Bluetooth Print
+              </Button>
+              <Button
+                onClick={() => {
+                  const androidUrl = getAndroidBluetoothRentalInvoiceUrl(rental.id);
+                  window.location.href = androidUrl;
+                }}
+                className="text-xs px-3 py-1 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md"
+                title="Android: opens Bluetooth Print app (my.bluetoothprint.scheme) to print invoice"
+              >
+                Android Bluetooth Print
               </Button>
             </div>
             <p className="text-[10px] text-gray-500 mt-1">
-              iPhone: tap the link in Safari (don’t paste in address bar). Use your computer’s IP for the API, not localhost.
+              iPhone (bprint://): open in Safari and use your computer’s IP (not localhost). Android (my.bluetoothprint.scheme://): install "Bluetooth Print", enable Browser Print, then tap the button.
             </p>
             {printerStatus && (
               <div className="text-xs text-gray-600 mt-1">{printerStatus}</div>
