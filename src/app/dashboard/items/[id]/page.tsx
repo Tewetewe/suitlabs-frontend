@@ -420,7 +420,7 @@ export default function ItemDetailPage() {
                             </Button>
                           </div>
                           <p className="text-[10px] text-gray-500 mt-1 text-center">
-                            iPhone (bprint://): open in Safari and use your computer’s IP (not localhost). Android (my.bluetoothprint.scheme://): install "Bluetooth Print", enable Browser Print, then tap the button.
+                            iPhone (bprint://): open in Safari and use your computer&apos;s IP (not localhost). Android (my.bluetoothprint.scheme://): install Bluetooth Print, enable Browser Print, then tap the button.
                           </p>
                           {printerStatus && (
                             <div className="mt-2 text-xs text-gray-600 text-center">{printerStatus}</div>
