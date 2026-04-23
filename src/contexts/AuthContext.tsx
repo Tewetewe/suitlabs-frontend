@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
 import { apiClient } from '@/lib/api';
 
@@ -18,11 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const token = localStorage.getItem('auth_token');
       if (token) {
@@ -40,17 +36,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   const login = async (email: string, password: string) => {
-    try {
-      const response = await apiClient.login({ email, password });
-      localStorage.setItem('auth_token', response.token);
-      apiClient.setToken(response.token);
-      setUser(response.user);
-    } catch (error) {
-      throw error;
-    }
+    const response = await apiClient.login({ email, password });
+    setUser(response.user);
   };
 
   const logout = () => {

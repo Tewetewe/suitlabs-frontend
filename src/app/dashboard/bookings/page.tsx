@@ -14,11 +14,15 @@ import { formatDate } from '@/lib/date';
 import { Booking, BookingFilters, InvoiceData, Customer, Item, PackagePricing } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
-import { Plus, Edit, Calendar, User, DollarSign, Clock, Filter, Eye, FileText, Download, Shirt } from 'lucide-react';
+import { Plus, Edit, Calendar, User, DollarSign, Clock, Eye, FileText, Download, Shirt } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
+import { PageShell } from '@/components/ui/PageShell';
+import { Badge, FilterBar, EmptyState, Pagination, SkeletonRow } from '@/components/ui/DataDisplay';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function BookingsPage() {
   const { user } = useAuth();
+  const { warning } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<BookingFilters>({});
@@ -27,7 +31,6 @@ export default function BookingsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
-  const [showFilters, setShowFilters] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -345,15 +348,15 @@ export default function BookingsPage() {
       setBookings(Array.isArray(list) ? list : []);
       setTotal(pagination?.total || 0);
       setTotalPages(pagination?.total_pages || 1);
-    } catch (error) {
-      console.error('Failed to load bookings:', error);
+    } catch {
+      warning('Unable to load bookings', 'Backend may be offline. Please try again.');
       setBookings([]);
       setTotal(0);
       setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  }, [filters, currentPage, itemsPerPage]);
+  }, [filters, currentPage, itemsPerPage, warning]);
 
   useEffect(() => {
     loadBookings();
@@ -372,37 +375,23 @@ export default function BookingsPage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Pagination helpers
-  const goToPrevPage = () => setCurrentPage((p) => Math.max(1, p - 1));
-  const goToNextPage = () => setCurrentPage((p) => Math.min(totalPages, p + 1));
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'confirmed':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'active':
-        return 'bg-blue-100 text-blue-800';
-      case 'completed':
-        return 'bg-gray-100 text-gray-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const bookingStatusVariant = (s: string): 'success' | 'warning' | 'primary' | 'default' | 'danger' => {
+    switch (s) {
+      case 'confirmed': return 'success';
+      case 'pending':   return 'warning';
+      case 'active':    return 'primary';
+      case 'completed': return 'default';
+      case 'cancelled': return 'danger';
+      default:          return 'default';
     }
   };
 
-  const getPaymentStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'partial':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'pending':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const paymentStatusVariant = (s: string): 'success' | 'warning' | 'danger' | 'default' => {
+    switch (s) {
+      case 'completed': return 'success';
+      case 'partial':   return 'warning';
+      case 'pending':   return 'danger';
+      default:          return 'default';
     }
   };
 
@@ -427,8 +416,7 @@ export default function BookingsPage() {
     try {
       const invoice = await apiClient.generateInvoice(bookingId, invoiceType);
       
-      // Debug: Log the invoice data to help identify issues
-      console.log('Invoice data received:', invoice);
+      // invoice data used for modal / download
       
       // Validate invoice data
       if (!invoice) {
@@ -493,104 +481,47 @@ export default function BookingsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 sm:space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Bookings</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Manage customer bookings and reservations
-            </p>
-          </div>
-          <Button size="lg" fullWidth className="sm:w-auto" onClick={() => setIsCreateModalOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+      <PageShell
+        title="Bookings"
+        subtitle="Manage customer bookings and reservations"
+        action={
+          <Button size="md" onClick={() => setIsCreateModalOpen(true)}>
+            <Plus className="h-4 w-4" />
             New Booking
           </Button>
-        </div>
-
-        {/* Search and Filter Controls */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
+        }
+      >
+        <FilterBar>
+          <ClientOnly>
             <Input
               placeholder="Search bookings..."
-              value={filters.search || ''}
+              value={searchInput}
               onChange={(e) => handleSearch(e.target.value)}
             />
-          </div>
-          
-          <Button
-            variant="ghost"
-            size="md"
-            onClick={() => setShowFilters(!showFilters)}
-            className="sm:hidden"
-          >
-            <Filter className="h-4 w-4 mr-2" />
-            Filters
-          </Button>
-        </div>
-
-        {/* Filters */}
-        <div className={`${showFilters ? 'block' : 'hidden'} sm:block`}>
-          <Card>
-            <CardContent>
-              <ClientOnly>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Select
-                    label="Status"
-                    options={statusOptions}
-                    value={filters.status || ''}
-                    onChange={(e) => setFilters({ ...filters, status: e.target.value || undefined })}
-                  />
-                  <Select
-                    label="Payment Status"
-                    options={paymentStatusOptions}
-                    value={filters.payment_status || ''}
-                    onChange={(e) => setFilters({ ...filters, payment_status: e.target.value || undefined })}
-                  />
-                </div>
-              </ClientOnly>
-            </CardContent>
-          </Card>
-        </div>
+            <Select
+              options={statusOptions}
+              value={filters.status || ''}
+              onChange={(e) => { setFilters(prev => ({ ...prev, status: e.target.value || undefined })); setCurrentPage(1); }}
+            />
+            <Select
+              options={paymentStatusOptions}
+              value={filters.payment_status || ''}
+              onChange={(e) => { setFilters(prev => ({ ...prev, payment_status: e.target.value || undefined })); setCurrentPage(1); }}
+            />
+          </ClientOnly>
+        </FilterBar>
 
         {/* Bookings List */}
         <div className="space-y-4">
           {loading ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent>
-                  <div className="animate-pulse">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="space-y-2 flex-1">
-                        <div className="h-4 bg-gray-200 rounded w-32"></div>
-                        <div className="h-4 bg-gray-200 rounded w-24"></div>
-                      </div>
-                      <div className="h-6 bg-gray-200 rounded w-20"></div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-3 bg-gray-200 rounded w-full"></div>
-                      <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+            Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
           ) : bookings.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No bookings found</h3>
-                <p className="text-gray-500 mb-4">
-                  {Object.values(filters).some(v => v)
-                    ? 'Try adjusting your filters'
-                    : 'Get started by creating your first booking'}
-                </p>
-                <Button size="lg">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Booking
-                </Button>
-              </CardContent>
-            </Card>
+            <EmptyState
+              icon={<Calendar className="h-10 w-10" />}
+              title="No bookings found"
+              description={Object.values(filters).some(v => v) ? 'Try adjusting your filters' : 'Get started by creating your first booking'}
+              action={<Button onClick={() => setIsCreateModalOpen(true)}><Plus className="h-4 w-4" /> New Booking</Button>}
+            />
           ) : (
             (Array.isArray(bookings) ? bookings : []).map((booking) => (
               <Card key={booking.id}>
@@ -602,12 +533,8 @@ export default function BookingsPage() {
                         <h3 className="text-base sm:text-lg font-medium text-gray-900">
                           Booking #{booking.id.slice(-8)}
                         </h3>
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
-                          {booking.status}
-                        </span>
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(booking.payment_status)}`}>
-                          {booking.payment_status}
-                        </span>
+                        <Badge variant={bookingStatusVariant(booking.status)}>{booking.status}</Badge>
+                        <Badge variant={paymentStatusVariant(booking.payment_status)}>{booking.payment_status}</Badge>
                       </div>
                       {booking.customer && (
                         <div className="flex items-center text-sm text-gray-600">
@@ -615,7 +542,7 @@ export default function BookingsPage() {
                           <div className="min-w-0">
                             <span className="font-medium">{booking.customer.first_name} {booking.customer.last_name}</span>
                             <div className="text-xs text-gray-500 truncate sm:inline sm:ml-2">
-                              {booking.customer.email}
+                              {booking.customer.email || '-'}
                             </div>
                           </div>
                         </div>
@@ -684,15 +611,12 @@ export default function BookingsPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-blue-700 font-medium">Status:</span>
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            booking.rental.status === 'active' ? 'bg-green-100 text-green-800' :
-                            booking.rental.status === 'completed' ? 'bg-gray-100 text-gray-800' :
-                            booking.rental.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                            booking.rental.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {booking.rental.status.charAt(0).toUpperCase() + booking.rental.status.slice(1)}
-                          </span>
+                          <Badge variant={
+                            booking.rental.status === 'active' ? 'success' :
+                            booking.rental.status === 'completed' ? 'default' :
+                            booking.rental.status === 'cancelled' ? 'danger' :
+                            booking.rental.status === 'overdue' ? 'danger' : 'warning'
+                          }>{booking.rental.status.charAt(0).toUpperCase() + booking.rental.status.slice(1)}</Badge>
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -1109,35 +1033,13 @@ export default function BookingsPage() {
           </div>
         </SimpleModal>
 
-        {/* Pagination Info */}
-        {!loading && bookings.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4">
-            <div className="text-sm text-gray-500">
-              Showing {bookings.length} of {total} bookings (Page {currentPage} of {totalPages})
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={goToPrevPage}
-                disabled={currentPage <= 1}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-gray-600">
-                {currentPage} / {totalPages}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={goToNextPage}
-                disabled={currentPage >= totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={currentPage}
+          totalPages={totalPages}
+          total={total}
+          perPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
 
         {/* Booking Invoice Modal */}
         <BookingInvoiceModal
@@ -1148,7 +1050,7 @@ export default function BookingsPage() {
           }}
           invoice={invoiceData}
         />
-      </div>
+      </PageShell>
     </DashboardLayout>
   );
 }

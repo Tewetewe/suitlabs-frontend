@@ -12,7 +12,7 @@ npm run dev
 
 ## Environment
 
-The frontend reads the API base URL from `NEXT_PUBLIC_API_BASE_URL` (default proxied to the backend via Next.js API routes).
+The frontend reads the API base URL from `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:8081`).
 
 ## Key Flows
 

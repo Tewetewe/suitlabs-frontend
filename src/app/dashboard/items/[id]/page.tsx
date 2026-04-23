@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -12,8 +12,18 @@ import { apiClient } from '@/lib/api';
 import { Item, Rental, Booking } from '@/types';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
-import { thermalPrinter } from '@/lib/thermal-printer';
 import { getAndroidBluetoothProductLabelUrl, getBprintProductLabelUrl } from '@/lib/bprint';
+
+const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+function toImageUrl(url?: string): string | null {
+  if (!url) return null;
+  if (/^https?:\/\//.test(url)) return url;
+  const base = process.env.NEXT_PUBLIC_API_URL || '';
+  if (!base) return null;
+  return `${base.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
+}
 
 export default function ItemDetailPage() {
   const routeParams = useParams<{ id: string }>();
@@ -31,10 +41,8 @@ export default function ItemDetailPage() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingRentals, setLoadingRentals] = useState(false);
-  const [printingLabel, setPrintingLabel] = useState(false);
-  const [printerStatus, setPrinterStatus] = useState<string>('');
 
-  const loadRentalsAndBookings = async () => {
+  const loadRentalsAndBookings = useCallback(async () => {
     try {
       setLoadingRentals(true);
       const data = await apiClient.getItemRentals(id);
@@ -45,16 +53,14 @@ export default function ItemDetailPage() {
     } finally {
       setLoadingRentals(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        // Load item (category is preloaded by backend)
         const itemData = await apiClient.getItem(id);
         setItem(itemData);
-        // Load rental and booking information
         await loadRentalsAndBookings();
       } catch (e) {
         console.error('Error loading item:', e);
@@ -64,8 +70,7 @@ export default function ItemDetailPage() {
       }
     };
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, loadRentalsAndBookings]);
 
 
   const generateBarcode = async () => {
@@ -75,8 +80,7 @@ export default function ItemDetailPage() {
       setGeneratingBarcode(true);
       const updatedItem = await apiClient.generateItemBarcode(item.id);
       setItem(updatedItem);
-      // Refresh the page to ensure UI is updated
-      window.location.reload();
+      await loadRentalsAndBookings();
     } catch (err) {
       console.error('Error generating barcode:', err);
       setError('Failed to generate barcode');
@@ -94,99 +98,8 @@ export default function ItemDetailPage() {
     }
   };
 
-  const printLabelToThermal = async () => {
-    if (!item || !item.barcode) return;
 
-    setPrintingLabel(true);
-    setPrinterStatus('');
-
-    try {
-      // Check if Web Bluetooth is available
-      if (!thermalPrinter.isAvailable()) {
-        const errorMsg = 'Web Bluetooth is not available in this browser. Please use Chrome, Edge, or Opera.';
-        setPrinterStatus(errorMsg);
-        alert(errorMsg);
-        return;
-      }
-
-      // Check connection status
-      const status = thermalPrinter.getConnectionStatus();
-      console.log('Printer connection status:', status);
-
-      // Connect to printer if not already connected
-      if (!thermalPrinter.isConnected()) {
-        setPrinterStatus('Connecting to printer...');
-        console.log('Attempting to connect to printer...');
-        
-        try {
-          await thermalPrinter.connect();
-          const deviceName = thermalPrinter.getDeviceName();
-          setPrinterStatus(`Connected to ${deviceName}`);
-          console.log(`Successfully connected to ${deviceName}`);
-        } catch (connectError: unknown) {
-          console.error('Connection error:', connectError);
-          const errorMessage = connectError instanceof Error ? connectError.message : 'Unknown error';
-          setPrinterStatus(`Connection failed: ${errorMessage}`);
-          alert(`Failed to connect: ${errorMessage}\n\nTroubleshooting:\n1. Make sure printer is powered on\n2. Put printer in pairing mode\n3. Make sure printer is not connected to another device\n4. Check browser console (F12) for details`);
-          return;
-        }
-      } else {
-        setPrinterStatus(`Already connected to ${thermalPrinter.getDeviceName()}`);
-      }
-
-      // Print label
-      setPrinterStatus('Printing label...');
-      console.log('Starting to print product label...');
-      
-      try {
-        await thermalPrinter.printProductLabel({
-          name: item.name,
-          code: item.code,
-          barcode: item.barcode,
-          brand: item.brand,
-          color: item.color,
-          size: item.size,
-        });
-        setPrinterStatus('Label printed successfully!');
-        console.log('Product label printed successfully');
-        
-        // Show success message
-        setTimeout(() => {
-          setPrinterStatus('');
-        }, 2000);
-        alert('Product label printed successfully!');
-      } catch (printError: unknown) {
-        console.error('Print error:', printError);
-        const errorMessage = printError instanceof Error ? printError.message : 'Unknown error';
-        setPrinterStatus(`Print failed: ${errorMessage}`);
-        alert(`Failed to print: ${errorMessage}\n\nPlease check:\n1. Printer has paper\n2. Printer is not jammed\n3. Printer is within range\n4. Try reconnecting`);
-        throw printError;
-      }
-    } catch (error: unknown) {
-      console.error('Thermal printer error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
-      setPrinterStatus(`Error: ${errorMsg}`);
-      
-      // Don't show alert if we already showed one
-      if (error instanceof Error && !error.message.includes('Failed to print') && !error.message.includes('Failed to connect')) {
-        alert(`Error: ${errorMsg}\n\nCheck browser console (F12) for details.`);
-      }
-    } finally {
-      setPrintingLabel(false);
-    }
-  };
-
-  const toImageUrl = (url?: string): string | null => {
-    if (!url) return null;
-    if (/^https?:\/\//.test(url)) return url;
-    const base = process.env.NEXT_PUBLIC_API_URL || '';
-    if (!base) return null;
-    const normalizedBase = base.replace(/\/$/, '');
-    const normalizedPath = url.replace(/^\//, '');
-    return `${normalizedBase}/${normalizedPath}`;
-  };
-
-  const refreshItem = async () => {
+  const refreshItem = useCallback(async () => {
     if (!id) return;
     try {
       const refreshedItem = await apiClient.getItem(id);
@@ -194,7 +107,7 @@ export default function ItemDetailPage() {
     } catch (e) {
       console.error('Failed to refresh item:', e);
     }
-  };
+  }, [id]);
 
   const uploadThumbnail = async (file?: File | null) => {
     if (!file || !item) return;
@@ -373,14 +286,7 @@ export default function ItemDetailPage() {
                             onImageGenerated={setLabelImageUrl}
                             className="max-w-full"
                           />
-                          <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-center">
-                            <Button
-                              onClick={generateBarcode}
-                              disabled={generatingBarcode}
-                              className="px-3 py-1 text-xs bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50"
-                            >
-                              {generatingBarcode ? 'Generating...' : 'Generate New Barcode'}
-                            </Button>
+                          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                             {labelImageUrl && (
                               <Button
                                 onClick={downloadLabel}
@@ -389,42 +295,23 @@ export default function ItemDetailPage() {
                                 Download Label
                               </Button>
                             )}
-                            {item.barcode && (
+                            {(!isAndroid && !isIOS) || isIOS ? (
                               <Button
-                                onClick={printLabelToThermal}
-                                disabled={printingLabel}
-                                className="px-3 py-1 text-xs bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                                onClick={() => { window.location.href = getBprintProductLabelUrl(item.id); }}
+                                className="px-3 py-1 text-xs border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md"
                               >
-                                {printingLabel ? 'Printing...' : 'Print Label'}
+                                Print (iOS)
                               </Button>
-                            )}
-                            <Button
-                              onClick={() => {
-                                const bprintUrl = getBprintProductLabelUrl(item.id);
-                                window.location.href = bprintUrl;
-                              }}
-                              className="inline-flex items-center px-3 py-1 text-xs border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md"
-                              title="iOS: opens Bluetooth Print app (bprint://) to print label"
-                            >
-                              iOS Bluetooth Print
-                            </Button>
-                            <Button
-                              onClick={() => {
-                                const androidUrl = getAndroidBluetoothProductLabelUrl(item.id);
-                                window.location.href = androidUrl;
-                              }}
-                              className="inline-flex items-center px-3 py-1 text-xs border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md"
-                              title="Android: opens Bluetooth Print app (my.bluetoothprint.scheme) to print label"
-                            >
-                              Android Bluetooth Print
-                            </Button>
+                            ) : null}
+                            {(!isAndroid && !isIOS) || isAndroid ? (
+                              <Button
+                                onClick={() => { window.location.href = getAndroidBluetoothProductLabelUrl(item.id); }}
+                                className="px-3 py-1 text-xs border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md"
+                              >
+                                Print (Android)
+                              </Button>
+                            ) : null}
                           </div>
-                          <p className="text-[10px] text-gray-500 mt-1 text-center">
-                            iPhone (bprint://): open in Safari and use your computer&apos;s IP (not localhost). Android (my.bluetoothprint.scheme://): install Bluetooth Print, enable Browser Print, then tap the button.
-                          </p>
-                          {printerStatus && (
-                            <div className="mt-2 text-xs text-gray-600 text-center">{printerStatus}</div>
-                          )}
                         </div>
                       )}
                     </div>

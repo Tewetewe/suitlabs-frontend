@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -9,6 +9,7 @@ import { apiClient } from '@/lib/api';
 import { Booking, CreateRentalRequest } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Calendar, AlertCircle, FileText } from 'lucide-react';
+import { useToast } from '@/contexts/ToastContext';
 
 interface CreateRentalModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface CreateRentalModalProps {
 
 export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalModalProps) {
   const { user } = useAuth();
+  const { warning } = useToast();
   const [form, setForm] = useState<CreateRentalRequest>({
     user_id: '',
     suit_id: '',
@@ -35,12 +37,23 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
   const [errors, setErrors] = useState<Record<string, string>>({});
   
 
+  const loadBookings = useCallback(async (search?: string) => {
+    try {
+      const res = await apiClient.getBookings({ status: 'confirmed', page: 1, limit: 10, search: search || '' });
+      const list = res?.data?.data?.bookings || [];
+      setBookings(list);
+    } catch {
+      warning('Unable to load bookings', 'Backend may be offline. Please try again.');
+      setBookings([]);
+    }
+  }, [warning]);
+
   useEffect(() => {
     if (isOpen) {
       // Prefetch a small list of recent confirmed bookings for selection
       loadBookings('');
     }
-  }, [isOpen]);
+  }, [isOpen, loadBookings]);
 
   useEffect(() => {
     const loadOne = async (id: string) => {
@@ -58,17 +71,6 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
 
   // no derived pricing in simplified flow
 
-  const loadBookings = async (search?: string) => {
-    try {
-      const res = await apiClient.getBookings({ status: 'confirmed', page: 1, limit: 10, search: search || '' });
-      const list = res?.data?.data?.bookings || [];
-      setBookings(list);
-    } catch (error) {
-      console.error('Failed to load bookings:', error);
-      setBookings([]);
-    }
-  };
-
   // Debounced search for bookings
   useEffect(() => {
     const t = setTimeout(() => {
@@ -80,7 +82,7 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [bookingSearch]);
+  }, [bookingSearch, loadBookings]);
 
   // no separate availability step in simplified flow
 

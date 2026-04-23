@@ -180,7 +180,7 @@ export interface Item {
 // Customer Types
 export interface Customer {
   id: string;
-  email: string;
+  email?: string;
   first_name: string;
   last_name: string;
   phone: string;
@@ -427,7 +427,7 @@ export interface Address {
 }
 
 export interface CreateCustomerRequest {
-  email: string;
+  email?: string;
   first_name: string;
   last_name: string;
   phone: string;

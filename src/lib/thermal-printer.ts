@@ -7,8 +7,17 @@ import { ESCPOSGenerator, formatCurrencyForPrint, formatDateForPrint, formatDate
 import { InvoiceData } from '@/types';
 import { Rental } from '@/types';
 
-// Bluetooth Service UUIDs for Serial Port Profile (SPP)
-const BLUETOOTH_SERVICE_UUID = '00001101-0000-1000-8000-00805f9b34fb'; // Serial Port Profile
+// Bluetooth Service UUIDs for common thermal printers
+// All must be declared in optionalServices for Web Bluetooth to allow access
+const THERMAL_PRINTER_SERVICE_UUIDS = [
+  '00001101-0000-1000-8000-00805f9b34fb', // Serial Port Profile (SPP)
+  '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 / common BLE printers (GOOJPRT, Bixolon BLE)
+  '0000fff0-0000-1000-8000-00805f9b34fb', // FFF0 service (Xprinter, many Chinese BLE printers)
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // ESC/POS BLE (Epson)
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC / Microchip BLE
+  '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART Service (NUS)
+  '000018f0-0000-1000-8000-00805f9b34fb', // 18F0 (Star Micronics BLE)
+];
 
 export interface ThermalPrinterDevice {
   device: BluetoothDevice;
@@ -37,32 +46,14 @@ export class ThermalPrinterService {
     }
 
     try {
-      // Request Bluetooth device with Serial Port Profile
-      // Try with specific service UUID first, then fallback to acceptAllDevices
-      let deviceRequestOptions: RequestDeviceOptions;
-      
-      try {
-        // First try with Serial Port Profile UUID
-        deviceRequestOptions = {
-          filters: [
-            { services: [BLUETOOTH_SERVICE_UUID] }
-          ],
-          optionalServices: [BLUETOOTH_SERVICE_UUID],
-        };
-        this.device = await navigator.bluetooth!.requestDevice(deviceRequestOptions);
-      } catch (e: unknown) {
-        // If that fails, try accepting all devices (user will need to select)
-        const error = e as { name?: string };
-        if (error.name === 'NotFoundError' || error.name === 'SecurityError') {
-          deviceRequestOptions = {
-            acceptAllDevices: true,
-            optionalServices: [BLUETOOTH_SERVICE_UUID],
-          };
-          this.device = await navigator.bluetooth!.requestDevice(deviceRequestOptions);
-        } else {
-          throw e;
-        }
-      }
+      // Request Bluetooth device. Always use acceptAllDevices with all known service UUIDs
+      // in optionalServices — this is required by Web Bluetooth to permit GATT service access.
+      // Filtering by service UUID often fails because many BLE printers don't advertise their
+      // service UUID in scan responses.
+      this.device = await navigator.bluetooth!.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: THERMAL_PRINTER_SERVICE_UUIDS,
+      });
 
       if (!this.device.gatt) {
         throw new Error('Device does not support GATT');
@@ -71,15 +62,20 @@ export class ThermalPrinterService {
       // Connect to GATT server
       this.server = await this.device.gatt.connect();
 
-      // Try to get the Serial Port Profile service
-      let service: BluetoothRemoteGATTService;
-      try {
-        service = await this.server.getPrimaryService(BLUETOOTH_SERVICE_UUID);
-      } catch {
-        // If SPP service not found, try to find any service with writable characteristics
+      // Try each known service UUID until one works
+      let service: BluetoothRemoteGATTService | null = null;
+      for (const uuid of THERMAL_PRINTER_SERVICE_UUIDS) {
+        try {
+          service = await this.server.getPrimaryService(uuid);
+          break;
+        } catch {
+          continue;
+        }
+      }
+
+      // Fallback: scan all returned services for any writable characteristic
+      if (!service) {
         const services = await this.server.getPrimaryServices();
-        let foundService: BluetoothRemoteGATTService | null = null;
-        
         for (const svc of services) {
           try {
             const chars = await svc.getCharacteristics();
@@ -87,18 +83,17 @@ export class ThermalPrinterService {
               (char: BluetoothRemoteGATTCharacteristic) => char.properties.write || char.properties.writeWithoutResponse
             );
             if (writableChar) {
-              foundService = svc;
+              service = svc;
               break;
             }
           } catch {
             continue;
           }
         }
-        
-        if (!foundService) {
-          throw new Error('No suitable service found. Make sure your printer supports Bluetooth Serial Port Profile.');
-        }
-        service = foundService;
+      }
+
+      if (!service) {
+        throw new Error('No suitable service found. Make sure your printer supports Bluetooth Serial Port Profile.');
       }
 
       // Get the characteristic for writing
@@ -217,9 +212,20 @@ export class ThermalPrinterService {
       console.log('Device disconnected, attempting to reconnect...');
       try {
         this.server = await this.device.gatt.connect();
-        // Re-establish service and characteristic
-        const service = await this.server.getPrimaryService(BLUETOOTH_SERVICE_UUID);
-        const characteristics = await service.getCharacteristics();
+        // Re-establish service by trying each known UUID
+        let reconnectService: BluetoothRemoteGATTService | null = null;
+        for (const uuid of THERMAL_PRINTER_SERVICE_UUIDS) {
+          try {
+            reconnectService = await this.server.getPrimaryService(uuid);
+            break;
+          } catch {
+            continue;
+          }
+        }
+        if (!reconnectService) {
+          throw new Error('Could not re-establish printer service after reconnect.');
+        }
+        const characteristics = await reconnectService.getCharacteristics();
         this.characteristic = characteristics.find(
           (char: BluetoothRemoteGATTCharacteristic) => char.properties.write || char.properties.writeWithoutResponse
         ) || characteristics[0];

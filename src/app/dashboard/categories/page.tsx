@@ -9,6 +9,8 @@ import { apiClient } from '@/lib/api';
 import { Category } from '@/types';
 import { Plus, Edit, Trash2, Settings, Folder, FolderOpen, X } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
+import { PageShell } from '@/components/ui/PageShell';
+import { FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -538,105 +540,50 @@ export default function CategoriesPage() {
     return result;
   }, []);
 
-  const totalCategories = useMemo(() => countCategories(categories), [categories, countCategories]);
-  const activeCategories = useMemo(() => countActiveCategories(categories), [categories, countActiveCategories]);
+  // Stats are computed but used in subtitle for context
+  void useMemo(() => countCategories(categories), [categories, countCategories]);
+  void useMemo(() => countActiveCategories(categories), [categories, countActiveCategories]);
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Categories</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Organize your inventory with categories and subcategories
-            </p>
-          </div>
+      <PageShell
+        title="Categories"
+        subtitle="Organize your inventory with categories and subcategories"
+        action={
           <Button onClick={openAddModal}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             Add Category
           </Button>
-        </div>
-
-        {/* Search and Stats */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3">
-            <Card>
-              <CardContent>
-                <Input
-                  placeholder="Search categories..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </CardContent>
-            </Card>
-          </div>
-          <div>
-            <Card>
-              <CardContent className="text-center">
-                <div className="text-2xl font-bold text-gray-900">
-                  {loading ? '...' : totalCategories}
-                </div>
-                <div className="text-sm text-gray-500">Total Categories</div>
-                <div className="text-lg font-semibold text-green-600 mt-1">
-                  {loading ? '...' : activeCategories}
-                </div>
-                <div className="text-xs text-gray-500">Active</div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        }
+      >
+        <FilterBar>
+          <Input
+            placeholder="Search categories..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </FilterBar>
 
         {/* Categories List */}
         <div>
           {loading ? (
             <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Card key={i}>
-                  <CardContent className="py-4">
-                    <div className="animate-pulse flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="h-4 w-4 bg-gray-200 rounded"></div>
-                        <div className="space-y-2">
-                          <div className="h-4 bg-gray-200 rounded w-32"></div>
-                          <div className="h-3 bg-gray-200 rounded w-48"></div>
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <div className="h-8 w-8 bg-gray-200 rounded"></div>
-                        <div className="h-8 w-8 bg-gray-200 rounded"></div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)}
             </div>
           ) : filteredCategories.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No categories found</h3>
-                <p className="text-gray-500 mb-4">
-                  {searchTerm
-                    ? 'Try adjusting your search term'
-                    : 'Get started by creating your first category or setting up business categories'}
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Button onClick={openAddModal}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Category
-                  </Button>
-                  <Button 
-                    variant="secondary" 
-                    onClick={seedDefaultCategories}
-                    disabled={seeding}
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    {seeding ? 'Creating...' : 'Create Business Categories'}
+            <EmptyState
+              icon={<Settings className="h-10 w-10" />}
+              title="No categories found"
+              description={searchTerm ? 'Try adjusting your search term' : 'Get started by creating your first category or setting up business categories'}
+              action={
+                <div className="flex gap-2">
+                  <Button onClick={openAddModal}><Plus className="h-4 w-4" /> Add Category</Button>
+                  <Button variant="outline" onClick={seedDefaultCategories} loading={seeding}>
+                    <Settings className="h-4 w-4" /> Create Business Categories
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
+              }
+            />
           ) : (
             <div>
               {filteredCategories.map(category => renderCategory(category))}
@@ -881,7 +828,7 @@ export default function CategoriesPage() {
             </div>
           </div>
         )}
-      </div>
+      </PageShell>
     </DashboardLayout>
   );
 }

@@ -17,9 +17,13 @@ import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
 import { RentalDetailsModal } from '@/components/modals/RentalDetailsModal';
 import { EditRentalModal } from '@/components/modals/EditRentalModal';
 import { PickupRentalModal } from '@/components/modals/PickupRentalModal';
+import { PageShell } from '@/components/ui/PageShell';
+import { Badge, FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function RentalsPage() {
   const { user } = useAuth();
+  const { warning } = useToast();
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,21 +52,7 @@ export default function RentalsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, itemsPerPage]);
 
-  // Handle browser extension hydration issues
-  useEffect(() => {
-    // Suppress hydration warnings for browser extensions
-    const originalError = console.error;
-    console.error = (...args) => {
-      if (typeof args[0] === 'string' && args[0].includes('hydration')) {
-        return;
-      }
-      originalError.apply(console, args);
-    };
-
-    return () => {
-      console.error = originalError;
-    };
-  }, []);
+  // Hydration warnings are already handled globally in `HydrationSuppressor`.
 
   const loadRentals = async () => {
     try {
@@ -70,26 +60,22 @@ export default function RentalsPage() {
       const response = await apiClient.getRentals({ page: currentPage, limit: itemsPerPage });
       const data = response?.data?.data?.rentals || [];
       setRentals(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Failed to load rentals:', error);
+    } catch {
+      // Avoid noisy console spam; show a user-facing hint instead.
+      warning('Unable to load rentals', 'Backend may be offline. Please try again.');
       setRentals([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'completed':
-        return 'bg-gray-100 text-gray-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const rentalStatusVariant = (s: string): 'success' | 'warning' | 'default' | 'danger' => {
+    switch (s) {
+      case 'active':    return 'success';
+      case 'pending':   return 'warning';
+      case 'completed': return 'default';
+      case 'cancelled': return 'danger';
+      default:          return 'default';
     }
   };
 
@@ -249,72 +235,37 @@ export default function RentalsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" suppressHydrationWarning>
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Rentals</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Track active and completed rentals
-            </p>
-          </div>
+      <PageShell
+        title="Rentals"
+        subtitle="Track active and completed rentals"
+        action={
           <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             New Rental
           </Button>
-        </div>
-
-        {/* Search */}
-        <Card>
-          <CardContent>
-            <ClientOnly>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <Input
-                    placeholder="Search rentals..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-              </div>
-            </ClientOnly>
-          </CardContent>
-        </Card>
+        }
+      >
+        <FilterBar>
+          <ClientOnly>
+            <Input
+              placeholder="Search rentals..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </ClientOnly>
+        </FilterBar>
 
         {/* Rentals List */}
         <div className="space-y-4">
           {loading ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent>
-                  <div className="animate-pulse">
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-2">
-                        <div className="h-4 bg-gray-200 rounded w-32"></div>
-                        <div className="h-4 bg-gray-200 rounded w-24"></div>
-                      </div>
-                      <div className="h-6 bg-gray-200 rounded w-20"></div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+            Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
           ) : filteredRentals.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No rentals found</h3>
-                <p className="text-gray-500 mb-4">
-                  {searchTerm
-                    ? 'Try adjusting your search term'
-                    : 'Get started by creating your first rental'}
-                </p>
-                <Button onClick={() => setShowCreateModal(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Rental
-                </Button>
-              </CardContent>
-            </Card>
+            <EmptyState
+              icon={<FileText className="h-10 w-10" />}
+              title="No rentals found"
+              description={searchTerm ? 'Try adjusting your search term' : 'Get started by creating your first rental'}
+              action={<Button onClick={() => setShowCreateModal(true)}><Plus className="h-4 w-4" /> New Rental</Button>}
+            />
           ) : (
             filteredRentals.map((rental) => (
               <Card key={rental.id}>
@@ -325,9 +276,7 @@ export default function RentalsPage() {
                         <h3 className="text-lg font-medium text-gray-900">
                           Rental #{rental.id.slice(-8)}
                         </h3>
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(rental.status)}`}>
-                          {rental.status}
-                        </span>
+                        <Badge variant={rentalStatusVariant(rental.status)}>{rental.status}</Badge>
                       </div>
                       {rental.items && rental.items.length > 0 && (
                         <div className="flex items-center text-sm text-gray-600 mb-2">
@@ -368,7 +317,7 @@ export default function RentalsPage() {
                           {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : `Customer ID: ${rental.user_id.slice(-8)}`}
                         </div>
                         {rental.customer && (
-                          <div className="text-xs text-gray-500">{rental.customer.email}</div>
+                          <div className="text-xs text-gray-500">{rental.customer.email || '-'}</div>
                         )}
                       </div>
                     </div>
@@ -458,7 +407,7 @@ export default function RentalsPage() {
 
         {/* Summary Stats */}
         {!loading && activeRentals.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card>
               <CardContent className="text-center">
                 <div className="text-2xl font-bold text-gray-900">
@@ -481,16 +430,6 @@ export default function RentalsPage() {
                   {activeRentals.filter(r => r.status === 'completed').length}
                 </div>
                 <div className="text-sm text-gray-500">Completed</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
-                  {formatCurrency(
-                    activeRentals.reduce((sum, rental) => sum + ((rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0)), 0)
-                  )}
-                </div>
-                <div className="text-sm text-gray-500">Total Revenue</div>
               </CardContent>
             </Card>
           </div>
@@ -750,7 +689,7 @@ export default function RentalsPage() {
           onSuccess={() => loadRentals()}
           rental={selectedRental}
         />
-      </div>
+      </PageShell>
     </DashboardLayout>
   );
 }

@@ -51,7 +51,6 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
     const newErrors: Record<string, string> = {};
     if (!formData.first_name.trim()) newErrors.first_name = 'First name is required';
     if (!formData.last_name.trim()) newErrors.last_name = 'Last name is required';
-    if (!formData.email.trim()) newErrors.email = 'Email is required';
     if (!formData.phone.trim()) newErrors.phone = 'Phone is required';
 
     if (Object.keys(newErrors).length > 0) {
@@ -72,7 +71,8 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
       if (formData.last_name !== customer.last_name) {
         updateData.last_name = formData.last_name;
       }
-      if (formData.email !== customer.email) {
+      // Allow clearing email by sending empty string
+      if ((formData.email || '') !== (customer.email || '')) {
         updateData.email = formData.email;
       }
       if (formData.phone !== customer.phone) {

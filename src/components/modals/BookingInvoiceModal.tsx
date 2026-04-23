@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/currency';
 import { InvoiceData } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { thermalPrinter } from '@/lib/thermal-printer';
 import { getAndroidBluetoothBookingInvoiceUrl, getBprintBookingInvoiceUrl } from '@/lib/bprint';
+import SimpleModal from '@/components/modals/SimpleModal';
 
 interface BookingInvoiceModalProps {
   isOpen: boolean;
@@ -16,8 +16,8 @@ interface BookingInvoiceModalProps {
 }
 
 export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoiceModalProps) {
-  const [isPrinting, setIsPrinting] = useState(false);
-  const [printerStatus, setPrinterStatus] = useState<string>('');
+  const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+  const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   if (!isOpen || !invoice) return null;
 
@@ -223,79 +223,17 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
     printWindow.document.close();
   };
 
-  const printToThermalPrinter = async () => {
-    if (!invoice) return;
-
-    setIsPrinting(true);
-    setPrinterStatus('');
-
-    try {
-      // Check if Web Bluetooth is available
-      if (!thermalPrinter.isAvailable()) {
-        const errorMsg = 'Web Bluetooth is not available in this browser. Please use Chrome, Edge, or Opera.';
-        setPrinterStatus(errorMsg);
-        alert(errorMsg);
-        return;
-      }
-
-      // Check connection status
-      const status = thermalPrinter.getConnectionStatus();
-      console.log('Printer connection status:', status);
-
-      // Connect to printer if not already connected
-      if (!thermalPrinter.isConnected()) {
-        setPrinterStatus('Connecting to printer...');
-        console.log('Attempting to connect to printer...');
-        
-        try {
-          await thermalPrinter.connect();
-          const deviceName = thermalPrinter.getDeviceName();
-          setPrinterStatus(`Connected to ${deviceName}`);
-          console.log(`Successfully connected to ${deviceName}`);
-        } catch (connectError: unknown) {
-          console.error('Connection error:', connectError);
-          const errorMessage = connectError instanceof Error ? connectError.message : 'Unknown error';
-          setPrinterStatus(`Connection failed: ${errorMessage}`);
-          alert(`Failed to connect: ${errorMessage}\n\nTroubleshooting:\n1. Make sure printer is powered on\n2. Put printer in pairing mode\n3. Make sure printer is not connected to another device\n4. Check browser console (F12) for details`);
-          return;
-        }
-      } else {
-        setPrinterStatus(`Already connected to ${thermalPrinter.getDeviceName()}`);
-      }
-
-      // Print invoice
-      setPrinterStatus('Printing invoice...');
-      console.log('Starting to print invoice...');
-      
-      try {
-        await thermalPrinter.printBookingInvoice(invoice);
-        setPrinterStatus('Invoice printed successfully!');
-        console.log('Invoice printed successfully');
-        
-        // Show success message
-        setTimeout(() => {
-          setPrinterStatus('');
-        }, 2000);
-        alert('Invoice printed successfully!');
-      } catch (printError: unknown) {
-        console.error('Print error:', printError);
-        const errorMessage = printError instanceof Error ? printError.message : 'Unknown error';
-        setPrinterStatus(`Print failed: ${errorMessage}`);
-        alert(`Failed to print: ${errorMessage}\n\nPlease check:\n1. Printer has paper\n2. Printer is not jammed\n3. Printer is within range\n4. Try reconnecting`);
-        throw printError;
-      }
-    } catch (error: unknown) {
-      console.error('Thermal printer error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
-      setPrinterStatus(`Error: ${errorMsg}`);
-      
-      // Don't show alert if we already showed one
-      if (error instanceof Error && !error.message.includes('Failed to print') && !error.message.includes('Failed to connect')) {
-        alert(`Error: ${errorMsg}\n\nCheck browser console (F12) for details.`);
-      }
-    } finally {
-      setIsPrinting(false);
+  const handlePrint = () => {
+    // Prefer native bprint flows on mobile; fall back to browser print.
+    if (isIOS) {
+      window.location.href = getBprintBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full');
+      return;
     }
+    if (isAndroid) {
+      window.location.href = getAndroidBluetoothBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full');
+      return;
+    }
+    printInvoice();
   };
 
   const downloadInvoice = async () => {
@@ -495,135 +433,112 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
         </div>
       </div>
 
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 print:hidden">
-        <div className="bg-white rounded-lg p-4 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Booking Invoice</h3>
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap gap-2">
-                <Button variant="ghost" onClick={onClose} className="text-xs px-3 py-1">Close</Button>
-                <Button onClick={downloadInvoice} className="text-xs px-3 py-1">Download</Button>
-                <Button onClick={printInvoice} className="text-xs px-3 py-1">Print</Button>
-                <Button 
-                  onClick={printToThermalPrinter} 
-                  disabled={isPrinting}
-                  className="text-xs px-3 py-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                >
-                  {isPrinting ? 'Printing...' : 'Print to Thermal'}
-                </Button>
-                <Button 
-                  onClick={() => {
-                    const bprintUrl = getBprintBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full');
-                    window.location.href = bprintUrl;
-                  }}
-                  className="text-xs px-3 py-1 border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md"
-                  title="iOS: opens Bluetooth Print app (bprint://) to print invoice"
-                >
-                  iOS Bluetooth Print
-                </Button>
-                <Button
-                  onClick={() => {
-                    const androidUrl = getAndroidBluetoothBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full');
-                    window.location.href = androidUrl;
-                  }}
-                  className="text-xs px-3 py-1 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md"
-                  title="Android: opens Bluetooth Print app (my.bluetoothprint.scheme) to print invoice"
-                >
-                  Android Bluetooth Print
-                </Button>
+      <div className="print:hidden">
+        <SimpleModal
+          isOpen={isOpen}
+          onClose={onClose}
+          title="Booking Invoice"
+          size="xl"
+          footer={
+            <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
+                Close
+              </Button>
+              <Button variant="outline" onClick={downloadInvoice} className="w-full sm:w-auto">
+                Download
+              </Button>
+              <Button onClick={handlePrint} className="w-full sm:w-auto">
+                Print
+              </Button>
+            </div>
+          }
+        >
+          <div className="flex items-center justify-center">
+            <div className="w-full max-w-[420px] rounded-2xl bg-white ring-1 ring-black/10 shadow-sm px-3 py-3">
+              <div className="thermal-receipt-container">
+                <div className="thermal-receipt">
+                  {/* Company Header - same as bprint */}
+                  <div className="receipt-center">
+                    <div className="receipt-title">SUITLABS BALI</div>
+                    <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
+                    <div className="receipt-line">{invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362'}</div>
+                    {invoice.company?.phone && <div className="receipt-line">TEL: {invoice.company.phone}</div>}
+                  </div>
+
+                  <div className="receipt-divider"></div>
+
+                  {/* Invoice & booking info - same as bprint */}
+                  <div className="receipt-line">Invoice: {invoice.invoice_number}</div>
+                  <div className="receipt-line">Date: {bprintDateTime(invoice.generated_at || new Date())}</div>
+                  <div className="receipt-line">Booking ID: {invoice.booking_id.slice(-8)}</div>
+                  <div className="receipt-line">Type: {invoice.invoice_type?.toUpperCase() || 'FULL'}</div>
+                  {invoice.due_date && <div className="receipt-line">Due: {bprintDate(invoice.due_date)}</div>}
+                  <div className="receipt-line">Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}</div>
+                  {invoice.booking_date && <div className="receipt-line">Booking: {bprintDate(invoice.booking_date)}</div>}
+
+                  <div className="receipt-divider"></div>
+
+                  {/* Customer - name only, same as bprint */}
+                  <div className="receipt-label">CUSTOMER:</div>
+                  <div className="receipt-line">{invoice.customer_name}</div>
+
+                  <div className="receipt-divider"></div>
+
+                  {/* Items - same as bprint */}
+                  <div className="receipt-label">ITEMS:</div>
+                  {invoice.items && invoice.items.length > 0 ? (
+                    <>
+                      {invoice.items.map((item, idx) => {
+                        if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+                          return (
+                            <div key={idx} className="receipt-item">
+                              <div className="receipt-line">  {item.description}</div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={idx} className="receipt-item">
+                            <div className="receipt-line">  {item.description}</div>
+                            <div className="receipt-line">    {item.quantity} x {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}</div>
+                          </div>
+                        );
+                      })}
+                      {isPackagePricing && (invoice.total_amount || 0) > 0 && (
+                        <div className="receipt-line">Package: {formatCurrency(invoice.total_amount || 0)}</div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="receipt-line">{invoice.product_name || 'Booking Package'}</div>
+                  )}
+
+                  <div className="receipt-divider"></div>
+
+                  {/* Summary - same as bprint */}
+                  <div className="receipt-line">Subtotal: {formatCurrency(invoice.total_amount || 0)}</div>
+                  {(invoice.discount_amount || 0) > 0 && (
+                    <div className="receipt-line receipt-discount">Discount: ({formatCurrency(invoice.discount_amount || 0)})</div>
+                  )}
+                  <div className="receipt-total">TOTAL: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
+                  {invoice.invoice_type === 'dp' ? (
+                    <>
+                      <div className="receipt-line">DP: {formatCurrency(invoice.due_amount || 0)}</div>
+                      <div className="receipt-line">Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}</div>
+                    </>
+                  ) : (
+                    <div className="receipt-line">Due: {formatCurrency(invoice.due_amount || 0)}</div>
+                  )}
+
+                  {/* Footer - same as bprint */}
+                  <div className="receipt-divider"></div>
+                  <div className="receipt-center">
+                    <div className="receipt-line">Thank you for using SuitLabs!</div>
+                    <div className="receipt-line receipt-small">suitlabs.bali</div>
+                  </div>
+                </div>
               </div>
-              <p className="text-[10px] text-gray-500 mt-1">
-                iPhone (bprint://): open in Safari and use your computer&apos;s IP (not localhost). Android (my.bluetoothprint.scheme://): install Bluetooth Print, enable Browser Print, then tap the button.
-              </p>
-              {printerStatus && (
-                <div className="text-xs text-gray-600 mt-1">{printerStatus}</div>
-              )}
             </div>
           </div>
-
-          {/* Thermal Receipt - same structure as bprint */}
-          <div className="thermal-receipt-container">
-            <div className="thermal-receipt">
-            {/* Company Header - same as bprint */}
-            <div className="receipt-center">
-              <div className="receipt-title">SUITLABS BALI</div>
-              <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
-              <div className="receipt-line">{invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362'}</div>
-              {invoice.company?.phone && <div className="receipt-line">TEL: {invoice.company.phone}</div>}
-            </div>
-
-            <div className="receipt-divider"></div>
-
-            {/* Invoice & booking info - same as bprint */}
-            <div className="receipt-line">Invoice: {invoice.invoice_number}</div>
-            <div className="receipt-line">Date: {bprintDateTime(invoice.generated_at || new Date())}</div>
-            <div className="receipt-line">Booking ID: {invoice.booking_id.slice(-8)}</div>
-            <div className="receipt-line">Type: {invoice.invoice_type?.toUpperCase() || 'FULL'}</div>
-            {invoice.due_date && <div className="receipt-line">Due: {bprintDate(invoice.due_date)}</div>}
-            <div className="receipt-line">Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}</div>
-            {invoice.booking_date && <div className="receipt-line">Booking: {bprintDate(invoice.booking_date)}</div>}
-
-            <div className="receipt-divider"></div>
-
-            {/* Customer - name only, same as bprint */}
-            <div className="receipt-label">CUSTOMER:</div>
-            <div className="receipt-line">{invoice.customer_name}</div>
-
-            <div className="receipt-divider"></div>
-
-            {/* Items - same as bprint */}
-            <div className="receipt-label">ITEMS:</div>
-            {invoice.items && invoice.items.length > 0 ? (
-              <>
-                {invoice.items.map((item, idx) => {
-                  if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
-                    return (
-                      <div key={idx} className="receipt-item">
-                        <div className="receipt-line">  {item.description}</div>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div key={idx} className="receipt-item">
-                      <div className="receipt-line">  {item.description}</div>
-                      <div className="receipt-line">    {item.quantity} x {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}</div>
-                    </div>
-                  );
-                })}
-                {isPackagePricing && (invoice.total_amount || 0) > 0 && (
-                  <div className="receipt-line">Package: {formatCurrency(invoice.total_amount || 0)}</div>
-                )}
-              </>
-            ) : (
-              <div className="receipt-line">{invoice.product_name || 'Booking Package'}</div>
-            )}
-
-            <div className="receipt-divider"></div>
-
-            {/* Summary - same as bprint */}
-            <div className="receipt-line">Subtotal: {formatCurrency(invoice.total_amount || 0)}</div>
-            {(invoice.discount_amount || 0) > 0 && (
-              <div className="receipt-line receipt-discount">Discount: ({formatCurrency(invoice.discount_amount || 0)})</div>
-            )}
-            <div className="receipt-total">TOTAL: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
-            {invoice.invoice_type === 'dp' ? (
-              <>
-                <div className="receipt-line">DP: {formatCurrency(invoice.due_amount || 0)}</div>
-                <div className="receipt-line">Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}</div>
-              </>
-            ) : (
-              <div className="receipt-line">Due: {formatCurrency(invoice.due_amount || 0)}</div>
-            )}
-
-            {/* Footer - same as bprint */}
-            <div className="receipt-divider"></div>
-            <div className="receipt-center">
-              <div className="receipt-line">Thank you for using SuitLabs!</div>
-              <div className="receipt-line receipt-small">suitlabs.bali</div>
-            </div>
-          </div>
-          </div>
-        </div>
+        </SimpleModal>
       </div>
 
       {/* Thermal Receipt Styles */}

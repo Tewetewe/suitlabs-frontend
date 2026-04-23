@@ -65,7 +65,7 @@ export default function CameraModal({
         stream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [isOpen]);
+  }, [isOpen, stream]);
 
   const handleCapture = async () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -90,7 +90,7 @@ export default function CameraModal({
         onCapture(imageData);
         onClose();
       }
-    } catch (err) {
+    } catch {
       setError("Failed to capture photo");
     }
   };

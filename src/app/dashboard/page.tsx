@@ -6,171 +6,224 @@ import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/lib/currency';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { PageShell, StatGrid } from '@/components/ui/PageShell';
+import { Badge } from '@/components/ui/DataDisplay';
+import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
-import { DashboardStats } from '@/types';
-import { Package, Users, Calendar, DollarSign, AlertTriangle, Wrench } from 'lucide-react';
+import { Booking, DashboardStats, Rental } from '@/types';
+import { Package, Users, Calendar, DollarSign, AlertTriangle, Wrench, Plus, ArrowRight } from 'lucide-react';
 
-const statCards = [
-  {
-    title: 'Total Items',
-    key: 'totalItems' as keyof DashboardStats,
-    icon: Package,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-100',
-  },
-  {
-    title: 'Total Bookings',
-    key: 'totalBookings' as keyof DashboardStats,
-    icon: Calendar,
-    color: 'text-green-600',
-    bgColor: 'bg-green-100',
-  },
-  {
-    title: 'Active Rentals',
-    key: 'activeRentals' as keyof DashboardStats,
-    icon: Users,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-100',
-  },
-  {
-    title: 'Today Revenue',
-    key: 'todayRevenue' as keyof DashboardStats,
-    icon: DollarSign,
-    color: 'text-yellow-600',
-    bgColor: 'bg-yellow-100',
-    format: 'currency',
-  },
-  {
-    title: 'Low Stock Items',
-    key: 'lowStockItems' as keyof DashboardStats,
-    icon: AlertTriangle,
-    color: 'text-red-600',
-    bgColor: 'bg-red-100',
-  },
-  {
-    title: 'Maintenance Items',
-    key: 'maintenanceItems' as keyof DashboardStats,
-    icon: Wrench,
-    color: 'text-orange-600',
-    bgColor: 'bg-orange-100',
-  },
+const quickActions = [
+  { label: 'New Booking',   href: '/dashboard/bookings/new', variant: 'primary'   as const, icon: Calendar },
+  { label: 'Add Item',      href: '/dashboard/items/new',    variant: 'secondary' as const, icon: Package },
+  { label: 'Add Customer',  href: '/dashboard/customers/new',variant: 'secondary' as const, icon: Users },
 ];
+
+type ActivityItem = {
+  text: string;
+  time: string;
+  badge: 'success' | 'primary' | 'warning' | 'danger' | 'default';
+};
+
+function timeAgo(iso?: string) {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const diff = Date.now() - t;
+  const min = Math.max(0, Math.floor(diff / 60000));
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
+  const d = Math.floor(hr / 24);
+  return `${d} day${d === 1 ? '' : 's'} ago`;
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
-    loadDashboardStats();
+    const load = async () => {
+      try {
+        setLoading(true);
+        const [s, bookingsRes, rentalsRes] = await Promise.allSettled([
+          apiClient.getDashboardStats(),
+          apiClient.getBookings({ page: 1, limit: 5 }),
+          apiClient.getRentals({ page: 1, limit: 5 }),
+        ]);
+
+        if (s.status === 'fulfilled') setStats(s.value);
+
+        const bookings: Booking[] =
+          bookingsRes.status === 'fulfilled'
+            ? (bookingsRes.value?.data?.data?.bookings || [])
+            : [];
+
+        const rentals: Rental[] =
+          rentalsRes.status === 'fulfilled'
+            ? (rentalsRes.value?.data?.data?.rentals || [])
+            : [];
+
+        const bookingActivity: Array<ActivityItem & { ts: number }> = bookings.map((b) => {
+          const customerName = b.customer
+            ? [b.customer.first_name, b.customer.last_name].filter(Boolean).join(' ').trim()
+            : 'Customer';
+          const idShort = b.id ? b.id.slice(-8) : '';
+          const badge =
+            b.payment_status === 'completed'
+              ? 'primary'
+              : b.status === 'confirmed'
+                ? 'success'
+                : b.status === 'cancelled'
+                  ? 'danger'
+                  : b.status === 'pending'
+                    ? 'warning'
+                    : 'default';
+          const ts = new Date((b as unknown as { created_at?: string }).created_at || b.booking_date || '').getTime();
+          return {
+            text: `Booking #${idShort} • ${customerName} • ${b.status}`,
+            time: timeAgo((b as unknown as { created_at?: string }).created_at || b.booking_date),
+            badge,
+            ts: Number.isNaN(ts) ? 0 : ts,
+          };
+        });
+
+        const rentalActivity: Array<ActivityItem & { ts: number }> = rentals.map((r) => {
+          const customerName = r.customer
+            ? [r.customer.first_name, r.customer.last_name].filter(Boolean).join(' ').trim()
+            : (r.booking?.customer
+                ? [r.booking.customer.first_name, r.booking.customer.last_name].filter(Boolean).join(' ').trim()
+                : 'Customer');
+          const idShort = r.id ? r.id.slice(-8) : '';
+          const badge =
+            r.status === 'active'
+              ? 'success'
+              : r.status === 'pending'
+                ? 'warning'
+                : r.status === 'cancelled' || r.status === 'overdue'
+                  ? 'danger'
+                  : 'default';
+          const ts = new Date((r as unknown as { created_at?: string }).created_at || r.rental_date || '').getTime();
+          return {
+            text: `Rental #${idShort} • ${customerName} • ${r.status}`,
+            time: timeAgo((r as unknown as { created_at?: string }).created_at || r.rental_date),
+            badge,
+            ts: Number.isNaN(ts) ? 0 : ts,
+          };
+        });
+
+        const merged = [...bookingActivity, ...rentalActivity]
+          .sort((a, b) => b.ts - a.ts)
+          .slice(0, 5)
+          .map(({ ts, ...rest }) => rest);
+
+        setActivity(merged);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load().catch(console.error);
   }, []);
 
-  const loadDashboardStats = async () => {
-    try {
-      const data = await apiClient.getDashboardStats();
-      setStats(data);
-    } catch (error) {
-      console.error('Failed to load dashboard stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatValue = (value: number, format?: string) => {
-    if (format === 'currency') {
-      return formatCurrency(value);
-    }
-    return value.toLocaleString();
-  };
+  const statItems = [
+    { label: 'Total Items',      key: 'totalItems'       as keyof DashboardStats, icon: <Package />,       iconBg: 'bg-indigo-50',  iconColor: 'text-indigo-600' },
+    { label: 'Total Bookings',   key: 'totalBookings'    as keyof DashboardStats, icon: <Calendar />,      iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+    { label: 'Active Rentals',   key: 'activeRentals'    as keyof DashboardStats, icon: <Users />,         iconBg: 'bg-sky-50',     iconColor: 'text-sky-600' },
+    { label: "Today's Revenue",  key: 'todayRevenue'     as keyof DashboardStats, icon: <DollarSign />,    iconBg: 'bg-amber-50',   iconColor: 'text-amber-600', format: 'currency' },
+    { label: 'Low Stock',        key: 'lowStockItems'    as keyof DashboardStats, icon: <AlertTriangle />, iconBg: 'bg-red-50',     iconColor: 'text-red-600' },
+    { label: 'Maintenance',      key: 'maintenanceItems' as keyof DashboardStats, icon: <Wrench />,        iconBg: 'bg-orange-50',  iconColor: 'text-orange-600' },
+  ];
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Welcome back, {user?.first_name}! Here&apos;s what&apos;s happening with your business today.
-          </p>
-        </div>
+      <PageShell
+        title={`Welcome back, ${user?.first_name ?? 'there'}`}
+        subtitle="A quick snapshot of what matters today."
+        action={
+          <Link href="/dashboard/bookings/new">
+            <Button size="md">
+              <Plus className="h-4 w-4" />
+              New Booking
+            </Button>
+          </Link>
+        }
+      >
+        {/* KPI Stats */}
+        <StatGrid
+          stats={statItems.map(s => ({
+            label:    s.label,
+            value:    loading
+                        ? ''
+                        : s.format === 'currency'
+                          ? formatCurrency(stats?.[s.key] as number ?? 0)
+                          : (stats?.[s.key] as number ?? 0).toLocaleString(),
+            icon:      s.icon,
+            iconBg:    s.iconBg,
+            iconColor: s.iconColor,
+            loading,
+          }))}
+        />
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {statCards.map((card) => {
-            const Icon = card.icon;
-            const value = stats?.[card.key] ?? 0;
-            
-            return (
-              <Card key={card.title}>
-                <CardContent className="flex items-center">
-                  <div className={`p-3 rounded-lg ${card.bgColor}`}>
-                    <Icon className={`h-6 w-6 ${card.color}`} />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">{card.title}</p>
-                    <p className="text-2xl font-semibold text-gray-900">
-                      {loading ? '...' : formatValue(value, card.format)}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Secondary row */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {/* Quick Actions */}
           <Card>
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <a
-                  href="/dashboard/bookings/new"
-                  className="block w-full text-left px-4 py-3 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  Create New Booking
-                </a>
-                <Link
-                  href="/dashboard/items/new"
-                  className="block w-full text-left px-4 py-3 text-sm font-medium text-green-600 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
-                >
-                  Add New Item
-                </Link>
-                <a
-                  href="/dashboard/customers/new"
-                  className="block w-full text-left px-4 py-3 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
-                >
-                  Add New Customer
-                </a>
+              <div className="space-y-2">
+                {quickActions.map(({ label, href, icon: Icon }) => (
+                  <Link key={label} href={href} className="flex items-center justify-between rounded-lg px-4 py-3 transition-colors hover:bg-slate-50 group">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50">
+                        <Icon className="h-4 w-4 text-indigo-600" />
+                      </span>
+                      <span className="text-sm font-medium text-slate-700">{label}</span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                  </Link>
+                ))}
               </div>
             </CardContent>
           </Card>
 
+          {/* Recent Activity */}
           <Card>
             <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Recent Activity</CardTitle>
+                <Link href="/dashboard/bookings" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                  View all →
+                </Link>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="text-sm text-gray-600">
-                  <p>• New booking created for John Doe</p>
-                  <p className="text-xs text-gray-400 mt-1">2 hours ago</p>
-                </div>
-                <div className="text-sm text-gray-600">
-                  <p>• Item &quot;Black Tuxedo&quot; returned</p>
-                  <p className="text-xs text-gray-400 mt-1">4 hours ago</p>
-                </div>
-                <div className="text-sm text-gray-600">
-                  <p>• Payment received for booking #1234</p>
-                  <p className="text-xs text-gray-400 mt-1">6 hours ago</p>
-                </div>
-              </div>
+              <ul className="space-y-3">
+                {(activity.length > 0 ? activity : []).map((item, i) => (
+                  <li key={i} className="flex items-start justify-between gap-3">
+                    <p className="text-sm text-slate-600 flex-1">{item.text}</p>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <Badge variant={item.badge} dot>
+                        {item.badge === 'success' ? 'Active' : item.badge === 'primary' ? 'Paid' : item.badge === 'warning' ? 'Pending' : item.badge === 'danger' ? 'Alert' : 'Update'}
+                      </Badge>
+                      <span className="text-xs text-slate-400">{item.time}</span>
+                    </div>
+                  </li>
+                ))}
+                {!loading && activity.length === 0 && (
+                  <li className="text-sm text-slate-500">
+                    No recent activity yet.
+                  </li>
+                )}
+              </ul>
             </CardContent>
           </Card>
         </div>
-      </div>
+      </PageShell>
     </DashboardLayout>
   );
 }

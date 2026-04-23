@@ -27,7 +27,10 @@ import { apiClient } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { Item, ItemFilters, CreateItemRequest, Category } from '@/types';
 import { formatCurrency } from '@/lib/currency';
+import { PageShell } from '@/components/ui/PageShell';
+import { Badge, FilterBar, EmptyState, Pagination, SkeletonCard } from '@/components/ui/DataDisplay';
 import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck } from 'lucide-react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 type ViewMode = 'grid' | 'list';
 
@@ -35,6 +38,8 @@ export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ItemFilters>({});
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebouncedValue(searchInput, 400);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -116,17 +121,14 @@ export default function ItemsPage() {
         response = await apiClient.getItems(paginationFilters);
       }
       
-      // Handle case where response might be undefined or have unexpected structure
-      if (response && response.data && response.data.data && response.data.data.items && Array.isArray(response.data.data.items)) {
-        setItems(response.data.data.items);
-        setTotal(response.data.pagination?.total || 0);
-        setTotalPages(response.data.pagination?.total_pages || 1);
-      } else {
-        console.warn('Unexpected API response structure:', response);
-        setItems([]);
-        setTotal(0);
-        setTotalPages(1);
+      if (!response?.success) {
+        throw new Error('API request failed');
       }
+
+      const nextItems = response.data?.data?.items || [];
+      setItems(nextItems);
+      setTotal(response.data?.pagination?.total || 0);
+      setTotalPages(response.data?.pagination?.total_pages || 1);
     } catch (err) {
       console.error('Failed to load items:', err);
       error('Failed to Load Items', 'Unable to fetch item data. Please try again.');
@@ -142,10 +144,10 @@ export default function ItemsPage() {
     loadItems();
   }, [loadItems]);
 
-  const handleSearch = (search: string) => {
-    setFilters({ ...filters, search });
-    setCurrentPage(1); // Reset to first page when searching
-  };
+  useEffect(() => {
+    setFilters(prev => ({ ...prev, search: debouncedSearch || undefined }));
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   const handleBarcodeScan = (barcode: string) => {
     const cleanedBarcode = sanitizeBarcode(barcode);
@@ -154,22 +156,6 @@ export default function ItemsPage() {
     setIsScannerOpen(false);
     setUseSimpleScanner(false);
     success('Barcode Scanned!', `Searching for barcode: ${cleanedBarcode}`);
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handlePreviousPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
   };
 
   const handleAddItem = async (itemData: CreateItemRequest) => {
@@ -190,9 +176,7 @@ export default function ItemsPage() {
 
   const handleUpdateItem = async (id: string, itemData: Partial<CreateItemRequest>) => {
     try {
-      console.log('ItemsPage: Updating item', id, 'with data:', itemData);
-      const result = await apiClient.updateItem(id, itemData);
-      console.log('ItemsPage: Update result:', result);
+      await apiClient.updateItem(id, itemData);
       const item = items.find(i => i.id === id);
       const itemName = item ? item.name : 'Item';
       success('Item Updated Successfully!', `${itemName} has been updated.`);
@@ -224,33 +208,23 @@ export default function ItemsPage() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'available':
-        return 'bg-green-100 text-green-800';
-      case 'rented':
-        return 'bg-blue-100 text-blue-800';
-      case 'maintenance':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'retired':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const itemStatusVariant = (s: string): 'success' | 'primary' | 'warning' | 'danger' | 'default' => {
+    switch (s) {
+      case 'available':   return 'success';
+      case 'rented':      return 'primary';
+      case 'maintenance': return 'warning';
+      case 'retired':     return 'danger';
+      default:            return 'default';
     }
   };
 
-  const getConditionColor = (condition: string) => {
-    switch (condition) {
-      case 'excellent':
-        return 'bg-green-100 text-green-800';
-      case 'good':
-        return 'bg-blue-100 text-blue-800';
-      case 'fair':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'poor':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const itemConditionVariant = (s: string): 'success' | 'primary' | 'warning' | 'danger' | 'default' => {
+    switch (s) {
+      case 'excellent': return 'success';
+      case 'good':      return 'primary';
+      case 'fair':      return 'warning';
+      case 'poor':      return 'danger';
+      default:          return 'default';
     }
   };
 
@@ -306,8 +280,8 @@ export default function ItemsPage() {
       <CardContent className="space-y-3">
         {/* Item Image */}
         <Link href={`/dashboard/items/${item.id}`} className="block">
-          <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-            {item.thumbnail_url && /^https?:\/\//.test(item.thumbnail_url) ? (
+          <div className="aspect-square rounded-2xl flex items-center justify-center overflow-hidden bg-black/5 ring-1 ring-black/5">
+            {item.thumbnail_url && (/^https?:\/\//.test(item.thumbnail_url) || item.thumbnail_url.startsWith('/')) ? (
               <Image
                 src={item.thumbnail_url}
                 alt={item.name}
@@ -316,75 +290,79 @@ export default function ItemsPage() {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <Package className="h-12 w-12 text-gray-400" />
+              <Package className="h-12 w-12 text-slate-400" />
             )}
           </div>
         </Link>
 
         {/* Item Details */}
         <div className="space-y-2">
-          <div className="flex justify-between items-start">
-            <Link href={`/dashboard/items/${item.id}`} className="font-medium text-gray-900 truncate flex-1 hover:underline">
-              {item.name}
+          <div className="flex items-start justify-between gap-2">
+            <Link href={`/dashboard/items/${item.id}`} className="font-semibold text-slate-900 hover:underline flex-1 min-w-0">
+              <span className="leading-snug [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical] overflow-hidden">
+                {item.name}
+              </span>
             </Link>
-            <span className="text-xs text-gray-500 ml-2">#{item.code}</span>
           </div>
 
-          <div className="flex flex-wrap gap-1">
-            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
-              {item.status}
-            </span>
-            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getConditionColor(item.condition)}`}>
-              {item.condition}
-            </span>
-          </div>
-
-          <div className="text-sm text-gray-600 space-y-1">
-            <p>{item.brand} • {item.color}</p>
-            <p>Size: {item.size.label}</p>
-            <p>Qty: {item.quantity}</p>
-            {item.category && (
-              <p className="text-xs text-blue-600 font-medium">
-                📁 {item.category.name}
-              </p>
+          <div className="flex flex-wrap gap-1.5 max-w-full overflow-hidden">
+            <Badge variant={itemStatusVariant(item.status)}>{item.status}</Badge>
+            <Badge variant={itemConditionVariant(item.condition)}>{item.condition}</Badge>
+            {/* Category is usually redundant in dense cards — keep only if short */}
+            {item.category?.name && item.category.name.length <= 18 && (
+              <span className="inline-flex items-center rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-black/5 truncate max-w-[10rem]">
+                {item.category.name}
+              </span>
             )}
+          </div>
+
+          <div className="text-sm text-slate-600">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="font-medium text-slate-700 truncate max-w-[11rem]">{item.brand}</span>
+              <span className="text-slate-300">•</span>
+              <span className="truncate max-w-[7rem]">{item.color}</span>
+              <span className="text-slate-300">•</span>
+              <span className="tabular-nums">Size {item.size.label}</span>
+              <span className="text-slate-300">•</span>
+              <span className="tabular-nums">Qty {item.quantity}</span>
+            </div>
           </div>
 
           {/* Tags */}
           {item.tags && item.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {item.tags.slice(0, 3).map((tag, index) => (
-                <span
-                  key={index}
-                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
-                >
-                  {tag}
-                </span>
-              ))}
-              {item.tags.length > 3 && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-                  +{item.tags.length - 3}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center rounded-full bg-white/50 px-2 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-black/5 truncate max-w-[10rem]">
+                {item.tags[0]}
+              </span>
+              {item.tags.length > 1 && (
+                <span className="inline-flex items-center rounded-full bg-white/50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-black/5">
+                  +{item.tags.length - 1}
                 </span>
               )}
             </div>
           )}
 
-          <div className="text-sm font-medium text-gray-900">
-            <p>{formatCurrency(item.one_day_price)}/day</p>
-            <p className="text-xs text-gray-500">{formatCurrency(item.four_hour_price)}/4hr</p>
+          <div className="pt-1">
+            <p className="text-base font-semibold text-slate-900 tabular-nums">
+              {formatCurrency(item.one_day_price)}
+              <span className="text-xs font-medium text-slate-500">/day</span>
+            </p>
           </div>
         </div>
       </CardContent>
       
       <CardFooter>
-        <div className="flex w-full items-center justify-end gap-2">
+        <div className="flex w-full items-center justify-between gap-2">
+          <div className="text-[11px] text-slate-500 tabular-nums">
+            {item.code ? `ID • ${item.code}` : ''}
+          </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => { setAvailabilityForItem(item); setAvailabilityDates({ start: '', end: '' }); setAvailabilityResult(''); }}
             title="Check Availability"
             aria-label="Check Availability"
-            className="h-9 w-9 p-0 rounded-md border border-gray-200 hover:bg-gray-50"
+            className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
           >
             <CalendarCheck className="h-4 w-4" />
           </Button>
@@ -394,7 +372,7 @@ export default function ItemsPage() {
             onClick={() => handleEditItem(item)}
             title="Edit"
             aria-label="Edit"
-            className="h-9 w-9 p-0 rounded-md border border-gray-200 hover:bg-gray-50"
+            className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
           >
             <Edit className="h-4 w-4" />
           </Button>
@@ -404,7 +382,7 @@ export default function ItemsPage() {
             onClick={() => handleDeleteItem(item)}
             title="Delete"
             aria-label="Delete"
-            className="h-9 w-9 p-0 rounded-md border border-gray-200 hover:bg-red-50 text-red-600"
+            className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-red-500/10 text-red-600"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -418,8 +396,8 @@ export default function ItemsPage() {
       <CardContent>
         <div className="flex space-x-4">
           {/* Item Image */}
-          <Link href={`/dashboard/items/${item.id}`} className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-            {item.thumbnail_url && /^https?:\/\//.test(item.thumbnail_url) ? (
+          <Link href={`/dashboard/items/${item.id}`} className="w-16 h-16 sm:w-20 sm:h-20 bg-black/5 rounded-2xl flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-black/5">
+            {item.thumbnail_url && (/^https?:\/\//.test(item.thumbnail_url) || item.thumbnail_url.startsWith('/')) ? (
               <Image
                 src={item.thumbnail_url}
                 alt={item.name}
@@ -428,37 +406,33 @@ export default function ItemsPage() {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <Package className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400" />
+              <Package className="h-6 w-6 sm:h-8 sm:w-8 text-slate-400" />
             )}
           </Link>
 
           {/* Item Details */}
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-start mb-2">
-              <Link href={`/dashboard/items/${item.id}`} className="font-medium text-gray-900 truncate hover:underline">
-                {item.name}
+              <Link href={`/dashboard/items/${item.id}`} className="font-semibold text-slate-900 hover:underline flex-1 min-w-0">
+                <span className="leading-snug [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical] overflow-hidden">
+                  {item.name}
+                </span>
               </Link>
-              <span className="text-xs text-gray-500 ml-2">#{item.code}</span>
+              {item.code && <span className="text-xs text-slate-500 ml-2 shrink-0 tabular-nums">#{item.code}</span>}
             </div>
 
             <div className="flex flex-wrap gap-1 mb-2">
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
-                {item.status}
-              </span>
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getConditionColor(item.condition)}`}>
-                {item.condition}
-              </span>
+              <Badge variant={itemStatusVariant(item.status)}>{item.status}</Badge>
+              <Badge variant={itemConditionVariant(item.condition)}>{item.condition}</Badge>
             </div>
 
             <div className="flex justify-between items-end">
-              <div className="text-sm text-gray-600">
-                <p>{item.brand} • {item.color} • Size {item.size.label}</p>
+              <div className="text-sm text-slate-600">
+                <p>{item.brand} • {item.color} • Size {item.size.label} • Qty {item.quantity}</p>
                 {item.category && (
-                  <p className="text-xs text-blue-600 font-medium mb-1">
-                    📁 {item.category.name}
-                  </p>
+                  <p className="text-xs text-slate-600 font-medium mb-1">{item.category.name}</p>
                 )}
-                <p className="font-medium text-gray-900">{formatCurrency(item.one_day_price)}/day</p>
+                <p className="font-semibold text-slate-900 tabular-nums">{formatCurrency(item.one_day_price)}<span className="text-xs font-medium text-slate-500">/day</span></p>
               </div>
               
               <div className="flex space-x-2">
@@ -468,7 +442,7 @@ export default function ItemsPage() {
                   onClick={() => { setAvailabilityForItem(item); setAvailabilityDates({ start: '', end: '' }); setAvailabilityResult(''); }}
                   title="Check Availability"
                   aria-label="Check Availability"
-                  className="h-9 w-9 p-0 rounded-md border border-gray-200 hover:bg-gray-50"
+                  className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
                 >
                   <CalendarCheck className="h-4 w-4" />
                 </Button>
@@ -478,7 +452,7 @@ export default function ItemsPage() {
                   onClick={() => handleEditItem(item)}
                   title="Edit"
                   aria-label="Edit"
-                  className="h-9 w-9 p-0 rounded-md border border-gray-200 hover:bg-gray-50"
+                  className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
@@ -488,7 +462,7 @@ export default function ItemsPage() {
                   onClick={() => handleDeleteItem(item)}
                   title="Delete"
                   aria-label="Delete"
-                  className="h-9 w-9 p-0 rounded-md border border-gray-200 hover:bg-red-50 text-red-600"
+                  className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-red-500/10 text-red-600"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -503,29 +477,23 @@ export default function ItemsPage() {
   return (
     <ErrorBoundary>
       <DashboardLayout>
-        <div className="space-y-4 sm:space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Items</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Manage your inventory of suits and accessories
-            </p>
-          </div>
-          <Button size="lg" fullWidth className="sm:w-auto" onClick={() => setShowAddModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Item
-          </Button>
-        </div>
-
+        <PageShell
+          title="Items"
+          subtitle="Manage your inventory of suits and accessories"
+          action={
+            <Button size="md" onClick={() => setShowAddModal(true)}>
+              <Plus className="h-4 w-4" />
+              Add Item
+            </Button>
+          }
+        >
         {/* Search and View Controls */}
-        <ClientOnly>
-          <div className="flex flex-col sm:flex-row gap-4">
+        <FilterBar>
             <div className="flex-1 relative">
               <Input
                 placeholder={filters.barcode ? `Barcode: ${filters.barcode}` : "Search items..."}
-                value={filters.search || ''}
-                onChange={(e) => handleSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className={filters.barcode ? 'border-blue-500 bg-blue-50' : undefined}
               />
               <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex gap-1">
@@ -534,8 +502,9 @@ export default function ItemsPage() {
                     setUseSimpleScanner(false);
                     setIsScannerOpen(true);
                   }}
-                  className="text-gray-400 hover:text-blue-500 transition-colors"
+                  className="text-slate-400 hover:text-indigo-600 transition-colors"
                   title="Scan Barcode"
+                  suppressHydrationWarning
                 >
                   <QrCode className="h-4 w-4" />
                 </button>
@@ -543,16 +512,16 @@ export default function ItemsPage() {
             </div>
             
             <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="md"
-                onClick={() => setShowFilters(!showFilters)}
-                className="sm:hidden"
-              >
-                <Filter className="h-4 w-4 mr-2" />
-                Filters
-              </Button>
-              
+              <div className="sm:hidden">
+                <Button
+                  variant="ghost"
+                  size="md"
+                  onClick={() => setShowFilters((v) => !v)}
+                  title="Toggle filters"
+                >
+                  <Filter className="h-4 w-4" />
+                </Button>
+              </div>
               <div className="hidden sm:flex gap-2">
                 <Button
                   variant={viewMode === 'grid' ? 'primary' : 'ghost'}
@@ -570,8 +539,7 @@ export default function ItemsPage() {
                 </Button>
               </div>
             </div>
-          </div>
-        </ClientOnly>
+          </FilterBar>
 
         {/* Filters */}
         <div className={`${showFilters ? 'block' : 'hidden'} sm:block`}>
@@ -626,32 +594,14 @@ export default function ItemsPage() {
                     />
                   </div>
                   
-                  {/* Name and Barcode Section with Clear All Button */}
+                  {/* Advanced: Barcode + Availability date range */}
                   <div className="pt-2">
                     <div className="flex items-end justify-between gap-4">
                       <div className="flex-1 max-w-2xl">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {/* Name Field */}
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
-                            <Input
-                              placeholder="Search by item name..."
-                              value={filters.search || ''}
-                              onChange={(e) => {
-                                setFilters({ ...filters, search: e.target.value || undefined });
-                                setCurrentPage(1);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  setCurrentPage(1);
-                                }
-                              }}
-                            />
-                          </div>
-                          
                           {/* Barcode Field */}
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Barcode</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Barcode</label>
                             <div className="flex items-stretch gap-2">
                               <Input
                                 placeholder="Enter barcode or scan..."
@@ -672,9 +622,10 @@ export default function ItemsPage() {
                                   setUseSimpleScanner(false);
                                   setIsScannerOpen(true);
                                 }}
-                                className="h-[44px] px-3 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                                className="h-[44px] px-3 rounded-xl"
                                 title="Scan Barcode"
                                 aria-label="Scan Barcode"
+                                suppressHydrationWarning
                               >
                                 <QrCode className="h-4 w-4" />
                               </Button>
@@ -682,7 +633,7 @@ export default function ItemsPage() {
                           </div>
                           {/* Rental Date */}
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Rental Date</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Rental Date</label>
                             <Input
                               type="date"
                               value={rentalDate}
@@ -691,7 +642,7 @@ export default function ItemsPage() {
                           </div>
                           {/* Return Date */}
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Return Date</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Return Date</label>
                             <Input
                               type="date"
                               value={returnDate}
@@ -706,8 +657,8 @@ export default function ItemsPage() {
                         <Button
                           variant="ghost"
                           size="md"
-                          onClick={() => { setFilters({}); setRentalDate(''); setReturnDate(''); }}
-                          className="px-4 py-2 rounded-md border border-gray-300 shadow-sm hover:bg-gray-50 text-gray-900"
+                          onClick={() => { setFilters({}); setSearchInput(''); setRentalDate(''); setReturnDate(''); }}
+                          className="px-4 py-2 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60 text-slate-900"
                         >
                           Clear All
                         </Button>
@@ -722,54 +673,22 @@ export default function ItemsPage() {
 
         {/* Items Grid/List */}
         {loading ? (
-          <div className={viewMode === 'grid' 
-            ? "grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" 
+          <div className={viewMode === 'grid'
+            ? "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
             : "space-y-4"
           }>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent>
-                  <div className="animate-pulse">
-                    <div className={viewMode === 'grid' ? "aspect-square bg-gray-200 rounded-lg mb-4" : "flex space-x-4"}>
-                      {viewMode === 'list' && <div className="w-20 h-20 bg-gray-200 rounded-lg"></div>}
-                      {viewMode === 'grid' && <div className="w-full h-full bg-gray-200 rounded-lg"></div>}
-                      {viewMode === 'list' && (
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 bg-gray-200 rounded"></div>
-                          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                        </div>
-                      )}
-                    </div>
-                    {viewMode === 'grid' && (
-                      <>
-                        <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         ) : items.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No items found</h3>
-              <p className="text-gray-500 mb-4">
-                {filters.search || filters.type || filters.status
-                  ? 'Try adjusting your filters'
-                  : 'Get started by adding your first item'}
-              </p>
-              <Button size="lg" onClick={() => setShowAddModal(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Item
-              </Button>
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={<Package className="h-10 w-10" />}
+            title="No items found"
+            description={filters.search || filters.type || filters.status ? 'Try adjusting your filters' : 'Get started by adding your first item'}
+            action={<Button onClick={() => setShowAddModal(true)}><Plus className="h-4 w-4" /> Add Item</Button>}
+          />
         ) : (
           <div className={viewMode === 'grid' 
-            ? "grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" 
+            ? "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" 
             : "space-y-4"
           }>
             {items.map((item) => 
@@ -782,71 +701,14 @@ export default function ItemsPage() {
           </div>
         )}
 
-        {/* Pagination Controls */}
-        {!loading && totalPages > 1 && (
-          <div className="flex items-center justify-between mt-6">
-            <div className="text-sm text-gray-500">
-              Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, total)} of {total} items
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handlePreviousPage}
-                disabled={currentPage === 1}
-                className="flex items-center"
-              >
-                Previous
-              </Button>
-              
-              <div className="flex items-center space-x-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={currentPage === pageNum ? "primary" : "ghost"}
-                      size="sm"
-                      onClick={() => handlePageChange(pageNum)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                })}
-              </div>
-              
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={currentPage === totalPages}
-                className="flex items-center"
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Pagination Info for single page */}
-        {!loading && totalPages === 1 && items.length > 0 && (
-          <div className="text-center text-sm text-gray-500 py-4">
-            Showing {items.length} of {total} items
-          </div>
-        )}
-      </div>
+        <Pagination
+          page={currentPage}
+          totalPages={totalPages}
+          total={total}
+          perPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
+      </PageShell>
 
       {/* Add Item Modal */}
       <AddItemModal

@@ -4,6 +4,7 @@ import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import HydrationSuppressor from '@/components/HydrationSuppressor';
+import ApiStatusBanner from '@/components/ApiStatusBanner';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -31,11 +32,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-gray-50`} suppressHydrationWarning>
+    <html lang="en" data-scroll-behavior="smooth">
+      <body className={`${inter.className} app-canvas`} suppressHydrationWarning>
         <HydrationSuppressor />
         <AuthProvider>
           <ToastProvider>
+            <ApiStatusBanner />
             {children}
           </ToastProvider>
         </AuthProvider>

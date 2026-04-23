@@ -32,6 +32,7 @@ import {
   DiscountSummary,
   MaintenanceItem
 } from '@/types';
+import { emitAPIStatus } from '@/lib/api-status';
 
 // Backend category structure (uses 'children' instead of 'subcategories')
 interface BackendCategory {
@@ -69,8 +70,18 @@ class APIClient {
 
     // Response interceptor for error handling
     this.client.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // Mark API online after any successful response
+        if (typeof window !== 'undefined') emitAPIStatus({ online: true, baseURL });
+        return response;
+      },
       (error) => {
+        // Mark API offline on network errors (connection refused, DNS, etc.)
+        if (!error?.response) {
+          const msg = typeof error?.message === 'string' ? error.message : undefined;
+          if (typeof window !== 'undefined') emitAPIStatus({ online: false, baseURL, message: msg });
+        }
+
         if (error.response?.status === 401) {
           this.clearToken();
           localStorage.removeItem('auth_token');
@@ -188,12 +199,8 @@ class APIClient {
   }
 
   async updateItem(id: string, item: Partial<CreateItemRequest>): Promise<Item> {
-    console.log('API: Updating item with data:', item); // Debug log
     const response = await this.client.put<UpdateResponse<Item>>(`/api/v1/items/${id}`, item);
-    console.log('API: Update response:', response.data); // Debug log
-    // Handle both old and new API response formats
-    const responseData = response.data as unknown as { data?: { data?: Item } } & { data?: Item } & Item;
-    return responseData?.data?.data || responseData?.data || responseData;
+    return this.handleResponse<Item>(response as { data: UpdateResponse<Item> });
   }
 
   async deleteItem(id: string): Promise<void> {

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import Image from 'next/image';
 
 export default function HomePage() {
   const { isAuthenticated, loading } = useAuth();
@@ -10,24 +11,31 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!loading) {
-      if (isAuthenticated) {
-        router.push('/dashboard');
-      } else {
-        router.push('/auth/login');
-      }
+      router.push(isAuthenticated ? '/dashboard' : '/auth/login');
     }
   }, [isAuthenticated, loading, router]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
+  return (
+    <div className="min-h-screen app-canvas flex flex-col items-center justify-center gap-4">
+      <div className="glass-panel-strong rounded-3xl px-6 py-5">
+        <Image
+          src="/suitlabs-logo.svg"
+          alt="SuitLabs"
+          width={240}
+          height={64}
+          priority
+          className="h-8 w-auto"
+        />
       </div>
-    );
-  }
-
-  return null;
+      <div className="flex gap-1.5">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }

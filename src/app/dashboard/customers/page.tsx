@@ -9,14 +9,20 @@ import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Customer, CustomerFilters, CreateCustomerRequest } from '@/types';
-import { Plus, Edit, Trash2, User, Mail, Phone, X } from 'lucide-react';
+import { Plus, Edit, Trash2, User, Mail, Phone } from 'lucide-react';
 import GenericDeleteConfirmModal from '@/components/modals/GenericDeleteConfirmModal';
 import EditCustomerModal from '@/components/modals/EditCustomerModal';
+import { PageShell } from '@/components/ui/PageShell';
+import { Badge, FilterBar, EmptyState, Pagination, SkeletonCard } from '@/components/ui/DataDisplay';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import SimpleModal from '@/components/modals/SimpleModal';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<CustomerFilters>({});
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebouncedValue(searchInput, 400);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -57,17 +63,14 @@ export default function CustomersPage() {
       };
       const response = await apiClient.getCustomers(paginationFilters);
       
-      // Handle case where response might be undefined or have unexpected structure
-      if (response && response.data && response.data.data && response.data.data.customers && Array.isArray(response.data.data.customers)) {
-        setCustomers(response.data.data.customers);
-        setTotal(response.data.pagination?.total || 0);
-        setTotalPages(response.data.pagination?.total_pages || 1);
-      } else {
-        console.warn('Unexpected API response structure:', response);
-        setCustomers([]);
-        setTotal(0);
-        setTotalPages(1);
+      if (!response?.success) {
+        throw new Error('API request failed');
       }
+
+      const nextCustomers = response.data?.data?.customers || [];
+      setCustomers(nextCustomers);
+      setTotal(response.data?.pagination?.total || 0);
+      setTotalPages(response.data?.pagination?.total_pages || 1);
     } catch (err) {
       console.error('Failed to load customers:', err);
       error(
@@ -88,26 +91,10 @@ export default function CustomersPage() {
     }
   }, [loadCustomers, isAuthenticated]);
 
-  const handleSearch = (search: string) => {
-    setFilters({ ...filters, search });
-    setCurrentPage(1); // Reset to first page when searching
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handlePreviousPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
+  useEffect(() => {
+    setFilters(prev => ({ ...prev, search: debouncedSearch || undefined }));
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,85 +229,48 @@ export default function CustomersPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Manage your customer database
-            </p>
-          </div>
+      <PageShell
+        title="Customers"
+        subtitle="Manage your customer database"
+        action={
           <Button onClick={openCreateModal}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             Add Customer
           </Button>
-        </div>
-
-        {/* Filters */}
-        <Card>
-          <CardContent>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <Input
-                  placeholder="Search customers..."
-                  value={filters.search || ''}
-                  onChange={(e) => handleSearch(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <select
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-                  value={filters.is_active?.toString() || ''}
-                  onChange={(e) => {
-                    setFilters({ 
-                      ...filters, 
-                      is_active: e.target.value ? e.target.value === 'true' : undefined 
-                    });
-                    setCurrentPage(1); // Reset to first page when filtering
-                  }}
-                >
-                  <option value="">All Customers</option>
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
-                </select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        }
+      >
+        <FilterBar>
+          <Input
+            placeholder="Search customers..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <select
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            value={filters.is_active?.toString() || ''}
+            onChange={(e) => {
+              setFilters({ ...filters, is_active: e.target.value ? e.target.value === 'true' : undefined });
+              setCurrentPage(1);
+            }}
+          >
+            <option value="">All Customers</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </FilterBar>
 
         {/* Customers List */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {loading ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent>
-                  <div className="animate-pulse">
-                    <div className="h-12 w-12 bg-gray-200 rounded-full mb-4"></div>
-                    <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                    <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+            Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
           ) : customers.length === 0 ? (
             <div className="col-span-full">
-              <Card>
-                <CardContent className="text-center py-12">
-                  <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No customers found</h3>
-                  <p className="text-gray-500 mb-4">
-                    {filters.search || filters.is_active !== undefined
-                      ? 'Try adjusting your filters'
-                      : 'Get started by adding your first customer'}
-                  </p>
-                  <Button onClick={openCreateModal}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Customer
-                  </Button>
-                </CardContent>
-              </Card>
+              <EmptyState
+                icon={<User className="h-10 w-10" />}
+                title="No customers found"
+                description={filters.search || filters.is_active !== undefined ? 'Try adjusting your filters' : 'Get started by adding your first customer'}
+                action={<Button onClick={openCreateModal}><Plus className="h-4 w-4" /> Add Customer</Button>}
+              />
             </div>
           ) : (
             customers.map((customer) => (
@@ -335,13 +285,9 @@ export default function CustomersPage() {
                         <h3 className="text-sm font-medium text-gray-900">
                           {customer.first_name} {customer.last_name}
                         </h3>
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          customer.is_active 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
+                        <Badge variant={customer.is_active ? 'success' : 'danger'}>
                           {customer.is_active ? 'Active' : 'Inactive'}
-                        </span>
+                        </Badge>
                       </div>
                     </div>
                   </div>
@@ -349,7 +295,7 @@ export default function CustomersPage() {
                   <div className="space-y-2">
                     <div className="flex items-center text-sm text-gray-600">
                       <Mail className="h-4 w-4 mr-2" />
-                      <span className="truncate">{customer.email}</span>
+                      <span className="truncate">{customer.email || '-'}</span>
                     </div>
                     <div className="flex items-center text-sm text-gray-600">
                       <Phone className="h-4 w-4 mr-2" />
@@ -376,177 +322,99 @@ export default function CustomersPage() {
           )}
         </div>
 
-        {/* Pagination Controls */}
-        {!loading && totalPages > 1 && (
-          <div className="flex items-center justify-between mt-6">
-            <div className="text-sm text-gray-500">
-              Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, total)} of {total} customers
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handlePreviousPage}
-                disabled={currentPage === 1}
-                className="flex items-center"
-              >
-                Previous
-              </Button>
-              
-              <div className="flex items-center space-x-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={currentPage === pageNum ? "primary" : "ghost"}
-                      size="sm"
-                      onClick={() => handlePageChange(pageNum)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                })}
-              </div>
-              
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={currentPage === totalPages}
-                className="flex items-center"
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={currentPage}
+          totalPages={totalPages}
+          total={total}
+          perPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
 
         {/* Create Customer Modal */}
-        {showCreateModal && (
-          <div className="fixed inset-0 bg-white flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b">
-                <h2 className="text-lg font-semibold text-gray-900">Add New Customer</h2>
-                <button
-                  onClick={closeCreateModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              
-              <form onSubmit={handleCreateCustomer} className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      First Name *
-                    </label>
-                    <Input
-                      required
-                      value={formData.first_name}
-                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                      placeholder="John"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Name *
-                    </label>
-                    <Input
-                      required
-                      value={formData.last_name}
-                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                      placeholder="Doe"
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email *
-                  </label>
-                  <Input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="john.doe@example.com"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone *
-                  </label>
-                  <Input
-                    type="tel"
-                    required
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+1 (555) 123-4567"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Address
-                  </label>
-                  <Input
-                    value={formData.address || ''}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="123 Main St, City, State, Postal Code, Country"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                    rows={3}
-                    value={formData.notes || ''}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="Additional notes about the customer..."
-                  />
-                </div>
-                
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={closeCreateModal}
-                    disabled={createLoading}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={createLoading}
-                    className="flex-1"
-                  >
-                    {createLoading ? 'Creating...' : 'Create Customer'}
-                  </Button>
-                </div>
-              </form>
+        <SimpleModal
+          isOpen={showCreateModal}
+          title="Add Customer"
+          onClose={closeCreateModal}
+          size="md"
+          footer={
+            <>
+              <Button variant="ghost" onClick={closeCreateModal} disabled={createLoading}>
+                Cancel
+              </Button>
+              <Button type="submit" form="create-customer-form" loading={createLoading}>
+                Create
+              </Button>
+            </>
+          }
+        >
+          <form id="create-customer-form" onSubmit={handleCreateCustomer} className="space-y-4" suppressHydrationWarning>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="First name"
+                required
+                value={formData.first_name}
+                onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                placeholder="John"
+              />
+              <Input
+                label="Last name"
+                required
+                value={formData.last_name}
+                onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                placeholder="Doe"
+              />
             </div>
-          </div>
-        )}
-      </div>
+
+            <Input
+              label="Email"
+              type="email"
+              required
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="john.doe@example.com"
+            />
+
+            <Input
+              label="Phone"
+              type="tel"
+              required
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              placeholder="08xx-xxxx-xxxx"
+            />
+
+            <Input
+              label="Address (optional)"
+              value={formData.address || ''}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              placeholder="Street, city"
+            />
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Notes (optional)
+              </label>
+              <textarea
+                rows={3}
+                value={formData.notes || ''}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                placeholder="Anything staff should know…"
+                className={[
+                  'block w-full rounded-xl border text-slate-900',
+                  'glass-control',
+                  'placeholder:text-slate-400 text-sm',
+                  'px-3 py-2 touch-manipulation resize-y',
+                  'border-black/10 focus:border-indigo-500/60 focus:ring-indigo-500/40',
+                  'focus:outline-none focus:ring-1 transition-colors',
+                ].join(' ')}
+              />
+              <p className="mt-1.5 text-xs text-slate-500">
+                Visible to staff only.
+              </p>
+            </div>
+          </form>
+        </SimpleModal>
+      </PageShell>
 
       {/* Edit Customer Modal */}
       <EditCustomerModal

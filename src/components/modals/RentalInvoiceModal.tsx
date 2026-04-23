@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/currency';
 import { Rental } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { thermalPrinter } from '@/lib/thermal-printer';
 import { getAndroidBluetoothRentalInvoiceUrl, getBprintRentalInvoiceUrl } from '@/lib/bprint';
+import SimpleModal from '@/components/modals/SimpleModal';
 
 interface RentalInvoiceModalProps {
   isOpen: boolean;
@@ -16,8 +16,8 @@ interface RentalInvoiceModalProps {
 }
 
 export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceModalProps) {
-  const [isPrinting, setIsPrinting] = useState(false);
-  const [printerStatus, setPrinterStatus] = useState<string>('');
+  const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+  const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   if (!isOpen || !rental) return null;
 
@@ -250,79 +250,17 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
     printWindow.document.close();
   };
 
-  const printToThermalPrinter = async () => {
-    if (!rental) return;
-
-    setIsPrinting(true);
-    setPrinterStatus('');
-
-    try {
-      // Check if Web Bluetooth is available
-      if (!thermalPrinter.isAvailable()) {
-        const errorMsg = 'Web Bluetooth is not available in this browser. Please use Chrome, Edge, or Opera.';
-        setPrinterStatus(errorMsg);
-        alert(errorMsg);
-        return;
-      }
-
-      // Check connection status
-      const status = thermalPrinter.getConnectionStatus();
-      console.log('Printer connection status:', status);
-
-      // Connect to printer if not already connected
-      if (!thermalPrinter.isConnected()) {
-        setPrinterStatus('Connecting to printer...');
-        console.log('Attempting to connect to printer...');
-        
-        try {
-          await thermalPrinter.connect();
-          const deviceName = thermalPrinter.getDeviceName();
-          setPrinterStatus(`Connected to ${deviceName}`);
-          console.log(`Successfully connected to ${deviceName}`);
-        } catch (connectError: unknown) {
-          console.error('Connection error:', connectError);
-          const errorMessage = connectError instanceof Error ? connectError.message : 'Unknown error';
-          setPrinterStatus(`Connection failed: ${errorMessage}`);
-          alert(`Failed to connect: ${errorMessage}\n\nTroubleshooting:\n1. Make sure printer is powered on\n2. Put printer in pairing mode\n3. Make sure printer is not connected to another device\n4. Check browser console (F12) for details`);
-          return;
-        }
-      } else {
-        setPrinterStatus(`Already connected to ${thermalPrinter.getDeviceName()}`);
-      }
-
-      // Print invoice
-      setPrinterStatus('Printing invoice...');
-      console.log('Starting to print invoice...');
-      
-      try {
-        await thermalPrinter.printRentalInvoice(rental);
-        setPrinterStatus('Invoice printed successfully!');
-        console.log('Invoice printed successfully');
-        
-        // Show success message
-        setTimeout(() => {
-          setPrinterStatus('');
-        }, 2000);
-        alert('Invoice printed successfully!');
-      } catch (printError: unknown) {
-        console.error('Print error:', printError);
-        const errorMessage = printError instanceof Error ? printError.message : 'Unknown error';
-        setPrinterStatus(`Print failed: ${errorMessage}`);
-        alert(`Failed to print: ${errorMessage}\n\nPlease check:\n1. Printer has paper\n2. Printer is not jammed\n3. Printer is within range\n4. Try reconnecting`);
-        throw printError;
-      }
-    } catch (error: unknown) {
-      console.error('Thermal printer error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
-      setPrinterStatus(`Error: ${errorMsg}`);
-      
-      // Don't show alert if we already showed one
-      if (error instanceof Error && !error.message.includes('Failed to print') && !error.message.includes('Failed to connect')) {
-        alert(`Error: ${errorMsg}\n\nCheck browser console (F12) for details.`);
-      }
-    } finally {
-      setIsPrinting(false);
+  const handlePrint = () => {
+    // Prefer native bprint flows on mobile; fall back to browser print.
+    if (isIOS) {
+      window.location.href = getBprintRentalInvoiceUrl(rental.id);
+      return;
     }
+    if (isAndroid) {
+      window.location.href = getAndroidBluetoothRentalInvoiceUrl(rental.id);
+      return;
+    }
+    printInvoice();
   };
 
   const downloadInvoice = async () => {
@@ -544,55 +482,30 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
         </div>
       </div>
 
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 print:hidden">
-        <div className="bg-white rounded-lg p-4 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Rental Invoice</h3>
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" onClick={onClose} className="text-xs px-3 py-1">Close</Button>
-              <Button onClick={downloadInvoice} className="text-xs px-3 py-1">Download</Button>
-              <Button onClick={printInvoice} className="text-xs px-3 py-1">Print</Button>
-              <Button 
-                onClick={printToThermalPrinter} 
-                disabled={isPrinting}
-                className="text-xs px-3 py-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-              >
-                {isPrinting ? 'Printing...' : 'Print to Thermal'}
+      <div className="print:hidden">
+        <SimpleModal
+          isOpen={isOpen}
+          onClose={onClose}
+          title="Rental Invoice"
+          size="xl"
+          footer={
+            <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
+                Close
               </Button>
-              <Button 
-                onClick={() => {
-                  const bprintUrl = getBprintRentalInvoiceUrl(rental.id);
-                  window.location.href = bprintUrl;
-                }}
-                className="text-xs px-3 py-1 border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md"
-                title="iOS: opens Bluetooth Print app (bprint://) to print invoice"
-              >
-                iOS Bluetooth Print
+              <Button variant="outline" onClick={downloadInvoice} className="w-full sm:w-auto">
+                Download
               </Button>
-              <Button
-                onClick={() => {
-                  const androidUrl = getAndroidBluetoothRentalInvoiceUrl(rental.id);
-                  window.location.href = androidUrl;
-                }}
-                className="text-xs px-3 py-1 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md"
-                title="Android: opens Bluetooth Print app (my.bluetoothprint.scheme) to print invoice"
-              >
-                Android Bluetooth Print
+              <Button onClick={handlePrint} className="w-full sm:w-auto">
+                Print
               </Button>
             </div>
-            <p className="text-[10px] text-gray-500 mt-1">
-              iPhone (bprint://): open in Safari and use your computer&apos;s IP (not localhost). Android (my.bluetoothprint.scheme://): install Bluetooth Print, enable Browser Print, then tap the button.
-            </p>
-            {printerStatus && (
-              <div className="text-xs text-gray-600 mt-1">{printerStatus}</div>
-            )}
-          </div>
-        </div>
-
-          {/* Thermal Receipt - same structure as bprint/booking */}
-          <div className="thermal-receipt-container">
-            <div className="thermal-receipt">
+          }
+        >
+          <div className="flex items-center justify-center">
+            <div className="w-full max-w-[420px] rounded-2xl bg-white ring-1 ring-black/10 shadow-sm px-3 py-3">
+              <div className="thermal-receipt-container">
+                <div className="thermal-receipt">
               {/* Company Header - same as bprint/booking */}
               <div className="receipt-center">
                 <div className="receipt-title">SUITLABS BALI</div>
@@ -693,7 +606,9 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
               </div>
             </div>
           </div>
-        </div>
+            </div>
+          </div>
+        </SimpleModal>
       </div>
 
       {/* Thermal Receipt Styles - same as booking invoice */}
