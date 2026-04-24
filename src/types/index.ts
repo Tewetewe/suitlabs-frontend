@@ -140,6 +140,18 @@ export interface User {
   updated_at: string;
 }
 
+export type FinancialGroupBy = 'month' | 'year';
+
+export interface FinancialReportRow {
+  period: string; // ISO string from backend
+  bookings_count: number;
+  total_amount: number;
+  discounts: number;
+  final_amount: number;
+  paid_amount: number;
+  remaining: number;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;

@@ -30,7 +30,9 @@ import {
   DiscountApplication,
   DiscountStats,
   DiscountSummary,
-  MaintenanceItem
+  MaintenanceItem,
+  FinancialGroupBy,
+  FinancialReportRow
 } from '@/types';
 import { emitAPIStatus } from '@/lib/api-status';
 
@@ -51,7 +53,25 @@ class APIClient {
   private token: string | null = null;
 
   constructor() {
-    const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+    const envBaseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+    // If the app is opened via LAN IP/hostname (e.g. on a phone),
+    // `localhost` would point to the phone itself and cause ECONNREFUSED.
+    // In that case, rewrite the API host to the current page host.
+    const baseURL = (() => {
+      if (typeof window === 'undefined') return envBaseURL;
+      const host = window.location.hostname;
+      if (!host || host === 'localhost' || host === '127.0.0.1') return envBaseURL;
+      try {
+        const u = new URL(envBaseURL);
+        if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+          u.hostname = host;
+          return u.toString().replace(/\/$/, '');
+        }
+      } catch {
+        // ignore invalid envBaseURL, fall back
+      }
+      return envBaseURL;
+    })();
     this.client = axios.create({
       baseURL,
       timeout: 10000,
@@ -291,6 +311,17 @@ class APIClient {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
     return response.data.data!.image_url;
+  }
+
+  async syncItemsFromCSVUpload(file: File): Promise<{ source: unknown; result: { created: number; updated: number; skipped: number; errors?: unknown[] } }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await this.client.post<APIResponse<{ source: unknown; result: { created: number; updated: number; skipped: number; errors?: unknown[] } }>>(
+      '/api/v1/items/sync-sheet/upload',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data.data!;
   }
 
   async uploadIdentityCard(file: File): Promise<string> {
@@ -935,6 +966,93 @@ class APIClient {
       console.warn('Failed to fetch suits needing maintenance (admin access required):', error);
       return []; // Return empty array if user doesn't have admin access
     }
+  }
+
+  async getFinancialReport(params: {
+    startDate?: string; // YYYY-MM-DD
+    endDate?: string;   // YYYY-MM-DD
+    groupBy?: FinancialGroupBy;
+  }): Promise<{ rows: FinancialReportRow[]; start_date: string; end_date: string; group_by: FinancialGroupBy }> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    search.set('group_by', params.groupBy || 'month');
+
+    const response = await this.client.get<APIResponse<{
+      rows: FinancialReportRow[];
+      start_date: string;
+      end_date: string;
+      group_by: FinancialGroupBy;
+    }>>(`/api/v1/admin/financial-report?${search.toString()}`);
+
+    return response.data.data!;
+  }
+
+  async downloadFinancialReportCSV(params: {
+    startDate?: string; // YYYY-MM-DD
+    endDate?: string;   // YYYY-MM-DD
+    groupBy?: FinancialGroupBy;
+  }): Promise<Blob> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    search.set('group_by', params.groupBy || 'month');
+    search.set('format', 'csv');
+
+    const response = await this.client.get(`/api/v1/admin/financial-report?${search.toString()}`, {
+      responseType: 'blob',
+      headers: { Accept: 'text/csv' },
+    });
+    return response.data as Blob;
+  }
+
+  async getFinancialReportBookings(params: {
+    startDate?: string; // YYYY-MM-DD
+    endDate?: string;   // YYYY-MM-DD
+    status?: string;
+    paymentStatus?: string;
+    paymentMethod?: string;
+    search?: string;
+  }): Promise<{ bookings: Booking[]; start_date: string; end_date: string }> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    if (params.status) search.set('status', params.status);
+    if (params.paymentStatus) search.set('payment_status', params.paymentStatus);
+    if (params.paymentMethod) search.set('payment_method', params.paymentMethod);
+    if (params.search) search.set('search', params.search);
+
+    const response = await this.client.get<APIResponse<{
+      bookings: Booking[];
+      start_date: string;
+      end_date: string;
+    }>>(`/api/v1/admin/financial-report/bookings?${search.toString()}`);
+
+    return response.data.data!;
+  }
+
+  async downloadFinancialReportBookingsCSV(params: {
+    startDate?: string; // YYYY-MM-DD
+    endDate?: string;   // YYYY-MM-DD
+    status?: string;
+    paymentStatus?: string;
+    paymentMethod?: string;
+    search?: string;
+  }): Promise<Blob> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    if (params.status) search.set('status', params.status);
+    if (params.paymentStatus) search.set('payment_status', params.paymentStatus);
+    if (params.paymentMethod) search.set('payment_method', params.paymentMethod);
+    if (params.search) search.set('search', params.search);
+    search.set('format', 'csv');
+
+    const response = await this.client.get(`/api/v1/admin/financial-report/bookings?${search.toString()}`, {
+      responseType: 'blob',
+      headers: { Accept: 'text/csv' },
+    });
+    return response.data as Blob;
   }
 
   // Health Check
