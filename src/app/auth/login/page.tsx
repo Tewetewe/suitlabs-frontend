@@ -87,10 +87,6 @@ export default function LoginPage() {
               {loading ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
-
-          <p className="mt-7 text-center text-xs text-slate-500">
-            Demo — admin@suitlabs.com / admin12345
-          </p>
         </div>
       </div>
     </div>
