@@ -118,7 +118,7 @@ export default function DashboardPage() {
         const merged = [...bookingActivity, ...rentalActivity]
           .sort((a, b) => b.ts - a.ts)
           .slice(0, 5)
-          .map(({ ts, ...rest }) => rest);
+          .map(({ ts: _ts, ...rest }) => rest);
 
         setActivity(merged);
       } finally {

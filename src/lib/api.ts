@@ -143,7 +143,7 @@ class APIClient {
     const { data } = response;
     
     if (!data.success) {
-      throw new Error(data.error?.message || 'API request failed');
+      throw new Error(data.error || 'API request failed');
     }
     
     if ('data' in data && data.data !== undefined) {
@@ -158,7 +158,7 @@ class APIClient {
     const { data } = response;
     
     if (!data.success) {
-      throw new Error(data.error?.message || 'API request failed');
+      throw new Error(data.error || 'API request failed');
     }
     
     return data;

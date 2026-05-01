@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -71,11 +71,7 @@ export default function PackagePricingPage() {
   const [search, setSearch] = useState('');
   const { success, error } = useToast();
 
-  useEffect(() => {
-    loadPricings();
-  }, []);
-
-  const loadPricings = async () => {
+  const loadPricings = useCallback(async () => {
     try {
       setLoading(true);
       const data = await apiClient.getPackagePricing();
@@ -87,7 +83,11 @@ export default function PackagePricingPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [error]);
+
+  useEffect(() => {
+    loadPricings();
+  }, [loadPricings]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
