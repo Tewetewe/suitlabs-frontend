@@ -3,10 +3,12 @@ export interface APIResponse<T> {
   success: boolean;
   data?: T;
   message?: string;
-  error?: APIError;
+  // Backend sends error as a plain string
+  error?: string;
   meta?: ResponseMeta;
 }
 
+// Kept for backward compatibility with api-utils.ts (not used at runtime)
 export interface APIError {
   code: string;
   message: string;
@@ -26,7 +28,7 @@ export interface PaginatedResponse<T> {
   data: T[];
   pagination: PaginationMeta;
   message?: string;
-  error?: APIError;
+  error?: string;
   meta?: ResponseMeta;
 }
 
@@ -40,7 +42,7 @@ export interface CustomerPaginatedResponse {
     pagination: PaginationMeta;
   };
   message?: string;
-  error?: APIError;
+  error?: string;
   meta?: ResponseMeta;
 }
 
@@ -54,7 +56,7 @@ export interface ItemPaginatedResponse {
     pagination: PaginationMeta;
   };
   message?: string;
-  error?: APIError;
+  error?: string;
   meta?: ResponseMeta;
 }
 
@@ -68,7 +70,7 @@ export interface RentalPaginatedResponse {
     pagination: PaginationMeta;
   };
   message?: string;
-  error?: APIError;
+  error?: string;
   meta?: ResponseMeta;
 }
 
@@ -82,7 +84,7 @@ export interface BookingPaginatedResponse {
     pagination: PaginationMeta;
   };
   message?: string;
-  error?: APIError;
+  error?: string;
   meta?: ResponseMeta;
 }
 
@@ -100,7 +102,7 @@ export interface CreateResponse<T> {
   success: boolean;
   data: T;
   message: string;
-  error?: APIError;
+  error?: string;
   meta?: ResponseMeta;
 }
 
@@ -108,14 +110,14 @@ export interface UpdateResponse<T> {
   success: boolean;
   data: T;
   message: string;
-  error?: APIError;
+  error?: string;
   meta?: ResponseMeta;
 }
 
 export interface DeleteResponse {
   success: boolean;
   message: string;
-  error?: APIError;
+  error?: string;
   meta?: ResponseMeta;
 }
 
