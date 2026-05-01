@@ -25,8 +25,10 @@ export default function LoginPage() {
       await login(email, password);
       router.push('/dashboard');
     } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
       setError(
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        axiosErr?.response?.data?.error ||
+        axiosErr?.response?.data?.message ||
         'Invalid credentials. Please try again.'
       );
     } finally {

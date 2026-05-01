@@ -14,9 +14,9 @@ import { Booking, DashboardStats, Rental } from '@/types';
 import { Package, Users, Calendar, DollarSign, AlertTriangle, Wrench, Plus, ArrowRight } from 'lucide-react';
 
 const quickActions = [
-  { label: 'New Booking',   href: '/dashboard/bookings/new', variant: 'primary'   as const, icon: Calendar },
-  { label: 'Add Item',      href: '/dashboard/items/new',    variant: 'secondary' as const, icon: Package },
-  { label: 'Add Customer',  href: '/dashboard/customers/new',variant: 'secondary' as const, icon: Users },
+  { label: 'New Booking',   href: '/dashboard/bookings', variant: 'primary'   as const, icon: Calendar },
+  { label: 'Add Item',      href: '/dashboard/items',    variant: 'secondary' as const, icon: Package },
+  { label: 'Add Customer',  href: '/dashboard/customers',variant: 'secondary' as const, icon: Users },
 ];
 
 type ActivityItem = {
@@ -118,7 +118,7 @@ export default function DashboardPage() {
         const merged = [...bookingActivity, ...rentalActivity]
           .sort((a, b) => b.ts - a.ts)
           .slice(0, 5)
-          .map(({ ts, ...rest }) => rest);
+          .map(({ ts: _ts, ...rest }) => rest);
 
         setActivity(merged);
       } finally {
@@ -143,7 +143,7 @@ export default function DashboardPage() {
         title={`Welcome back, ${user?.first_name ?? 'there'}`}
         subtitle="A quick snapshot of what matters today."
         action={
-          <Link href="/dashboard/bookings/new">
+          <Link href="/dashboard/bookings">
             <Button size="md">
               <Plus className="h-4 w-4" />
               New Booking

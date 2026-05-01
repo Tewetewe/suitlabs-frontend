@@ -103,11 +103,15 @@ class APIClient {
         }
 
         if (error.response?.status === 401) {
-          this.clearToken();
-          localStorage.removeItem('auth_token');
-          // Redirect to login page
-          if (typeof window !== 'undefined') {
-            window.location.href = '/auth/login';
+          // Don't redirect if this IS the login request — let the login page
+          // handle the error and display it to the user.
+          const isLoginRequest = error.config?.url?.includes('/auth/login');
+          if (!isLoginRequest) {
+            this.clearToken();
+            localStorage.removeItem('auth_token');
+            if (typeof window !== 'undefined') {
+              window.location.href = '/auth/login';
+            }
           }
         }
         return Promise.reject(error);
@@ -139,7 +143,7 @@ class APIClient {
     const { data } = response;
     
     if (!data.success) {
-      throw new Error(data.error?.message || 'API request failed');
+      throw new Error(data.error || 'API request failed');
     }
     
     if ('data' in data && data.data !== undefined) {
@@ -154,7 +158,7 @@ class APIClient {
     const { data } = response;
     
     if (!data.success) {
-      throw new Error(data.error?.message || 'API request failed');
+      throw new Error(data.error || 'API request failed');
     }
     
     return data;

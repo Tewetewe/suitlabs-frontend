@@ -3,8 +3,7 @@ import {
   PaginatedResponse, 
   CreateResponse, 
   UpdateResponse, 
-  DeleteResponse, 
-  APIError as APIErrorType 
+  DeleteResponse,
 } from '@/types';
 
 /**
@@ -18,7 +17,7 @@ export class APIResponseHandler {
    */
   static extractData<T>(response: APIResponse<T>): T {
     if (!response.success) {
-      throw new APIError(response.error || { code: 'UNKNOWN_ERROR', message: 'Request failed' });
+      throw new APIError({ code: 'API_ERROR', message: response.error || 'Request failed' });
     }
     
     if (response.data === undefined) {
@@ -33,7 +32,7 @@ export class APIResponseHandler {
    */
   static extractPaginatedData<T>(response: PaginatedResponse<T>): { data: T[]; pagination: PaginatedResponse<T>['pagination'] } {
     if (!response.success) {
-      throw new APIError(response.error || { code: 'UNKNOWN_ERROR', message: 'Request failed' });
+      throw new APIError({ code: 'API_ERROR', message: response.error || 'Request failed' });
     }
     
     return {
@@ -47,7 +46,7 @@ export class APIResponseHandler {
    */
   static extractCreateData<T>(response: CreateResponse<T>): T {
     if (!response.success) {
-      throw new APIError(response.error || { code: 'UNKNOWN_ERROR', message: 'Create request failed' });
+      throw new APIError({ code: 'API_ERROR', message: response.error || 'Create request failed' });
     }
     
     if (response.data === undefined) {
@@ -62,7 +61,7 @@ export class APIResponseHandler {
    */
   static extractUpdateData<T>(response: UpdateResponse<T>): T {
     if (!response.success) {
-      throw new APIError(response.error || { code: 'UNKNOWN_ERROR', message: 'Update request failed' });
+      throw new APIError({ code: 'API_ERROR', message: response.error || 'Update request failed' });
     }
     
     if (response.data === undefined) {
@@ -77,7 +76,7 @@ export class APIResponseHandler {
    */
   static validateDeleteResponse(response: DeleteResponse): void {
     if (!response.success) {
-      throw new APIError(response.error || { code: 'UNKNOWN_ERROR', message: 'Delete request failed' });
+      throw new APIError({ code: 'API_ERROR', message: response.error || 'Delete request failed' });
     }
   }
 
@@ -91,7 +90,7 @@ export class APIResponseHandler {
   /**
    * Extracts error information from a response
    */
-  static extractError<T>(response: APIResponse<T> | PaginatedResponse<T> | CreateResponse<T> | UpdateResponse<T> | DeleteResponse): APIErrorType | null {
+  static extractError<T>(response: APIResponse<T> | PaginatedResponse<T> | CreateResponse<T> | UpdateResponse<T> | DeleteResponse): string | null {
     return response.error || null;
   }
 
@@ -106,12 +105,19 @@ export class APIResponseHandler {
 /**
  * Custom API Error class
  */
+interface APIErrorShape {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+  field?: string;
+}
+
 export class APIError extends Error {
   public readonly code: string;
   public readonly details?: Record<string, unknown>;
   public readonly field?: string;
 
-  constructor(error: APIErrorType) {
+  constructor(error: APIErrorShape) {
     super(error.message);
     this.name = 'APIError';
     this.code = error.code;
@@ -165,8 +171,8 @@ export const responseInterceptor = {
     if (error.response?.data) {
       const apiError = error.response.data as Record<string, unknown>;
       
-      if (apiError.error && typeof apiError.error === 'object') {
-        throw new APIError(apiError.error as APIErrorType);
+      if (typeof apiError.error === 'string') {
+        throw new APIError({ code: 'API_ERROR', message: apiError.error });
       }
       
       if (typeof apiError.message === 'string') {
