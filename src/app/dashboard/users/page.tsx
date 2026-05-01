@@ -84,7 +84,6 @@ export default function UsersPage() {
 
   // Role-based permission checks
   const isAdmin = currentUser?.role === 'admin';
-  const isStaff = currentUser?.role === 'staff';
   const canAddUsers = isAdmin;
   const canEditUsers = isAdmin;
   const canDeleteUsers = isAdmin;
