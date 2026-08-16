@@ -649,12 +649,8 @@ class APIClient {
     return response.data.data!;
   }
 
-  async createRentalFromBooking(bookingId: string, userId: string): Promise<Rental> {
-    const response = await this.client.post<APIResponse<Rental>>(`/api/v1/rentals/from-booking/${bookingId}`, {}, {
-      headers: {
-        'X-User-ID': userId
-      }
-    });
+  async createRentalFromBooking(bookingId: string): Promise<Rental> {
+    const response = await this.client.post<APIResponse<Rental>>(`/api/v1/rentals/from-booking/${bookingId}`, {});
     return response.data.data!;
   }
 

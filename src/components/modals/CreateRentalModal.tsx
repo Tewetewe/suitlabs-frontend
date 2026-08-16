@@ -124,7 +124,7 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
 
     try {
       setLoading(true);
-      const rental = await apiClient.createRentalFromBooking(selectedBookingId, user.id);
+      const rental = await apiClient.createRentalFromBooking(selectedBookingId);
       const toISOStartOfDay = (d: string) => {
         const iso = toISODate(d);
         if (!iso) return d;
