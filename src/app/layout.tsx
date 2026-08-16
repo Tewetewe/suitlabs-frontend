@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { BranchProvider } from '@/contexts/BranchContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import HydrationSuppressor from '@/components/HydrationSuppressor';
 import ApiStatusBanner from '@/components/ApiStatusBanner';
@@ -36,10 +37,12 @@ export default function RootLayout({
       <body className={`${inter.className} app-canvas`} suppressHydrationWarning>
         <HydrationSuppressor />
         <AuthProvider>
+          <BranchProvider>
           <ToastProvider>
             <ApiStatusBanner />
             {children}
           </ToastProvider>
+          </BranchProvider>
         </AuthProvider>
       </body>
     </html>

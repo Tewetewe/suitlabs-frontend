@@ -6,6 +6,7 @@ import {
   ItemPaginatedResponse,
   RentalPaginatedResponse,
   BookingPaginatedResponse,
+  SalePaginatedResponse,
   CreateResponse,
   UpdateResponse,
   DeleteResponse,
@@ -26,15 +27,43 @@ import {
   ItemFilters,
   BookingFilters,
   CustomerFilters,
+  Sale,
+  SaleFilters,
+  CreateSaleRequest,
+  Expense,
+  ExpenseFilters,
+  ExpensePaginatedResponse,
+  ExpenseSummary,
+  CreateExpenseRequest,
+  UpdateExpenseRequest,
+  ProfitAndLossReport,
+  RecurringExpense,
+  CreateRecurringExpenseRequest,
+  InventoryAssetReport,
+  AssetReport,
+  FixedAsset,
+  CreateFixedAssetRequest,
+  AccountingReport,
+  OpeningBalance,
+  ClosedMonth,
+  Dividend,
+  Payable,
+  Loan,
   InvoiceData,
   DiscountApplication,
   DiscountStats,
   DiscountSummary,
   MaintenanceItem,
   FinancialGroupBy,
-  FinancialReportRow
+  FinancialReportRow,
+  GoogleSheetsStatus,
+  GoogleSyncJobType,
+  GoogleSyncRun,
+  ItemSyncResult,
+  Branch
 } from '@/types';
 import { emitAPIStatus } from '@/lib/api-status';
+import { headerBranchId } from '@/lib/branch-scope';
 
 // Backend category structure (uses 'children' instead of 'subcategories')
 interface BackendCategory {
@@ -84,6 +113,10 @@ class APIClient {
     this.client.interceptors.request.use((config) => {
       if (this.token) {
         config.headers.Authorization = `Bearer ${this.token}`;
+      }
+      const branchId = headerBranchId(config.method);
+      if (branchId) {
+        config.headers['X-Branch-Id'] = branchId;
       }
       return config;
     });
@@ -231,6 +264,38 @@ class APIClient {
     await this.client.delete<DeleteResponse>(`/api/v1/items/${id}`);
   }
 
+  async getSales(filters?: SaleFilters): Promise<SalePaginatedResponse> {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') params.append(key, String(value));
+      });
+    }
+    const response = await this.client.get<SalePaginatedResponse>(`/api/v1/sales${params.toString() ? `?${params}` : ''}`);
+    return response.data;
+  }
+
+  async getSale(id: string): Promise<Sale> {
+    const response = await this.client.get<APIResponse<{ sale: Sale } | Sale>>(`/api/v1/sales/${id}`);
+    const payload = response.data.data as { sale?: Sale } | Sale;
+    if (payload && 'sale' in payload && payload.sale) return payload.sale;
+    return payload as Sale;
+  }
+
+  async createSale(sale: CreateSaleRequest): Promise<Sale> {
+    const response = await this.client.post<APIResponse<{ sale: Sale } | Sale>>('/api/v1/sales', sale);
+    const payload = response.data.data as { sale?: Sale } | Sale;
+    if (payload && 'sale' in payload && payload.sale) return payload.sale;
+    return payload as Sale;
+  }
+
+  async cancelSale(id: string): Promise<Sale> {
+    const response = await this.client.put<APIResponse<{ sale: Sale } | Sale>>(`/api/v1/sales/${id}/cancel`);
+    const payload = response.data.data as { sale?: Sale } | Sale;
+    if (payload && 'sale' in payload && payload.sale) return payload.sale;
+    return payload as Sale;
+  }
+
   async getAvailableItems(): Promise<Item[]> {
     const response = await this.client.get<APIResponse<Item[]>>('/api/v1/items/available');
     return response.data.data!;
@@ -269,8 +334,9 @@ class APIClient {
 
   async getItemByCode(code: string): Promise<Item> {
     const encoded = encodeURIComponent(code);
-    const response = await this.client.get<APIResponse<Item>>(`/api/v1/items/code/${encoded}`);
-    return this.handleResponse<Item>(response);
+    const response = await this.client.get<APIResponse<Item | { item: Item }>>(`/api/v1/items/code/${encoded}`);
+    const payload = this.handleResponse<Item | { item: Item }>(response);
+    return payload && typeof payload === 'object' && 'item' in payload ? payload.item : payload as Item;
   }
 
   async updateItemQuantity(id: string, quantity: number): Promise<Item> {
@@ -317,15 +383,30 @@ class APIClient {
     return response.data.data!.image_url;
   }
 
-  async syncItemsFromCSVUpload(file: File): Promise<{ source: unknown; result: { created: number; updated: number; skipped: number; errors?: unknown[] } }> {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await this.client.post<APIResponse<{ source: unknown; result: { created: number; updated: number; skipped: number; errors?: unknown[] } }>>(
-      '/api/v1/items/sync-sheet/upload',
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+  async getGoogleSheetsStatus(): Promise<GoogleSheetsStatus> {
+    const response = await this.client.get<APIResponse<GoogleSheetsStatus>>('/api/v1/admin/google-sheets/status');
+    return this.handleResponse<GoogleSheetsStatus>(response);
+  }
+
+  async getGoogleSheetsRuns(jobType?: GoogleSyncJobType, limit = 20): Promise<GoogleSyncRun[]> {
+    const response = await this.client.get<APIResponse<{ runs: GoogleSyncRun[] }>>('/api/v1/admin/google-sheets/runs', {
+      params: { job_type: jobType, limit },
+    });
+    return response.data.data?.runs || [];
+  }
+
+  async syncItemsFromGoogleSheets(): Promise<{ result: ItemSyncResult; run: GoogleSyncRun }> {
+    const response = await this.client.post<APIResponse<{ result: ItemSyncResult; run: GoogleSyncRun }>>(
+      '/api/v1/admin/google-sheets/items/sync'
     );
-    return response.data.data!;
+    return this.handleResponse<{ result: ItemSyncResult; run: GoogleSyncRun }>(response);
+  }
+
+  async retryGoogleSheetsBookingExport(runId: string): Promise<GoogleSyncRun> {
+    const response = await this.client.post<APIResponse<{ run: GoogleSyncRun }>>(
+      `/api/v1/admin/google-sheets/booking-exports/${runId}/retry`
+    );
+    return response.data.data!.run;
   }
 
   async uploadIdentityCard(file: File): Promise<string> {
@@ -514,10 +595,11 @@ class APIClient {
     return response.data.data?.data?.bookings || [];
   }
 
-  async addPayment(bookingId: string, amount: number, paymentMethod: string): Promise<Booking> {
+  async addPayment(bookingId: string, amount: number, paymentMethod: string, paidOn?: string): Promise<Booking> {
     const response = await this.client.put<APIResponse<Booking>>(`/api/v1/bookings/${bookingId}/payment`, {
       amount,
-      payment_method: paymentMethod
+      payment_method: paymentMethod,
+      paid_on: paidOn,
     });
     return response.data.data!;
   }
@@ -589,13 +671,14 @@ class APIClient {
     return response.data.data!;
   }
 
-  async completeRental(rentalId: string, userId: string, actualReturnDate?: string, damageCharges?: number, damageNotes?: string): Promise<Rental> {
+  async completeRental(rentalId: string, userId: string, actualReturnDate?: string, damageCharges?: number, damageNotes?: string, paymentMethod?: string): Promise<Rental> {
     const body: Record<string, unknown> = {
       user_id: userId
     };
     if (actualReturnDate) body.actual_return_date = actualReturnDate;
     if (typeof damageCharges === 'number') body.damage_charges = damageCharges;
     if (damageNotes) body.damage_notes = damageNotes;
+    if (paymentMethod) body.payment_method = paymentMethod;
     const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/complete`, body);
     return response.data.data!;
   }
@@ -931,6 +1014,7 @@ class APIClient {
       postal_code?: string;
       country?: string;
     };
+    branch_ids?: string[];
   }): Promise<User> {
     const response = await this.client.post<CreateResponse<User>>('/api/v1/users', user);
     return response.data.data;
@@ -939,6 +1023,37 @@ class APIClient {
   async updateUserRole(userId: string, role: string): Promise<User> {
     const response = await this.client.put<APIResponse<User>>(`/api/v1/users/${userId}/role`, { role });
     return response.data.data!;
+  }
+
+  async assignUserBranches(userId: string, branchIds: string[]): Promise<User> {
+    const response = await this.client.put<APIResponse<User>>(`/api/v1/users/${userId}/branches`, { branch_ids: branchIds });
+    return response.data.data!;
+  }
+
+  async getBranches(activeOnly = false): Promise<Branch[]> {
+    const response = await this.client.get<APIResponse<{ branches: Branch[] }>>(`/api/v1/branches${activeOnly ? '?active=true' : ''}`);
+    return response.data.data?.branches || [];
+  }
+
+  async getBranch(id: string): Promise<Branch> {
+    const response = await this.client.get<APIResponse<{ branch: Branch }>>(`/api/v1/branches/${id}`);
+    return response.data.data!.branch;
+  }
+
+  async createBranch(payload: Partial<Branch> & { name: string; code: string; receipt_subtitle: string }): Promise<Branch> {
+    const response = await this.client.post<APIResponse<{ branch: Branch }>>('/api/v1/branches', payload);
+    return response.data.data!.branch;
+  }
+
+  async updateBranch(id: string, payload: Partial<Branch>): Promise<Branch> {
+    const response = await this.client.put<APIResponse<{ branch: Branch }>>(`/api/v1/branches/${id}`, payload);
+    return response.data.data!.branch;
+  }
+
+  async transferItem(itemId: string, toBranchId: string): Promise<Item> {
+    const response = await this.client.post<{ data: { item: Item } | Item }>(`/api/v1/items/${itemId}/transfer`, { to_branch_id: toBranchId });
+    const payload = response.data.data;
+    return payload && typeof payload === 'object' && 'item' in payload ? payload.item : payload as Item;
   }
 
   async activateUser(userId: string): Promise<User> {
@@ -1033,6 +1148,273 @@ class APIClient {
     }>>(`/api/v1/admin/financial-report/bookings?${search.toString()}`);
 
     return response.data.data!;
+  }
+
+  async getProfitAndLoss(params: {
+    startDate?: string;
+    endDate?: string;
+    groupBy?: FinancialGroupBy;
+  }): Promise<ProfitAndLossReport> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    search.set('group_by', params.groupBy || 'month');
+
+    const response = await this.client.get<APIResponse<ProfitAndLossReport>>(
+      `/api/v1/expenses/profit-and-loss?${search.toString()}`
+    );
+    return response.data.data!;
+  }
+
+  async getAccountingReport(params: { startDate?: string; endDate?: string }): Promise<AccountingReport> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    const response = await this.client.get<APIResponse<AccountingReport>>(
+      `/api/v1/admin/accounting?${search.toString()}`
+    );
+    return response.data.data!;
+  }
+
+  async downloadAccountingExcel(params: { startDate?: string; endDate?: string }): Promise<Blob> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    const response = await this.client.get(`/api/v1/admin/accounting/export.xlsx?${search.toString()}`, {
+      responseType: 'blob',
+      headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    });
+    return response.data as Blob;
+  }
+
+  async getClosedMonths(): Promise<ClosedMonth[]> {
+    const response = await this.client.get<APIResponse<{ closed_months: ClosedMonth[] }>>(
+      '/api/v1/admin/closed-months'
+    );
+    return response.data.data?.closed_months || [];
+  }
+
+  async closeMonth(year: number, month: number): Promise<ClosedMonth> {
+    const response = await this.client.post<APIResponse<{ closed_month: ClosedMonth }>>(
+      '/api/v1/admin/closed-months',
+      { year, month }
+    );
+    return response.data.data!.closed_month;
+  }
+
+  async openMonth(year: number, month: number): Promise<void> {
+    await this.client.delete(`/api/v1/admin/closed-months/${year}/${month}`);
+  }
+
+  async getOpeningBalances(): Promise<OpeningBalance[]> {
+    const response = await this.client.get<APIResponse<{ opening_balances: OpeningBalance[] }>>(
+      '/api/v1/admin/opening-balances'
+    );
+    return response.data.data?.opening_balances || [];
+  }
+
+  async createOpeningBalance(payload: { as_of_date: string; cash_amount: number; bank_amount?: number; notes?: string }): Promise<OpeningBalance> {
+    const response = await this.client.post<APIResponse<{ opening_balance: OpeningBalance }>>(
+      '/api/v1/admin/opening-balances',
+      payload
+    );
+    return response.data.data!.opening_balance;
+  }
+
+  async updateOpeningBalance(id: string, payload: { cash_amount?: number; bank_amount?: number; notes?: string }): Promise<OpeningBalance> {
+    const response = await this.client.put<APIResponse<{ opening_balance: OpeningBalance }>>(
+      `/api/v1/admin/opening-balances/${id}`,
+      payload
+    );
+    return response.data.data!.opening_balance;
+  }
+
+  async deleteOpeningBalance(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/admin/opening-balances/${id}`);
+  }
+
+  async getDividends(): Promise<Dividend[]> {
+    const response = await this.client.get<APIResponse<{ dividends: Dividend[] }>>('/api/v1/admin/dividends');
+    return response.data.data?.dividends || [];
+  }
+
+  async createDividend(payload: {
+    dividend_date: string;
+    amount: number;
+    fiscal_year?: number;
+    shareholder?: string;
+    notes?: string;
+  }): Promise<Dividend> {
+    const response = await this.client.post<APIResponse<{ dividend: Dividend }>>(
+      '/api/v1/admin/dividends',
+      payload
+    );
+    return response.data.data!.dividend;
+  }
+
+  async deleteDividend(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/admin/dividends/${id}`);
+  }
+
+  async getPayables(): Promise<Payable[]> {
+    const response = await this.client.get<APIResponse<{ payables: Payable[] }>>('/api/v1/admin/payables');
+    return response.data.data?.payables || [];
+  }
+
+  async createPayable(payload: {
+    payable_date: string;
+    due_date?: string;
+    description: string;
+    vendor?: string;
+    amount: number;
+    notes?: string;
+  }): Promise<Payable> {
+    const response = await this.client.post<APIResponse<{ payable: Payable }>>('/api/v1/admin/payables', payload);
+    return response.data.data!.payable;
+  }
+
+  async payPayable(id: string, payload: { amount: number; payment_method?: string; paid_on?: string }): Promise<Payable> {
+    const response = await this.client.post<APIResponse<{ payable: Payable }>>(`/api/v1/admin/payables/${id}/pay`, payload);
+    return response.data.data!.payable;
+  }
+
+  async deletePayable(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/admin/payables/${id}`);
+  }
+
+  async getLoans(): Promise<Loan[]> {
+    const response = await this.client.get<APIResponse<{ loans: Loan[] }>>('/api/v1/admin/loans');
+    return response.data.data?.loans || [];
+  }
+
+  async createLoan(payload: {
+    loan_date: string;
+    lender: string;
+    principal: number;
+    payment_method?: string;
+    notes?: string;
+  }): Promise<Loan> {
+    const response = await this.client.post<APIResponse<{ loan: Loan }>>('/api/v1/admin/loans', payload);
+    return response.data.data!.loan;
+  }
+
+  async repayLoan(id: string, payload: { amount: number; payment_method?: string; paid_on?: string }): Promise<Loan> {
+    const response = await this.client.post<APIResponse<{ loan: Loan }>>(`/api/v1/admin/loans/${id}/repay`, payload);
+    return response.data.data!.loan;
+  }
+
+  async deleteLoan(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/admin/loans/${id}`);
+  }
+
+  async getExpenses(filters?: ExpenseFilters): Promise<ExpensePaginatedResponse> {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') params.append(key, String(value));
+      });
+    }
+    const response = await this.client.get<ExpensePaginatedResponse>(`/api/v1/expenses?${params}`);
+    return response.data;
+  }
+
+  async getExpense(id: string): Promise<Expense> {
+    const response = await this.client.get<APIResponse<{ expense: Expense }>>(`/api/v1/expenses/${id}`);
+    return response.data.data!.expense;
+  }
+
+  async createExpense(payload: CreateExpenseRequest): Promise<Expense> {
+    const response = await this.client.post<APIResponse<{ expense: Expense }>>('/api/v1/expenses', payload);
+    return response.data.data!.expense;
+  }
+
+  async updateExpense(id: string, payload: UpdateExpenseRequest): Promise<Expense> {
+    const response = await this.client.put<APIResponse<{ expense: Expense }>>(`/api/v1/expenses/${id}`, payload);
+    return response.data.data!.expense;
+  }
+
+  async voidExpense(id: string): Promise<Expense> {
+    const response = await this.client.put<APIResponse<{ expense: Expense }>>(`/api/v1/expenses/${id}/void`);
+    return response.data.data!.expense;
+  }
+
+  async getExpenseSummary(params: { startDate?: string; endDate?: string }): Promise<ExpenseSummary> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    const response = await this.client.get<APIResponse<ExpenseSummary>>(
+      `/api/v1/expenses/summary?${search.toString()}`
+    );
+    return response.data.data!;
+  }
+
+  async getRecurringExpenses(): Promise<RecurringExpense[]> {
+    const response = await this.client.get<APIResponse<{ recurring_expenses: RecurringExpense[] }>>(
+      '/api/v1/recurring-expenses'
+    );
+    return response.data.data?.recurring_expenses || [];
+  }
+
+  async createRecurringExpense(payload: CreateRecurringExpenseRequest): Promise<RecurringExpense> {
+    const response = await this.client.post<APIResponse<{ recurring_expense: RecurringExpense }>>(
+      '/api/v1/recurring-expenses',
+      payload
+    );
+    return response.data.data!.recurring_expense;
+  }
+
+  async updateRecurringExpense(id: string, payload: Partial<CreateRecurringExpenseRequest> & { is_active?: boolean }): Promise<RecurringExpense> {
+    const response = await this.client.put<APIResponse<{ recurring_expense: RecurringExpense }>>(
+      `/api/v1/recurring-expenses/${id}`,
+      payload
+    );
+    return response.data.data!.recurring_expense;
+  }
+
+  async deleteRecurringExpense(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/recurring-expenses/${id}`);
+  }
+
+  async postRecurringExpense(id: string): Promise<Expense> {
+    const response = await this.client.post<APIResponse<{ expense: Expense }>>(
+      `/api/v1/recurring-expenses/${id}/post`
+    );
+    return response.data.data!.expense;
+  }
+
+  async getInventoryAssets(): Promise<InventoryAssetReport> {
+    const report = await this.getAssets();
+    return report.inventory;
+  }
+
+  async getAssets(): Promise<AssetReport> {
+    const response = await this.client.get<APIResponse<AssetReport>>('/api/v1/admin/assets');
+    return response.data.data!;
+  }
+
+  async getFixedAssets(): Promise<FixedAsset[]> {
+    const response = await this.client.get<APIResponse<{ fixed_assets: FixedAsset[] }>>('/api/v1/fixed-assets');
+    return response.data.data?.fixed_assets || [];
+  }
+
+  async createFixedAsset(payload: CreateFixedAssetRequest): Promise<FixedAsset> {
+    const response = await this.client.post<APIResponse<{ fixed_asset: FixedAsset }>>(
+      '/api/v1/fixed-assets',
+      payload
+    );
+    return response.data.data!.fixed_asset;
+  }
+
+  async updateFixedAsset(id: string, payload: Partial<CreateFixedAssetRequest> & { status?: string }): Promise<FixedAsset> {
+    const response = await this.client.put<APIResponse<{ fixed_asset: FixedAsset }>>(
+      `/api/v1/fixed-assets/${id}`,
+      payload
+    );
+    return response.data.data!.fixed_asset;
+  }
+
+  async deleteFixedAsset(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/fixed-assets/${id}`);
   }
 
   async downloadFinancialReportBookingsCSV(params: {

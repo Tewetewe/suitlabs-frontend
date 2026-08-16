@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/api';
-import { User } from '@/types';
+import { User, Branch } from '@/types';
 import { AddUserModal } from '@/components/modals/AddUserModal';
 import { Plus, Edit, Trash2, UserCog, Mail, Phone, Shield, User as UserIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +18,8 @@ export default function UsersPage() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading, user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
@@ -42,8 +44,12 @@ export default function UsersPage() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const { users } = await apiClient.getUsers({ page: currentPage, limit: itemsPerPage, search: searchTerm });
-      setUsers(Array.isArray(users) ? users : []);
+      const [{ users: rows }, shops] = await Promise.all([
+        apiClient.getUsers({ page: currentPage, limit: itemsPerPage, search: searchTerm }),
+        apiClient.getBranches(),
+      ]);
+      setUsers(Array.isArray(rows) ? rows : []);
+      setBranches(shops);
     } catch (error) {
       console.error('Failed to load users:', error);
       setUsers([]);
@@ -80,6 +86,20 @@ export default function UsersPage() {
 
   const handleUserAdded = (newUser: User) => {
     setUsers(prev => [newUser, ...prev]);
+  };
+
+  const toggleUserBranch = async (user: User, branchId: string, checked: boolean) => {
+    const current = (user.branches || []).map((branch) => branch.id);
+    const next = checked ? [...new Set([...current, branchId])] : current.filter((id) => id !== branchId);
+    try {
+      setSavingUserId(user.id);
+      const updated = await apiClient.assignUserBranches(user.id, next);
+      setUsers((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+    } catch (error) {
+      console.error('Failed to assign shops:', error);
+    } finally {
+      setSavingUserId(null);
+    }
   };
 
   // Role-based permission checks
@@ -190,6 +210,27 @@ export default function UsersPage() {
                           <span>{user.phone}</span>
                         </div>
                       )}
+                      {(user.role === 'admin' || user.role === 'staff') && (
+                        <div className="pt-2">
+                          <div className="text-xs font-medium text-slate-500 mb-1">Shops</div>
+                          <div className="flex flex-wrap gap-2">
+                            {branches.map((branch) => {
+                              const checked = (user.branches || []).some((mine) => mine.id === branch.id);
+                              return (
+                                <label key={branch.id} className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={savingUserId === user.id}
+                                    onChange={(e) => toggleUserBranch(user, branch.id, e.target.checked)}
+                                  />
+                                  {branch.name}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-4 pt-4 border-t border-gray-200">
@@ -273,6 +314,7 @@ export default function UsersPage() {
             isOpen={isAddUserModalOpen}
             onClose={() => setIsAddUserModalOpen(false)}
             onUserAdded={handleUserAdded}
+            branches={branches}
           />
         )}
       </PageShell>

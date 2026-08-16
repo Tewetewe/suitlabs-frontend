@@ -6,7 +6,7 @@ import { formatCurrency } from '@/lib/currency';
 import { InvoiceData } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { getAndroidBluetoothBookingInvoiceUrl, getBprintBookingInvoiceUrl } from '@/lib/bprint';
+import { getAndroidBridgeBookingInvoiceUrl, getBprintBookingInvoiceUrl } from '@/lib/bprint';
 import SimpleModal from '@/components/modals/SimpleModal';
 
 interface BookingInvoiceModalProps {
@@ -54,7 +54,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
           <div class="thermal-receipt">
             <div class="receipt-center">
               <div class="receipt-title">SUITLABS BALI</div>
-              <div class="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
+              <div class="receipt-subtitle">{invoice.company?.subtitle || 'Sewa Jas Jimbaran'}</div>
               <div class="receipt-line">${invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362'}</div>
               ${invoice.company?.phone ? `<div class="receipt-line">TEL: ${invoice.company.phone}</div>` : ''}
             </div>
@@ -230,7 +230,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
       return;
     }
     if (isAndroid) {
-      window.location.href = getAndroidBluetoothBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full');
+      window.location.href = getAndroidBridgeBookingInvoiceUrl(invoice.booking_id, invoice.invoice_type === 'dp' ? 'dp' : 'full');
       return;
     }
     printInvoice();
@@ -355,7 +355,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
             {/* Company Header - same as bprint */}
             <div className="receipt-center">
               <div className="receipt-title">SUITLABS BALI</div>
-              <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
+              <div className="receipt-subtitle">{invoice.company?.subtitle || 'Sewa Jas Jimbaran'}</div>
               <div className="receipt-line">{invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362'}</div>
               {invoice.company?.phone && <div className="receipt-line">TEL: {invoice.company.phone}</div>}
             </div>
@@ -460,7 +460,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
                   {/* Company Header - same as bprint */}
                   <div className="receipt-center">
                     <div className="receipt-title">SUITLABS BALI</div>
-                    <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
+                    <div className="receipt-subtitle">{invoice.company?.subtitle || 'Sewa Jas Jimbaran'}</div>
                     <div className="receipt-line">{invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362'}</div>
                     {invoice.company?.phone && <div className="receipt-line">TEL: {invoice.company.phone}</div>}
                   </div>

@@ -1,33 +1,31 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { BarcodeLabel } from '@/components/ui/BarcodeLabel';
+import { SafeImage } from '@/components/ui/SafeImage';
+import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api';
 import { Item, Rental, Booking } from '@/types';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
 import { getAndroidBluetoothProductLabelUrl, getBprintProductLabelUrl } from '@/lib/bprint';
+import { BranchBadge } from '@/components/branch/BranchBadge';
+import { TransferItemModal } from '@/components/modals/TransferItemModal';
+import { ArrowRightLeft } from 'lucide-react';
 
 const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
 
-function toImageUrl(url?: string): string | null {
-  if (!url) return null;
-  if (/^https?:\/\//.test(url)) return url;
-  const base = process.env.NEXT_PUBLIC_API_URL || '';
-  if (!base) return null;
-  return `${base.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
-}
-
 export default function ItemDetailPage() {
   const routeParams = useParams<{ id: string }>();
   const id = routeParams?.id as string;
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +39,8 @@ export default function ItemDetailPage() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingRentals, setLoadingRentals] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [pairedTrousers, setPairedTrousers] = useState<Item | null>(null);
 
   const loadRentalsAndBookings = useCallback(async () => {
     try {
@@ -61,6 +61,15 @@ export default function ItemDetailPage() {
         setLoading(true);
         const itemData = await apiClient.getItem(id);
         setItem(itemData);
+        if (itemData.trousers_code && itemData.type !== 'trousers') {
+          try {
+            setPairedTrousers(await apiClient.getItemByCode(itemData.trousers_code));
+          } catch {
+            setPairedTrousers(null);
+          }
+        } else {
+          setPairedTrousers(null);
+        }
         await loadRentalsAndBookings();
       } catch (e) {
         console.error('Error loading item:', e);
@@ -222,11 +231,14 @@ export default function ItemDetailPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1">
                   <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
-                    {toImageUrl(item.thumbnail_url) ? (
-                      <Image src={toImageUrl(item.thumbnail_url)!} alt={item.name} width={800} height={800} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="h-full w-full grid place-items-center text-gray-400">No image</div>
-                    )}
+                    <SafeImage
+                      src={item.thumbnail_url}
+                      alt={item.name}
+                      width={800}
+                      height={800}
+                      className="h-full w-full object-cover"
+                      fallback={<div className="h-full w-full grid place-items-center text-gray-400">No image</div>}
+                    />
                   </div>
                   <div className="mt-3">
                     <label className="text-sm text-gray-600">Update Thumbnail</label>
@@ -259,6 +271,18 @@ export default function ItemDetailPage() {
                   <div>
                     <h2 className="text-2xl font-semibold text-gray-900">{item.name}</h2>
                     <p className="text-gray-500">Code: #{item.code}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <BranchBadge branch={item.branch} always />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setTransferOpen(true)}
+                        disabled={item.status !== 'available'}
+                      >
+                        <ArrowRightLeft className="h-4 w-4" />
+                        Transfer
+                      </Button>
+                    </div>
                     <div className="mt-4 space-y-3">
                       <div className="text-sm text-gray-700 flex items-center gap-2">
                         <span className="text-gray-500">Barcode:</span>
@@ -334,6 +358,40 @@ export default function ItemDetailPage() {
                       <div className="text-sm text-gray-500">Size</div>
                       <div className="font-medium">{item.size?.label || '-'}</div>
                     </div>
+                    {item.trousers_code && item.type !== 'trousers' && (
+                      <div className="col-span-2">
+                        <div className="text-sm text-gray-500">Default trousers</div>
+                        {pairedTrousers ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Link href={`/dashboard/items/${pairedTrousers.id}`} className="font-mono font-medium text-blue-700 hover:underline">
+                              {pairedTrousers.name} ({pairedTrousers.code})
+                            </Link>
+                            <Link href="/dashboard/items?type=trousers" className="text-sm text-blue-700 hover:underline">
+                              Find other trousers
+                            </Link>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono font-medium">{item.trousers_code}</span>
+                            <Link href="/dashboard/items?type=trousers" className="text-sm text-blue-700 hover:underline">
+                              Find other trousers
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {item.detail_size && (
+                      <div>
+                        <div className="text-sm text-gray-500">Detail Size</div>
+                        <div className="font-medium">{item.detail_size}</div>
+                      </div>
+                    )}
+                    {item.owner && (
+                      <div>
+                        <div className="text-sm text-gray-500">Owner</div>
+                        <div className="font-medium">{item.owner}</div>
+                      </div>
+                    )}
                     <div>
                       <div className="text-sm text-gray-500">Quantity</div>
                       <div className="font-medium">{item.quantity}</div>
@@ -361,6 +419,12 @@ export default function ItemDetailPage() {
                           <span className="text-sm text-gray-500 w-16">4 hr</span>
                           <span className="font-medium">{formatCurrency(item.four_hour_price)}</span>
                         </div>
+                        {isAdmin && typeof item.purchase_price === 'number' && (
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-sm text-gray-500 w-16">Buy</span>
+                            <span className="font-medium">{formatCurrency(item.purchase_price)}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -436,17 +500,14 @@ export default function ItemDetailPage() {
                             className="aspect-square bg-gray-100 rounded-lg overflow-hidden group relative cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-lg"
                             onClick={() => openImageModal(index)}
                           >
-                            {toImageUrl(img) ? (
-                              <Image 
-                                src={toImageUrl(img)!} 
-                                alt={`${item.name} ${index + 1}`} 
-                                width={400} 
-                                height={400} 
-                                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-110" 
-                              />
-                            ) : (
-                              <div className="h-full w-full grid place-items-center text-gray-400">image</div>
-                            )}
+                            <SafeImage
+                              src={img}
+                              alt={`${item.name} ${index + 1}`}
+                              width={400}
+                              height={400}
+                              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-110"
+                              fallback={<div className="h-full w-full grid place-items-center text-gray-400">image</div>}
+                            />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-2">
                               <span className="text-white text-sm font-medium">
                                 {index + 1}
@@ -533,16 +594,13 @@ export default function ItemDetailPage() {
                         className={`relative max-w-full max-h-full transition-transform duration-300 ${isZoomed ? 'scale-150' : 'scale-100'}`}
                         onClick={(e) => { e.stopPropagation(); setIsZoomed(!isZoomed); }}
                       >
-                        {toImageUrl(item.images[selectedImageIndex]) && (
-                          <Image
-                            src={toImageUrl(item.images[selectedImageIndex])!}
-                            alt={`${item.name} ${selectedImageIndex + 1}`}
-                            width={1200}
-                            height={800}
-                            className="max-w-full max-h-full object-contain rounded-lg"
-                            priority
-                          />
-                        )}
+                        <SafeImage
+                          src={item.images[selectedImageIndex]}
+                          alt={`${item.name} ${selectedImageIndex + 1}`}
+                          width={1200}
+                          height={800}
+                          className="max-w-full max-h-full object-contain rounded-lg"
+                        />
                       </div>
 
                       {/* Image Counter */}
@@ -647,6 +705,12 @@ export default function ItemDetailPage() {
         </>
         )}
       </div>
+      <TransferItemModal
+        isOpen={transferOpen}
+        item={item}
+        onClose={() => setTransferOpen(false)}
+        onTransferred={setItem}
+      />
     </DashboardLayout>
   );
 }

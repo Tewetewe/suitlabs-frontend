@@ -1,17 +1,19 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate, formatDateTime } from '@/lib/date';
 import { Rental } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Edit, FileText, User, Calendar, DollarSign, Eye, Printer } from 'lucide-react';
+import { Plus, Edit, FileText, User, Calendar, DollarSign, Eye, Printer, ShoppingBag } from 'lucide-react';
 import { CreateRentalModal } from '@/components/modals/CreateRentalModal';
 import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
 import { RentalDetailsModal } from '@/components/modals/RentalDetailsModal';
@@ -20,6 +22,8 @@ import { PickupRentalModal } from '@/components/modals/PickupRentalModal';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
 import { useToast } from '@/contexts/ToastContext';
+import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
+import { BranchBadge } from '@/components/branch/BranchBadge';
 
 export default function RentalsPage() {
   const { user } = useAuth();
@@ -40,6 +44,7 @@ export default function RentalsPage() {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [damageCharges, setDamageCharges] = useState<string>('');
   const [damageNotes, setDamageNotes] = useState<string>('');
+  const [chargePaymentMethod, setChargePaymentMethod] = useState<string>('cash');
   const [actualReturnDate, setActualReturnDate] = useState<string>('');
   const [sendToMaintenance, setSendToMaintenance] = useState<boolean>(false);
   const [newRentalDate, setNewRentalDate] = useState('');
@@ -111,6 +116,7 @@ export default function RentalsPage() {
     setSelectedRental(rental);
     setDamageCharges('');
     setDamageNotes('');
+    setChargePaymentMethod('cash');
     setShowCompleteModal(true);
   };
 
@@ -128,7 +134,7 @@ export default function RentalsPage() {
         alert('User not authenticated. Please login again.');
         return;
       }
-      await apiClient.completeRental(selectedRental.id, user.id, isoActual, parsedCharge, damageNotes || undefined);
+      await apiClient.completeRental(selectedRental.id, user.id, isoActual, parsedCharge, damageNotes || undefined, chargePaymentMethod);
       // Optionally send all rented items to maintenance
       if (sendToMaintenance && Array.isArray(selectedRental.items)) {
         for (const it of selectedRental.items) {
@@ -277,6 +283,7 @@ export default function RentalsPage() {
                           Rental #{rental.id.slice(-8)}
                         </h3>
                         <Badge variant={rentalStatusVariant(rental.status)}>{rental.status}</Badge>
+                        <BranchBadge branch={rental.branch} />
                       </div>
                       {rental.items && rental.items.length > 0 && (
                         <div className="flex items-center text-sm text-gray-600 mb-2">
@@ -316,6 +323,9 @@ export default function RentalsPage() {
                         <div className="font-medium">
                           {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : `Customer ID: ${rental.user_id.slice(-8)}`}
                         </div>
+                        {rental.customer?.branch?.name && (
+                          <div className="mt-1"><BranchBadge branch={rental.customer.branch} always /></div>
+                        )}
                         {rental.customer && (
                           <div className="text-xs text-gray-500">{rental.customer.email || '-'}</div>
                         )}
@@ -382,10 +392,18 @@ export default function RentalsPage() {
                           Pickup
                         </Button>
                       )}
-                      {rental.status === 'active' && (
-                        <Button variant="secondary" size="sm" onClick={() => handleCompleteRental(rental.id)}>
-                          Complete Rental
-                        </Button>
+                      {(rental.status === 'active' || rental.status === 'overdue') && (
+                        <>
+                          <Link href={`/dashboard/sales?rental_id=${rental.id}&customer_id=${rental.user_id}`}>
+                            <Button variant="secondary" size="sm" title="Record lost items or add-ons before complete">
+                              <ShoppingBag className="h-4 w-4 sm:mr-1" />
+                              Lost / Add-ons
+                            </Button>
+                          </Link>
+                          <Button variant="secondary" size="sm" onClick={() => handleCompleteRental(rental.id)}>
+                            Complete Rental
+                          </Button>
+                        </>
                       )}
                       {(rental.status === 'pending' || rental.status === 'active') && (
                         <>
@@ -575,6 +593,18 @@ export default function RentalsPage() {
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
               <h3 className="text-lg font-semibold mb-4">Complete Rental</h3>
               <p className="text-gray-600 mb-4">Rental ID: {selectedRental.id}</p>
+              <p className="mb-4 text-sm text-slate-600">
+                If anything is missing, record lost items / add-ons first, then complete.
+              </p>
+              <Link
+                href={`/dashboard/sales?rental_id=${selectedRental.id}&customer_id=${selectedRental.user_id}`}
+                className="mb-4 inline-flex"
+              >
+                <Button variant="secondary" size="sm">
+                  <ShoppingBag className="h-4 w-4" />
+                  Lost items / add-ons
+                </Button>
+              </Link>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Actual Return Date (optional)</label>
@@ -607,6 +637,12 @@ export default function RentalsPage() {
                   />
                   <p className="text-xs text-gray-500 mt-1">Leave 0 if no damage charge.</p>
                 </div>
+                <Select
+                  label="Paid with (damage / late fee)"
+                  options={[...SALE_PAYMENT_METHOD_OPTIONS]}
+                  value={chargePaymentMethod}
+                  onChange={(e) => setChargePaymentMethod(e.target.value)}
+                />
             <div className="flex items-center gap-2">
               <input
                 id="send-maintenance"

@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/lib/api';
-import { User, Address } from '@/types';
+import { User, Address, Branch } from '@/types';
 import { X, User as UserIcon, MapPin, Lock, Shield } from 'lucide-react';
 
 interface AddUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUserAdded: (user: User) => void;
+  branches?: Branch[];
 }
 
 interface CreateUserRequest {
@@ -22,9 +23,10 @@ interface CreateUserRequest {
   password: string;
   role: 'admin' | 'staff' | 'customer';
   address: Address;
+  branch_ids: string[];
 }
 
-export function AddUserModal({ isOpen, onClose, onUserAdded }: AddUserModalProps) {
+export function AddUserModal({ isOpen, onClose, onUserAdded, branches = [] }: AddUserModalProps) {
   const [formData, setFormData] = useState<CreateUserRequest>({
     first_name: '',
     last_name: '',
@@ -39,6 +41,7 @@ export function AddUserModal({ isOpen, onClose, onUserAdded }: AddUserModalProps
       postal_code: '',
       country: '',
     },
+    branch_ids: [],
   });
 
   const [loading, setLoading] = useState(false);
@@ -152,6 +155,7 @@ export function AddUserModal({ isOpen, onClose, onUserAdded }: AddUserModalProps
           postal_code: '',
           country: '',
         },
+        branch_ids: [],
       });
       setErrors({});
     } catch (error: unknown) {
@@ -321,6 +325,34 @@ export function AddUserModal({ isOpen, onClose, onUserAdded }: AddUserModalProps
               </div>
             </div>
           </div>
+
+          {(formData.role === 'admin' || formData.role === 'staff') && branches.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-lg font-medium text-gray-900">Shops</h3>
+              <div className="flex flex-wrap gap-3">
+                {branches.map((branch) => {
+                  const checked = formData.branch_ids.includes(branch.id);
+                  return (
+                    <label key={branch.id} className="inline-flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            branch_ids: e.target.checked
+                              ? [...prev.branch_ids, branch.id]
+                              : prev.branch_ids.filter((id) => id !== branch.id),
+                          }));
+                        }}
+                      />
+                      {branch.name}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Address Information */}
           <div className="space-y-4">

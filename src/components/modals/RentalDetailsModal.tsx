@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/Button';
 import SimpleModal from '@/components/modals/SimpleModal';
@@ -18,7 +19,8 @@ import {
   XCircle,
   Edit,
   FileText,
-  Printer
+  Printer,
+  ShoppingBag
 } from 'lucide-react';
 
 interface RentalDetailsModalProps {
@@ -413,10 +415,20 @@ export function RentalDetailsModal({
             </Button>
           )}
           
-          {rental.status === 'active' && onComplete && (
-            <Button onClick={onComplete}>
-              Complete Rental
-            </Button>
+          {(rental.status === 'active' || rental.status === 'overdue') && (
+            <>
+              <Link href={`/dashboard/sales?rental_id=${rental.id}&customer_id=${rental.user_id}`}>
+                <Button variant="secondary">
+                  <ShoppingBag className="h-4 w-4 mr-2" />
+                  Lost / Add-ons
+                </Button>
+              </Link>
+              {onComplete && (
+                <Button onClick={onComplete}>
+                  Complete Rental
+                </Button>
+              )}
+            </>
           )}
           
           {(rental.status === 'pending' || rental.status === 'active') && onCancel && (

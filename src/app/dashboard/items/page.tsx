@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -9,6 +8,7 @@ import { Card, CardContent, CardFooter } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { SafeImage } from '@/components/ui/SafeImage';
 import ClientOnly from '@/components/ClientOnly';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import AddItemModal from '@/components/modals/AddItemModal';
@@ -29,12 +29,17 @@ import { Item, ItemFilters, CreateItemRequest, Category } from '@/types';
 import { formatCurrency } from '@/lib/currency';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, Pagination, SkeletonCard } from '@/components/ui/DataDisplay';
-import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck } from 'lucide-react';
+import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck, ArrowRightLeft } from 'lucide-react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { BranchBadge } from '@/components/branch/BranchBadge';
+import { TransferItemModal } from '@/components/modals/TransferItemModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 type ViewMode = 'grid' | 'list';
 
 export default function ItemsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ItemFilters>({});
@@ -61,10 +66,19 @@ export default function ItemsPage() {
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [rentalDate, setRentalDate] = useState('');
   const [returnDate, setReturnDate] = useState('');
+  const [transferringItem, setTransferringItem] = useState<Item | null>(null);
 
   // Load categories for filter dropdown
   useEffect(() => {
     loadCategories();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const type = new URLSearchParams(window.location.search).get('type');
+    if (type) {
+      setFilters((prev) => (prev.type === type ? prev : { ...prev, type }));
+    }
   }, []);
 
   const loadCategories = async () => {
@@ -232,11 +246,12 @@ export default function ItemsPage() {
     { value: '', label: 'All Types' },
     { value: 'suit', label: 'Suit' },
     { value: 'accessory', label: 'Accessory' },
+    { value: 'retail', label: 'Retail' },
     { value: 'shoes', label: 'Shoes' },
     { value: 'tie', label: 'Tie' },
     { value: 'belt', label: 'Belt' },
     { value: 'trousers', label: 'Trousers' },
-    { value: 'shirts', label: 'Shirts' },
+    { value: 'shirt', label: 'Shirts' },
     { value: 'vest', label: 'Vest' },
   ];
 
@@ -281,17 +296,14 @@ export default function ItemsPage() {
         {/* Item Image */}
         <Link href={`/dashboard/items/${item.id}`} className="block">
           <div className="aspect-square rounded-2xl flex items-center justify-center overflow-hidden bg-black/5 ring-1 ring-black/5">
-            {item.thumbnail_url && (/^https?:\/\//.test(item.thumbnail_url) || item.thumbnail_url.startsWith('/')) ? (
-              <Image
-                src={item.thumbnail_url}
-                alt={item.name}
-                width={200}
-                height={200}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <Package className="h-12 w-12 text-slate-400" />
-            )}
+            <SafeImage
+              src={item.thumbnail_url}
+              alt={item.name}
+              width={200}
+              height={200}
+              className="h-full w-full object-cover"
+              fallback={<Package className="h-12 w-12 text-slate-400" />}
+            />
           </div>
         </Link>
 
@@ -307,7 +319,10 @@ export default function ItemsPage() {
 
           <div className="flex flex-wrap gap-1.5 max-w-full overflow-hidden">
             <Badge variant={itemStatusVariant(item.status)}>{item.status}</Badge>
+            <Badge variant="default">{item.type}</Badge>
             <Badge variant={itemConditionVariant(item.condition)}>{item.condition}</Badge>
+            <BranchBadge branch={item.branch} />
+            {item.is_sellable && <Badge variant="primary">Sellable</Badge>}
             {/* Category is usually redundant in dense cards — keep only if short */}
             {item.category?.name && item.category.name.length <= 18 && (
               <span className="inline-flex items-center rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-black/5 truncate max-w-[10rem]">
@@ -366,6 +381,18 @@ export default function ItemsPage() {
           >
             <CalendarCheck className="h-4 w-4" />
           </Button>
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setTransferringItem(item)}
+              title="Transfer"
+              aria-label="Transfer"
+              className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -397,17 +424,14 @@ export default function ItemsPage() {
         <div className="flex space-x-4">
           {/* Item Image */}
           <Link href={`/dashboard/items/${item.id}`} className="w-16 h-16 sm:w-20 sm:h-20 bg-black/5 rounded-2xl flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-black/5">
-            {item.thumbnail_url && (/^https?:\/\//.test(item.thumbnail_url) || item.thumbnail_url.startsWith('/')) ? (
-              <Image
-                src={item.thumbnail_url}
-                alt={item.name}
-                width={80}
-                height={80}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <Package className="h-6 w-6 sm:h-8 sm:w-8 text-slate-400" />
-            )}
+            <SafeImage
+              src={item.thumbnail_url}
+              alt={item.name}
+              width={80}
+              height={80}
+              className="h-full w-full object-cover"
+              fallback={<Package className="h-6 w-6 sm:h-8 sm:w-8 text-slate-400" />}
+            />
           </Link>
 
           {/* Item Details */}
@@ -424,6 +448,7 @@ export default function ItemsPage() {
             <div className="flex flex-wrap gap-1 mb-2">
               <Badge variant={itemStatusVariant(item.status)}>{item.status}</Badge>
               <Badge variant={itemConditionVariant(item.condition)}>{item.condition}</Badge>
+              <BranchBadge branch={item.branch} />
             </div>
 
             <div className="flex justify-between items-end">
@@ -446,6 +471,18 @@ export default function ItemsPage() {
                 >
                   <CalendarCheck className="h-4 w-4" />
                 </Button>
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setTransferringItem(item)}
+                    title="Transfer"
+                    aria-label="Transfer"
+                    className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
+                  >
+                    <ArrowRightLeft className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button 
                   variant="ghost" 
                   size="sm" 
@@ -732,6 +769,15 @@ export default function ItemsPage() {
         onConfirm={handleConfirmDelete}
         item={deletingItem}
         loading={deleteLoading}
+      />
+
+      <TransferItemModal
+        isOpen={!!transferringItem}
+        item={transferringItem}
+        onClose={() => setTransferringItem(null)}
+        onTransferred={(updated) => {
+          setItems((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+        }}
       />
 
       {/* Barcode Scanner Modal */}

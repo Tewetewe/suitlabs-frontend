@@ -115,24 +115,37 @@ select, input, textarea, button {
 }
 :focus:not(:focus-visible) { outline: none; }
 
-/* Touch targets */
-@media (max-width: 768px) {
+/* Touch targets — phones and Xiaomi-class tablets */
+@media (max-width: 1280px) {
   button, a, [role="button"] { min-height: 44px; }
 }
 
-/* iOS font-size fix (prevents zoom) */
-@media screen and (max-width: 768px) {
-  input[type="text"],
-  input[type="email"],
-  input[type="password"],
-  input[type="number"],
-  input[type="tel"],
-  input[type="url"],
-  input[type="search"],
-  textarea,
-  select {
-    font-size: 16px;
-  }
+/* Prevent Android/iOS zoom on focus — Xiaomi tablets are often >768px */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+input[type="search"],
+input[type="date"],
+textarea,
+select {
+  font-size: 16px;
+}
+
+/* Cashier POS: stop MIUI/Chrome pull-to-refresh from stealing catalogue scroll */
+.cashier-shell {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+.cashier-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 /* Micro-animation utilities */

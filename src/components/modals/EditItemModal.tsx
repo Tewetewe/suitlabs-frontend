@@ -7,7 +7,16 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Item, CreateItemRequest, Category } from '@/types';
 import { X } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import apiClient from '@/lib/api';
+
+const PURCHASE_PAYMENT_OPTIONS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'transfer', label: 'Transfer' },
+  { value: 'qris', label: 'QRIS' },
+  { value: 'debit', label: 'Debit' },
+  { value: 'cc', label: 'Credit card' },
+];
 
 interface EditItemModalProps {
   isOpen: boolean;
@@ -17,11 +26,14 @@ interface EditItemModalProps {
 }
 
 export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditItemModalProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [formData, setFormData] = useState({
     code: '',
     name: '',
     description: '',
     type: '',
+    trousers_code: '',
     brand: '',
     color: '',
     size_label: '',
@@ -31,8 +43,12 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
     one_day_price: '',
     four_hour_price: '',
     purchase_price: '',
+    selling_price: '',
+    is_sellable: false,
     category_id: '',
-    tags: ''
+    tags: '',
+    payment_method: 'cash',
+    on_credit: false,
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -95,11 +111,12 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
     { value: '', label: 'Select Type' },
     { value: 'suit', label: 'Suit' },
     { value: 'accessory', label: 'Accessory' },
+    { value: 'retail', label: 'Retail (socks, tumbler, etc.)' },
     { value: 'shoes', label: 'Shoes' },
     { value: 'tie', label: 'Tie' },
     { value: 'belt', label: 'Belt' },
     { value: 'trousers', label: 'Trousers' },
-    { value: 'shirts', label: 'Shirts' },
+    { value: 'shirt', label: 'Shirts' },
     { value: 'vest', label: 'Vest' },
   ];
 
@@ -122,6 +139,7 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
         name: item.name || '',
         description: item.description || '',
         type: item.type || '',
+        trousers_code: item.trousers_code || '',
         brand: item.brand || '',
         color: item.color || '',
         size_label: item.size?.label || '',
@@ -131,8 +149,12 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
         one_day_price: item.one_day_price ? item.one_day_price.toString() : '0.00',
         four_hour_price: item.four_hour_price ? item.four_hour_price.toString() : '0.00',
         purchase_price: item.purchase_price ? item.purchase_price.toString() : '0.00',
+        selling_price: item.selling_price ? item.selling_price.toString() : '0.00',
+        is_sellable: !!item.is_sellable,
         category_id: item.category?.id || item.category_id || '',
-        tags: Array.isArray(item.tags) ? item.tags.join(', ') : ''
+        tags: Array.isArray(item.tags) ? item.tags.join(', ') : '',
+        payment_method: 'cash',
+        on_credit: false,
       });
       console.log('Form data set with category_id:', item.category?.id || item.category_id || ''); // Debug log
       setPreviewUrl(item.thumbnail_url || null);
@@ -177,7 +199,8 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
         code: formData.code.trim(),
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
-        type: formData.type as 'suit' | 'accessory' | 'shoes' | 'tie' | 'belt' | 'trousers' | 'shirts' | 'vest',
+        type: formData.type as CreateItemRequest['type'],
+        trousers_code: formData.trousers_code.trim() || undefined,
         brand: formData.brand.trim() || undefined,
         color: formData.color.trim() || undefined,
         size: formData.size_label.trim() ? { label: formData.size_label.trim() } : undefined,
@@ -185,7 +208,15 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
         standard_price: parseFloat(formData.standard_price) || 0,
         one_day_price: parseFloat(formData.one_day_price) || 0,
         four_hour_price: parseFloat(formData.four_hour_price) || 0,
-        purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : undefined,
+        ...(isAdmin
+          ? {
+              purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : undefined,
+              payment_method: formData.payment_method as CreateItemRequest['payment_method'],
+              on_credit: formData.on_credit,
+            }
+          : {}),
+        selling_price: formData.selling_price ? parseFloat(formData.selling_price) : undefined,
+        is_sellable: formData.is_sellable,
         category_id: formData.category_id || '',
         thumbnail_url: previewUrl || undefined,
         tags: formData.tags.trim() ? formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : []
@@ -206,7 +237,11 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
 
   const handleInputChange = (field: string, value: string) => {
     console.log(`Form field ${field} changed to:`, value); // Debug log
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => ({
+      ...prev,
+      [field]: value,
+      ...(field === 'type' && value === 'retail' ? { is_sellable: true } : {}),
+    }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
@@ -252,6 +287,15 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
               error={errors.type}
             />
 
+            {(formData.type === 'suit' || formData.type === 'jacket') && (
+              <Input
+                label="Default trousers code"
+                value={formData.trousers_code}
+                onChange={(e) => handleInputChange('trousers_code', e.target.value)}
+                placeholder="Creates a separate trousers item for pairing"
+              />
+            )}
+
             <Select
               label="Condition"
               options={conditionOptions}
@@ -292,15 +336,58 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
               placeholder="0.00"
             />
 
+            {isAdmin && (
+              <Input
+                label="Buying Price"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.purchase_price}
+                onChange={(e) => handleInputChange('purchase_price', e.target.value)}
+                placeholder="0.00"
+              />
+            )}
+
+            {isAdmin && parseFloat(formData.purchase_price) > 0 && (
+              <>
+                <Select
+                  label="Paid with"
+                  options={PURCHASE_PAYMENT_OPTIONS}
+                  value={formData.payment_method}
+                  onChange={(e) => handleInputChange('payment_method', e.target.value)}
+                  disabled={formData.on_credit}
+                />
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={formData.on_credit}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, on_credit: e.target.checked }))}
+                  />
+                  On credit (Payable)
+                </label>
+              </>
+            )}
+
             <Input
-              label="Purchase Price"
+              label="Selling Price"
               type="number"
               step="0.01"
               min="0"
-              value={formData.purchase_price}
-              onChange={(e) => handleInputChange('purchase_price', e.target.value)}
+              value={formData.selling_price}
+              onChange={(e) => handleInputChange('selling_price', e.target.value)}
               placeholder="0.00"
             />
+
+            <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={formData.is_sellable}
+                onChange={(e) => setFormData((prev) => ({ ...prev, is_sellable: e.target.checked }))}
+              />
+              Sellable (socks, tumbler, clearance stock)
+            </label>
 
             <Input
               label="Quantity *"

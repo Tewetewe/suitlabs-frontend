@@ -2,31 +2,54 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { BarChart3, Download, RefreshCcw } from 'lucide-react';
+import { BarChart3, Download, ExternalLink, Lock, RefreshCcw } from 'lucide-react';
 
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/DataDisplay';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBranch } from '@/contexts/BranchContext';
 import apiClient from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/currency';
-import type { Booking } from '@/types';
+import { AccountingReports } from '@/components/admin/AccountingReports';
+import type { Booking, ClosedMonth, GoogleSheetsStatus, GoogleSyncRun, ProfitAndLossReport } from '@/types';
+import { BOOKING_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
+
+const MONTHS = [
+  { value: 1, short: 'Jan', label: 'January' },
+  { value: 2, short: 'Feb', label: 'February' },
+  { value: 3, short: 'Mar', label: 'March' },
+  { value: 4, short: 'Apr', label: 'April' },
+  { value: 5, short: 'May', label: 'May' },
+  { value: 6, short: 'Jun', label: 'June' },
+  { value: 7, short: 'Jul', label: 'July' },
+  { value: 8, short: 'Aug', label: 'August' },
+  { value: 9, short: 'Sep', label: 'September' },
+  { value: 10, short: 'Oct', label: 'October' },
+  { value: 11, short: 'Nov', label: 'November' },
+  { value: 12, short: 'Dec', label: 'December' },
+];
 
 export default function FinancialReportPage() {
   const router = useRouter();
   const { user, loading: authLoading, isAuthenticated } = useAuth();
+  const { currentBranch, viewingAll } = useBranch();
 
   const isAdmin = user?.role === 'admin';
 
   const today = useMemo(() => new Date(), []);
   const currentYear = useMemo(() => today.getFullYear(), [today]);
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all'); // 1-12 or all year
+  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>(today.getMonth() + 1);
 
-  const [startDate, setStartDate] = useState<string>(`${currentYear}-01-01`);
-  const [endDate, setEndDate] = useState<string>(`${currentYear}-12-31`);
+  const initialMonth = today.getMonth() + 1;
+  const [startDate, setStartDate] = useState<string>(`${currentYear}-${String(initialMonth).padStart(2, '0')}-01`);
+  const [endDate, setEndDate] = useState<string>(() => {
+    const lastDay = new Date(currentYear, initialMonth, 0).getDate();
+    return `${currentYear}-${String(initialMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  });
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [bookingStatus, setBookingStatus] = useState<string>('');
@@ -35,6 +58,14 @@ export default function FinancialReportPage() {
   const [bookingSearch, setBookingSearch] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sheetStatus, setSheetStatus] = useState<GoogleSheetsStatus | null>(null);
+  const [exportRuns, setExportRuns] = useState<GoogleSyncRun[]>([]);
+  const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
+  const [pnl, setPnl] = useState<ProfitAndLossReport | null>(null);
+  const [pnlLoading, setPnlLoading] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [closedMonths, setClosedMonths] = useState<ClosedMonth[]>([]);
+  const [lockingMonth, setLockingMonth] = useState(false);
 
   const bookingTotals = useMemo(() => {
     return bookings.reduce(
@@ -70,8 +101,8 @@ export default function FinancialReportPage() {
   const getErrorMessage = (e: unknown): string => {
     if (typeof e === 'string') return e;
     if (e && typeof e === 'object') {
-      const maybeAxios = e as { response?: { data?: { message?: string } }; message?: string };
-      return maybeAxios.response?.data?.message || maybeAxios.message || 'Unknown error';
+      const maybeAxios = e as { response?: { data?: { error?: string; message?: string } }; message?: string };
+      return maybeAxios.response?.data?.error || maybeAxios.response?.data?.message || maybeAxios.message || 'Unknown error';
     }
     return 'Unknown error';
   };
@@ -99,6 +130,17 @@ export default function FinancialReportPage() {
     setEndDate(end);
   }, [selectedYear, selectedMonth]);
 
+  const periodLabel = useMemo(() => {
+    if (selectedMonth === 'all') return `All of ${selectedYear}`;
+    const month = MONTHS.find((m) => m.value === selectedMonth);
+    return `${month?.label || selectedMonth} ${selectedYear}`;
+  }, [selectedYear, selectedMonth]);
+
+  const isMonthClosed = (year: number, month: number) =>
+    closedMonths.some((row) => row.year === year && row.month === month);
+
+  const selectedMonthClosed = selectedMonth !== 'all' && isMonthClosed(selectedYear, selectedMonth);
+
   const fetchBookings = async () => {
     setLoading(true);
     setError(null);
@@ -117,6 +159,22 @@ export default function FinancialReportPage() {
       setBookings([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchProfitAndLoss = async () => {
+    setPnlLoading(true);
+    try {
+      const report = await apiClient.getProfitAndLoss({
+        startDate,
+        endDate,
+        groupBy: 'month',
+      });
+      setPnl(report);
+    } catch {
+      setPnl(null);
+    } finally {
+      setPnlLoading(false);
     }
   };
 
@@ -147,9 +205,85 @@ export default function FinancialReportPage() {
     }
   };
 
+  const generateExcel = async () => {
+    setExportingExcel(true);
+    setError(null);
+    try {
+      const blob = await apiClient.downloadAccountingExcel({ startDate, endDate });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `suitlabs-${periodLabel.replace(/\s+/g, '-').toLowerCase()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || 'Failed to generate Excel');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  const loadClosedMonths = async () => {
+    try {
+      setClosedMonths(await apiClient.getClosedMonths());
+    } catch {
+      setClosedMonths([]);
+    }
+  };
+
+  const toggleClosedMonth = async () => {
+    if (selectedMonth === 'all') return;
+    setLockingMonth(true);
+    setError(null);
+    try {
+      if (selectedMonthClosed) {
+        await apiClient.openMonth(selectedYear, selectedMonth);
+      } else {
+        await apiClient.closeMonth(selectedYear, selectedMonth);
+      }
+      await loadClosedMonths();
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || 'Failed to update month lock');
+    } finally {
+      setLockingMonth(false);
+    }
+  };
+
+  const loadGoogleSheetExports = async () => {
+    try {
+      const [status, runs] = await Promise.all([
+        apiClient.getGoogleSheetsStatus(),
+        apiClient.getGoogleSheetsRuns('booking_export', 12),
+      ]);
+      setSheetStatus(status);
+      setExportRuns(runs);
+    } catch {
+      setSheetStatus(null);
+      setExportRuns([]);
+    }
+  };
+
+  const retryGoogleSheetExport = async (runId: string) => {
+    setRetryingRunId(runId);
+    setError(null);
+    try {
+      await apiClient.retryGoogleSheetsBookingExport(runId);
+      await loadGoogleSheetExports();
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || 'Failed to retry Google Sheets export');
+    } finally {
+      setRetryingRunId(null);
+    }
+  };
+
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) return;
     fetchBookings();
+    fetchProfitAndLoss();
+    loadGoogleSheetExports();
+    loadClosedMonths();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isAdmin]);
 
@@ -158,6 +292,7 @@ export default function FinancialReportPage() {
     if (!isAuthenticated || !isAdmin) return;
     const t = window.setTimeout(() => {
       fetchBookings();
+      fetchProfitAndLoss();
     }, 300);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -202,7 +337,314 @@ export default function FinancialReportPage() {
 
   return (
     <DashboardLayout>
-      <PageShell title="Financial Report" subtitle="Realtime monthly report from bookings. Select a month or all year, filter, then download.">
+      <PageShell title="Financial Report" subtitle={
+        viewingAll
+          ? `Company group — separate shop books, shown together. ${periodLabel}.`
+          : `${currentBranch?.name || 'This shop'} only. ${periodLabel}.`
+      }>
+        <Card>
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="font-semibold text-slate-900">Report period</div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    Pick a month to see that month’s P&L, Balance Sheet, and Cash Flow, or choose the full year.
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {selectedMonth !== 'all' && (
+                    <Button variant="outline" loading={lockingMonth} onClick={toggleClosedMonth}>
+                      <Lock className="h-4 w-4" />
+                      {selectedMonthClosed ? 'Unlock month' : 'Lock month'}
+                    </Button>
+                  )}
+                  <Button loading={exportingExcel} onClick={generateExcel}>
+                    <Download className="h-4 w-4" />
+                    Generate Excel
+                  </Button>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="number"
+                  className="w-24 rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm"
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value || currentYear))}
+                />
+                <button
+                  type="button"
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                    selectedMonth === 'all' ? 'bg-indigo-600 text-white' : 'bg-white/70 text-slate-700 border border-black/10'
+                  }`}
+                  onClick={() => setSelectedMonth('all')}
+                >
+                  Full year
+                </button>
+                {MONTHS.map((month) => (
+                  <button
+                    key={month.value}
+                    type="button"
+                    className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                      selectedMonth === month.value ? 'bg-indigo-600 text-white' : 'bg-white/70 text-slate-700 border border-black/10'
+                    }`}
+                    onClick={() => setSelectedMonth(month.value)}
+                  >
+                    {month.short}
+                    {isMonthClosed(selectedYear, month.value) ? ' · locked' : ''}
+                  </button>
+                ))}
+              </div>
+              <div className="text-xs text-slate-500">
+                {startDate} → {endDate}
+                {selectedMonthClosed ? ' · This month is locked. Journal Entries dated here cannot be added or changed.' : ''}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="font-semibold text-slate-900">Monthly Google Sheets export</div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    Previous-month bookings are upserted automatically on the 1st in {sheetStatus?.timezone || 'Asia/Makassar'}.
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {sheetStatus?.configured
+                      ? `Monthly tabs: ${sheetStatus.booking_tab_pattern} (for example, JAN 2026)`
+                      : 'Google Sheets is not configured on the backend.'}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {sheetStatus?.spreadsheet_url && (
+                    <a href={sheetStatus.spreadsheet_url} target="_blank" rel="noreferrer">
+                      <Button variant="outline">
+                        <ExternalLink className="h-4 w-4" />
+                        Open sheet
+                      </Button>
+                    </a>
+                  )}
+                  <Button variant="secondary" onClick={loadGoogleSheetExports}>
+                    <RefreshCcw className="h-4 w-4" />
+                    Refresh status
+                  </Button>
+                </div>
+              </div>
+
+              {exportRuns.length > 0 ? (
+                <div className="overflow-x-auto rounded-2xl border border-black/5">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-white/60">
+                      <tr className="text-left text-slate-600">
+                        <th className="px-4 py-3 font-semibold">Period</th>
+                        <th className="px-4 py-3 font-semibold">Sheet</th>
+                        <th className="px-4 py-3 font-semibold">Status</th>
+                        <th className="px-4 py-3 font-semibold text-right">Rows</th>
+                        <th className="px-4 py-3 font-semibold">Finished</th>
+                        <th className="px-4 py-3 font-semibold text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black/5 bg-white/30">
+                      {exportRuns.map((run) => (
+                        <tr key={run.id}>
+                          <td className="px-4 py-3 font-medium text-slate-900">{run.period_key}</td>
+                          <td className="px-4 py-3 text-slate-700">{run.sheet_name || '—'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                              run.status === 'completed'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : run.status === 'failed'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {run.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-700">{run.row_count}</td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {run.finished_at ? new Date(run.finished_at).toLocaleString() : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {run.status === 'failed' && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                loading={retryingRunId === run.id}
+                                onClick={() => retryGoogleSheetExport(run.id)}
+                              >
+                                Retry
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-black/5 bg-white/40 px-4 py-3 text-sm text-slate-600">
+                  No monthly export runs recorded yet.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <div className="font-semibold text-slate-900">Profit & Loss {viewingAll ? '(company group)' : currentBranch ? `· ${currentBranch.name}` : ''}</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {viewingAll
+                    ? 'Each shop has its own P&L. Totals below are the group; the table after that is per shop.'
+                    : `This report is ${currentBranch?.name || 'the current shop'} only — not mixed with the other shop.`}
+                  {' '}Booking revenue (excluding cancelled) plus completed sales, minus Cost of Goods Sold and recorded expenses. {periodLabel}.
+                  {selectedMonth === 'all' ? ' Click a month row to open that month.' : ''}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Booking revenue</div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(pnl?.totals?.booking_revenue || 0)}</div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Sale revenue</div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(pnl?.totals?.sale_revenue || 0)}</div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Cost of Goods Sold</div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(pnl?.totals?.cost_of_goods_sold || 0)}</div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Expenses</div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(pnl?.totals?.expenses || 0)}</div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Net profit</div>
+                  <div className={`mt-1 text-lg font-bold ${(pnl?.totals?.net_profit || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {formatCurrency(pnl?.totals?.net_profit || 0)}
+                  </div>
+                </div>
+              </div>
+
+              {viewingAll && (pnl?.by_branch?.length || 0) > 0 && (
+                <div className="overflow-x-auto rounded-2xl border border-black/5">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-white/60">
+                      <tr className="text-left text-slate-600">
+                        <th className="px-4 py-3 font-semibold">Shop</th>
+                        <th className="px-4 py-3 font-semibold text-right">Bookings</th>
+                        <th className="px-4 py-3 font-semibold text-right">Sales</th>
+                        <th className="px-4 py-3 font-semibold text-right">Revenue</th>
+                        <th className="px-4 py-3 font-semibold text-right">COGS</th>
+                        <th className="px-4 py-3 font-semibold text-right">Expenses</th>
+                        <th className="px-4 py-3 font-semibold text-right">Net profit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black/5 bg-white/30">
+                      {pnl!.by_branch!.map((shop) => (
+                        <tr key={shop.branch_id} className="text-slate-800">
+                          <td className="px-4 py-3 font-medium">{shop.branch_name}</td>
+                          <td className="px-4 py-3 text-right">{formatCurrency(shop.totals.booking_revenue)}</td>
+                          <td className="px-4 py-3 text-right">{formatCurrency(shop.totals.sale_revenue)}</td>
+                          <td className="px-4 py-3 text-right">{formatCurrency(shop.totals.total_revenue)}</td>
+                          <td className="px-4 py-3 text-right">{formatCurrency(shop.totals.cost_of_goods_sold || 0)}</td>
+                          <td className="px-4 py-3 text-right">{formatCurrency(shop.totals.expenses)}</td>
+                          <td className={`px-4 py-3 text-right font-medium ${shop.totals.net_profit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {formatCurrency(shop.totals.net_profit)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {pnlLoading ? (
+                <div className="rounded-xl border border-black/5 bg-white/40 px-4 py-3 text-sm text-slate-600">Loading P&L...</div>
+              ) : !pnl || pnl.rows.length === 0 ? (
+                <div className="rounded-xl border border-black/5 bg-white/40 px-4 py-3 text-sm text-slate-600">
+                  No P&L rows for this range yet. Add expenses and completed bookings to see monthly profit.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-black/5">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-white/60">
+                      <tr className="text-left text-slate-600">
+                        <th className="px-4 py-3 font-semibold">Month</th>
+                        <th className="px-4 py-3 font-semibold text-right">Bookings</th>
+                        <th className="px-4 py-3 font-semibold text-right">Sales</th>
+                        <th className="px-4 py-3 font-semibold text-right">Revenue</th>
+                        <th className="px-4 py-3 font-semibold text-right">COGS</th>
+                        <th className="px-4 py-3 font-semibold text-right">Gross profit</th>
+                        <th className="px-4 py-3 font-semibold text-right">Expenses</th>
+                        <th className="px-4 py-3 font-semibold text-right">Net profit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black/5 bg-white/30">
+                      {pnl.rows.map((row) => {
+                        const period = new Date(row.period);
+                        const label = Number.isNaN(period.getTime())
+                          ? row.period
+                          : `${period.getFullYear()}-${String(period.getMonth() + 1).padStart(2, '0')}`;
+                        return (
+                          <tr
+                            key={row.period}
+                            className={`text-slate-800 ${selectedMonth === 'all' ? 'cursor-pointer hover:bg-indigo-50/70' : ''}`}
+                            onClick={() => {
+                              if (selectedMonth === 'all' && !Number.isNaN(period.getTime())) {
+                                setSelectedYear(period.getFullYear());
+                                setSelectedMonth(period.getMonth() + 1);
+                              }
+                            }}
+                          >
+                            <td className="px-4 py-3 font-medium">{label}</td>
+                            <td className="px-4 py-3 text-right">{formatCurrency(row.booking_revenue)}</td>
+                            <td className="px-4 py-3 text-right">{formatCurrency(row.sale_revenue)}</td>
+                            <td className="px-4 py-3 text-right">{formatCurrency(row.total_revenue)}</td>
+                            <td className="px-4 py-3 text-right">{formatCurrency(row.cost_of_goods_sold || 0)}</td>
+                            <td className="px-4 py-3 text-right">{formatCurrency(row.gross_profit || 0)}</td>
+                            <td className="px-4 py-3 text-right">{formatCurrency(row.expenses)}</td>
+                            <td className={`px-4 py-3 text-right font-medium ${row.net_profit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                              {formatCurrency(row.net_profit)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-white/60">
+                      <tr className="font-semibold text-slate-900">
+                        <td className="px-4 py-3">TOTAL</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(pnl.totals.booking_revenue)}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(pnl.totals.sale_revenue)}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(pnl.totals.total_revenue)}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(pnl.totals.cost_of_goods_sold || 0)}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(pnl.totals.gross_profit || 0)}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(pnl.totals.expenses)}</td>
+                        <td className={`px-4 py-3 text-right ${pnl.totals.net_profit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {formatCurrency(pnl.totals.net_profit)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <AccountingReports
+          startDate={startDate}
+          endDate={endDate}
+          periodLabel={periodLabel}
+          shopLabel={viewingAll ? 'Company group' : currentBranch?.name}
+        />
+
         <Card>
           <CardContent>
             <div className="flex flex-col gap-4">
@@ -226,53 +668,10 @@ export default function FinancialReportPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <label className="block">
-                    <div className="text-xs font-semibold text-slate-600 mb-1">Year</div>
-                    <input
-                      type="number"
-                      className="w-full rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm"
-                      value={selectedYear}
-                      onChange={(e) => setSelectedYear(Number(e.target.value || currentYear))}
-                    />
-                  </label>
-                  <label className="block">
-                    <div className="text-xs font-semibold text-slate-600 mb-1">Month</div>
-                    <select
-                      className="w-full rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm"
-                      value={selectedMonth}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setSelectedMonth(v === 'all' ? 'all' : Number(v));
-                      }}
-                    >
-                      <option value="all">All year</option>
-                      <option value="1">January</option>
-                      <option value="2">February</option>
-                      <option value="3">March</option>
-                      <option value="4">April</option>
-                      <option value="5">May</option>
-                      <option value="6">June</option>
-                      <option value="7">July</option>
-                      <option value="8">August</option>
-                      <option value="9">September</option>
-                      <option value="10">October</option>
-                      <option value="11">November</option>
-                      <option value="12">December</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <div className="text-xs font-semibold text-slate-600 mb-1">Range</div>
-                    <input
-                      type="text"
-                      className="w-full rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm"
-                      value={`${startDate} → ${endDate}`}
-                      readOnly
-                    />
-                  </label>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-slate-600">
+                  Booking list for {periodLabel}. Change the month at the top of this page.
                 </div>
-
                 <div className="flex gap-2">
                   <Button
                     variant="secondary"
@@ -327,12 +726,18 @@ export default function FinancialReportPage() {
 
                 <label className="block">
                   <div className="text-xs font-semibold text-slate-600 mb-1">Payment method</div>
-                  <input
+                  <select
                     className="w-full rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm"
-                    placeholder="e.g. full_transfer"
                     value={bookingPaymentMethod}
                     onChange={(e) => setBookingPaymentMethod(e.target.value)}
-                  />
+                  >
+                    <option value="">All</option>
+                    {BOOKING_PAYMENT_METHOD_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <label className="block">

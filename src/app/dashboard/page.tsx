@@ -10,13 +10,14 @@ import { PageShell, StatGrid } from '@/components/ui/PageShell';
 import { Badge } from '@/components/ui/DataDisplay';
 import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
-import { Booking, DashboardStats, Rental } from '@/types';
-import { Package, Users, Calendar, DollarSign, AlertTriangle, Wrench, Plus, ArrowRight } from 'lucide-react';
+import { Booking, DashboardStats, AssetReport, AccountingReport, Rental } from '@/types';
+import { Package, Users, Calendar, DollarSign, AlertTriangle, Wrench, ArrowRight, Wallet, TrendingUp, Landmark, Store } from 'lucide-react';
 
 const quickActions = [
-  { label: 'New Booking',   href: '/dashboard/bookings', variant: 'primary'   as const, icon: Calendar },
-  { label: 'Add Item',      href: '/dashboard/items',    variant: 'secondary' as const, icon: Package },
-  { label: 'Add Customer',  href: '/dashboard/customers',variant: 'secondary' as const, icon: Users },
+  { label: 'Open Cashier',  href: '/dashboard/cashier',  variant: 'primary'   as const, icon: Store },
+  { label: 'New Booking',   href: '/dashboard/bookings', variant: 'secondary' as const, icon: Calendar },
+  { label: 'New Sale',      href: '/dashboard/sales',    variant: 'secondary' as const, icon: DollarSign },
+  { label: 'Add Expense',   href: '/dashboard/expenses', variant: 'secondary' as const, icon: Wallet },
 ];
 
 type ActivityItem = {
@@ -41,9 +42,12 @@ function timeAgo(iso?: string) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [pnl, setPnl] = useState<AccountingReport | null>(null);
+  const [assets, setAssets] = useState<AssetReport | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -56,6 +60,24 @@ export default function DashboardPage() {
         ]);
 
         if (s.status === 'fulfilled') setStats(s.value);
+
+        if (isAdmin) {
+          const now = new Date();
+          const pad = (n: number) => String(n).padStart(2, '0');
+          const start = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+          const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+          const end = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDay)}`;
+          try {
+            setPnl(await apiClient.getAccountingReport({ startDate: start, endDate: end }));
+          } catch {
+            setPnl(null);
+          }
+          try {
+            setAssets(await apiClient.getAssets());
+          } catch {
+            setAssets(null);
+          }
+        }
 
         const bookings: Booking[] =
           bookingsRes.status === 'fulfilled'
@@ -126,7 +148,7 @@ export default function DashboardPage() {
       }
     };
     load().catch(console.error);
-  }, []);
+  }, [isAdmin]);
 
   const statItems = [
     { label: 'Total Items',      key: 'totalItems'       as keyof DashboardStats, icon: <Package />,       iconBg: 'bg-indigo-50',  iconColor: 'text-indigo-600' },
@@ -143,10 +165,10 @@ export default function DashboardPage() {
         title={`Welcome back, ${user?.first_name ?? 'there'}`}
         subtitle="A quick snapshot of what matters today."
         action={
-          <Link href="/dashboard/bookings">
+          <Link href="/dashboard/cashier">
             <Button size="md">
-              <Plus className="h-4 w-4" />
-              New Booking
+              <Store className="h-4 w-4" />
+              Open Cashier
             </Button>
           </Link>
         }
@@ -166,6 +188,105 @@ export default function DashboardPage() {
             loading,
           }))}
         />
+
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>This month (accrual)</CardTitle>
+                <Link href="/dashboard/admin/financial-report" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                  Full report →
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                    <TrendingUp className="h-3.5 w-3.5" /> Revenue
+                  </div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">
+                    {loading ? '—' : formatCurrency(pnl?.profit_and_loss?.totals?.total_revenue || 0)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                    <Wallet className="h-3.5 w-3.5" /> Expenses
+                  </div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">
+                    {loading ? '—' : formatCurrency(pnl?.profit_and_loss?.totals?.expenses || 0)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Net profit</div>
+                  <div className={`mt-1 text-lg font-bold ${(pnl?.profit_and_loss?.totals?.net_profit || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {loading ? '—' : formatCurrency(pnl?.profit_and_loss?.totals?.net_profit || 0)}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Cash on Hand</div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">
+                    {loading ? '—' : formatCurrency(pnl?.cash_on_hand || 0)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Drawer {formatCurrency(pnl?.cash_drawer || 0)} · Bank {formatCurrency(pnl?.bank || 0)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Accounts Receivable</div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">
+                    {loading ? '—' : formatCurrency(pnl?.balance_sheet?.accounts_receivable || 0)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Dividends this year</div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">
+                    {loading ? '—' : formatCurrency(pnl?.year_dividends || 0)}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Shop assets</CardTitle>
+                <Link href="/dashboard/admin/assets" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                  Full list →
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                    <Landmark className="h-3.5 w-3.5" /> Total assets
+                  </div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">
+                    {loading ? '—' : formatCurrency(assets?.total_value || 0)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Inventory</div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">
+                    {loading ? '—' : formatCurrency(assets?.inventory?.total_value || 0)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
+                  <div className="text-xs font-semibold text-slate-500">Fixed assets</div>
+                  <div className="mt-1 text-lg font-bold text-slate-900">
+                    {loading ? '—' : formatCurrency(assets?.fixed?.total_value || 0)}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Secondary row */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

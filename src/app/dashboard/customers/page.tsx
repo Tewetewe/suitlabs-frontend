@@ -16,6 +16,8 @@ import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, Pagination, SkeletonCard } from '@/components/ui/DataDisplay';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { BranchBadge } from '@/components/branch/BranchBadge';
+import { useBranch } from '@/contexts/BranchContext';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -42,6 +44,7 @@ export default function CustomersPage() {
     notes: ''
   });
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { currentBranch, viewingAll } = useBranch();
   const { success, error } = useToast();
 
   // Don't automatically redirect - let user decide
@@ -231,7 +234,11 @@ export default function CustomersPage() {
     <DashboardLayout>
       <PageShell
         title="Customers"
-        subtitle="Manage your customer database"
+        subtitle={
+          viewingAll
+            ? 'Shared directory — Origin Branch shows which shop they first registered at'
+            : `New customers belong to ${currentBranch?.name || 'this shop'}. Origin Branch is visible on every record.`
+        }
         action={
           <Button onClick={openCreateModal}>
             <Plus className="h-4 w-4" />
@@ -288,6 +295,9 @@ export default function CustomersPage() {
                         <Badge variant={customer.is_active ? 'success' : 'danger'}>
                           {customer.is_active ? 'Active' : 'Inactive'}
                         </Badge>
+                        <div className="mt-1">
+                          <BranchBadge branch={customer.branch} always />
+                        </div>
                       </div>
                     </div>
                   </div>

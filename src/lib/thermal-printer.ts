@@ -302,7 +302,7 @@ export class ThermalPrinterService {
       .lineFeed()
       .setFontSize(1, 1)
       .setBold(false)
-      .text('Sewa Jas Jimbaran & Nusadua')
+      .text(invoice.company?.subtitle || 'Sewa Jas Jimbaran')
       .lineFeed(2);
 
     // Company Info (optimized for 58mm paper width)
@@ -506,6 +506,8 @@ export class ThermalPrinterService {
   async printRentalInvoice(rental: Rental): Promise<void> {
     const generator = new ESCPOSGenerator();
     const invoiceNumber = `INV-${rental.id.slice(-8).toUpperCase()}`;
+    const shopSubtitle = rental.branch?.receipt_subtitle || 'Sewa Jas Jimbaran';
+    const shopAddress = rental.branch?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kab. Badung, Bali 80362';
     const items = (rental.items || rental.booking?.items || []) as Array<{
       item?: { name?: string; size?: { label?: string } };
       quantity: number;
@@ -535,13 +537,13 @@ export class ThermalPrinterService {
       .lineFeed()
       .setFontSize(1, 1)
       .setBold(false)
-      .text('Sewa Jas Jimbaran & Nusadua')
+      .text(shopSubtitle)
       .lineFeed(2);
 
     // Company Info (optimized for 58mm paper width)
     generator
       .setFontSize(1, 1)
-      .text('Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kab. Badung, Bali 80362')
+      .text(shopAddress)
       .lineFeed(2);
 
     // Separator

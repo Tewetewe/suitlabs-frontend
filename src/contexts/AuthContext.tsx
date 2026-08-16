@@ -3,6 +3,14 @@
 import React, { createContext, useCallback, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
 import { apiClient } from '@/lib/api';
+import { persistBranchScope, readStoredBranchId } from '@/lib/branch-scope';
+
+function ensureBranchStorage(user: User | null) {
+  if (!user) return;
+  if (readStoredBranchId()) return;
+  const first = user.branches?.[0]?.id;
+  if (first) persistBranchScope(first, first);
+}
 
 interface AuthContextType {
   user: User | null;
@@ -24,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) {
         apiClient.setToken(token);
         const userData = await apiClient.getProfile();
+        ensureBranchStorage(userData);
         setUser(userData);
       }
     } catch (error: unknown) {
@@ -44,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const response = await apiClient.login({ email, password });
+    ensureBranchStorage(response.user);
     setUser(response.user);
   };
 

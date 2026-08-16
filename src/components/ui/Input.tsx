@@ -45,7 +45,7 @@ export function Input({
             'block w-full rounded-xl border text-slate-900',
             'glass-control',
             'placeholder:text-slate-400 text-sm',
-            'min-h-[40px] px-3 py-2 touch-manipulation',
+            'min-h-[44px] px-3 py-2.5 touch-manipulation',
             prefixIcon && 'pl-9',
             error
               ? 'border-red-400 focus:border-red-500 focus:ring-red-500'

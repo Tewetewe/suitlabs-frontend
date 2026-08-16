@@ -242,6 +242,34 @@ export function formatAPIError(error: APIError): string {
 }
 
 /**
+ * Pulls a human-readable message out of whatever an API call threw, so backend
+ * rejections (a payment above the amount due, a closed month) reach the user
+ * instead of only the console.
+ */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof APIError) {
+    return formatAPIError(error);
+  }
+
+  const response = (error as { response?: { data?: unknown } } | undefined)?.response;
+  const body = response?.data as Record<string, unknown> | undefined;
+  if (body) {
+    if (typeof body.error === 'string' && body.error.trim() !== '') {
+      return body.error;
+    }
+    if (typeof body.message === 'string' && body.message.trim() !== '') {
+      return body.message;
+    }
+  }
+
+  if (error instanceof Error && error.message.trim() !== '') {
+    return error.message;
+  }
+
+  return fallback;
+}
+
+/**
  * Utility function to check if an error is retryable
  */
 export function isRetryableError(error: APIError): boolean {

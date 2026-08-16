@@ -3,18 +3,44 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { apiClient } from '@/lib/api';
 import { Booking, CreateRentalRequest } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Calendar, AlertCircle, FileText } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
+import axios from 'axios';
 
 interface CreateRentalModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+}
+
+const PAGE_SIZE = 20;
+
+function bookingLabel(b: Booking): string {
+  const name = [b.customer?.first_name, b.customer?.last_name].filter(Boolean).join(' ').trim()
+    || b.full_name
+    || '';
+  const ref = b.invoice_number || `#${b.id.slice(-8)}`;
+  const date = b.booking_date ? new Date(b.booking_date).toLocaleDateString() : '';
+  return [ref, name, date, b.status].filter(Boolean).join(' • ');
+}
+
+function toISODate(d: string): string {
+  if (!d) return '';
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) {
+    const [dd, mm, yyyy] = d.split('/');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '';
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${dt.getFullYear()}-${mm}-${dd}`;
 }
 
 export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalModalProps) {
@@ -28,39 +54,52 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
     security_deposit: 0,
     notes: ''
   });
-  // Simplified: create rental from booking
-  const [bookingSearch, setBookingSearch] = useState('');
-  const [bookings, setBookings] = useState<Booking[]>([]);
   const [selectedBookingId, setSelectedBookingId] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  
 
-  const loadBookings = useCallback(async (search?: string) => {
+  const fetchBookingPage = useCallback(async (query: string, page: number): Promise<AutoPageResult> => {
     try {
-      const res = await apiClient.getBookings({ status: 'confirmed', page: 1, limit: 10, search: search || '' });
+      const res = await apiClient.getBookings({
+        for_rental: true,
+        page,
+        limit: PAGE_SIZE,
+        search: query || undefined,
+      });
       const list = res?.data?.data?.bookings || [];
-      setBookings(list);
+      const pagination = res?.data?.pagination;
+      return {
+        options: list.map((b) => ({ value: b.id, label: bookingLabel(b) })),
+        hasMore: Boolean(pagination?.has_next),
+      };
     } catch {
       warning('Unable to load bookings', 'Backend may be offline. Please try again.');
-      setBookings([]);
+      return { options: [], hasMore: false };
     }
   }, [warning]);
 
   useEffect(() => {
-    if (isOpen) {
-      // Prefetch a small list of recent confirmed bookings for selection
-      loadBookings('');
-    }
-  }, [isOpen, loadBookings]);
-
-  useEffect(() => {
     const loadOne = async (id: string) => {
       try {
-        if (!id) { setSelectedBooking(null); return; }
+        if (!id) {
+          setSelectedBooking(null);
+          return;
+        }
         const b = await apiClient.getBooking(id);
         setSelectedBooking(b);
+        const start = toISODate(b.appointment_date || b.booking_date);
+        if (start) {
+          const startDate = new Date(`${start}T00:00:00`);
+          const ret = new Date(startDate);
+          ret.setDate(ret.getDate() + 1);
+          const retISO = `${ret.getFullYear()}-${String(ret.getMonth() + 1).padStart(2, '0')}-${String(ret.getDate()).padStart(2, '0')}`;
+          setForm((prev) => ({
+            ...prev,
+            rental_date: prev.rental_date || start,
+            return_date: prev.return_date || retISO,
+          }));
+        }
       } catch (e) {
         console.error('Failed to load booking details:', e);
         setSelectedBooking(null);
@@ -69,30 +108,11 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
     loadOne(selectedBookingId);
   }, [selectedBookingId]);
 
-  // no derived pricing in simplified flow
-
-  // Debounced search for bookings
-  useEffect(() => {
-    const t = setTimeout(() => {
-      // Only search when at least 2 chars to keep list small
-      if (bookingSearch.trim().length >= 2) {
-        loadBookings(bookingSearch.trim());
-      } else if (bookingSearch.trim().length === 0) {
-        loadBookings('');
-      }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [bookingSearch, loadBookings]);
-
-  // no separate availability step in simplified flow
-
-  // validation handled inline in submit
-
   const handleSubmit = async () => {
     if (!selectedBookingId) {
       setErrors({ submit: 'Booking is required' });
-        return;
-      }
+      return;
+    }
     if (!form.rental_date || !form.return_date) {
       setErrors({ submit: 'Rental and Return dates are required' });
       return;
@@ -105,28 +125,16 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
     try {
       setLoading(true);
       const rental = await apiClient.createRentalFromBooking(selectedBookingId, user.id);
-      // Normalize input dates to ISO (YYYY-MM-DD)
       const toISOStartOfDay = (d: string) => {
-        if (!d) return '';
-        // if format looks like DD/MM/YYYY, convert
-        if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) {
-          const [dd, mm, yyyy] = d.split('/');
-          const isoDate = `${yyyy}-${mm}-${dd}`;
-          return new Date(`${isoDate}T00:00:00Z`).toISOString();
-        }
-        // if already YYYY-MM-DD, keep
-        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return new Date(`${d}T00:00:00Z`).toISOString();
-        // fallback: use Date parsing
-        const dt = new Date(d);
-        if (!isNaN(dt.getTime())) return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).toISOString();
-        return d;
+        const iso = toISODate(d);
+        if (!iso) return d;
+        return new Date(`${iso}T00:00:00Z`).toISOString();
       };
 
       const isoStart = toISOStartOfDay(form.rental_date);
       const isoReturn = toISOStartOfDay(form.return_date);
 
-      // If dates provided differ from auto dates, update
-      if (rental && (rental.rental_date.split('T')[0] !== isoStart || rental.return_date.split('T')[0] !== isoReturn)) {
+      if (rental && (rental.rental_date.split('T')[0] !== isoStart.split('T')[0] || rental.return_date.split('T')[0] !== isoReturn.split('T')[0])) {
         await apiClient.changeRentalDates(rental.id, isoStart, isoReturn);
       }
       onSuccess();
@@ -134,7 +142,10 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
       resetForm();
     } catch (error) {
       console.error('Failed to create rental from booking:', error);
-      setErrors({ submit: 'Failed to create rental. Please verify the Booking and dates.' });
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.error || error.response?.data?.message
+        : null;
+      setErrors({ submit: typeof message === 'string' ? message : 'Failed to create rental. Please verify the Booking and dates.' });
     } finally {
       setLoading(false);
     }
@@ -143,9 +154,8 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
   const resetForm = () => {
     setForm({ user_id: '', suit_id: '', rental_date: '', return_date: '', security_deposit: 0, notes: '' });
     setErrors({});
-    
     setSelectedBookingId('');
-    setBookingSearch('');
+    setSelectedBooking(null);
   };
 
   const handleClose = () => {
@@ -153,42 +163,35 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return (
-    <SimpleModal isOpen={isOpen} onClose={handleClose} title="Create New Rental">
+    <SimpleModal isOpen={isOpen} onClose={handleClose} title="Create New Rental" overflowVisible>
       <div className="space-y-6">
-        {/* Booking Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <FileText className="h-4 w-4 inline mr-2" />
+          <label className="mb-2 flex items-center text-sm font-medium text-slate-700">
+            <FileText className="mr-2 h-4 w-4" />
             Booking
           </label>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <div className="md:col-span-2">
-          <Select
-                value={selectedBookingId}
-                onChange={(e) => setSelectedBookingId(e.target.value)}
-            options={[
-                  { value: '', label: 'Select booking' },
-                  ...bookings.map(b => ({ value: b.id, label: `#${b.id.slice(-8)} • ${b.customer?.first_name || ''} ${b.customer?.last_name || ''} • ${new Date(b.booking_date).toLocaleDateString()}` }))
-                ]}
-              />
-        </div>
-        <div>
-              <Input
-                placeholder="Search bookings (type 2+ chars)..."
-                value={bookingSearch}
-                onChange={(e) => { setBookingSearch(e.target.value); }}
-              />
-            </div>
-          </div>
+          <AutoCompleteSelect
+            value={selectedBookingId}
+            onChange={setSelectedBookingId}
+            fetchPage={fetchBookingPage}
+            minQueryLength={0}
+            placeholder="Search name, invoice, or phone…"
+            error={errors.submit && !selectedBookingId ? errors.submit : undefined}
+          />
+          <p className="mt-1.5 text-xs text-slate-500">
+            Pending and confirmed bookings that do not yet have a rental. Type to search, scroll for more.
+          </p>
         </div>
 
         {selectedBooking && Array.isArray(selectedBooking.items) && selectedBooking.items.length > 0 && (
-          <div className="bg-gray-50 rounded-md p-3">
-            <div className="text-sm font-medium text-gray-900 mb-2">Items in Booking</div>
-            <div className="space-y-1 text-sm text-gray-700">
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="mb-2 text-sm font-medium text-slate-900">Items in Booking</div>
+            <div className="space-y-1 text-sm text-slate-700">
               {selectedBooking.items.map((it, idx) => (
-                <div key={idx}>
+                <div key={it.id || idx}>
                   {it.item?.name || 'Item'} × {it.quantity}
                 </div>
               ))}
@@ -196,61 +199,55 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
           </div>
         )}
 
-        {/* Rental Dates */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Calendar className="h-4 w-4 inline mr-2" />
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              <Calendar className="mr-2 inline h-4 w-4" />
               Rental Date
             </label>
             <Input
               type="date"
               value={form.rental_date}
               onChange={(e) => setForm({ ...form, rental_date: e.target.value })}
-              min={new Date().toISOString().split('T')[0]}
             />
             {errors.rental_date && (
-              <p className="mt-1 text-sm text-red-600 flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
+              <p className="mt-1 flex items-center text-sm text-red-600">
+                <AlertCircle className="mr-1 h-4 w-4" />
                 {errors.rental_date}
               </p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Calendar className="h-4 w-4 inline mr-2" />
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              <Calendar className="mr-2 inline h-4 w-4" />
               Return Date
             </label>
             <Input
               type="date"
               value={form.return_date}
               onChange={(e) => setForm({ ...form, return_date: e.target.value })}
-              min={form.rental_date || new Date().toISOString().split('T')[0]}
+              min={form.rental_date || undefined}
             />
             {errors.return_date && (
-              <p className="mt-1 text-sm text-red-600 flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
+              <p className="mt-1 flex items-center text-sm text-red-600">
+                <AlertCircle className="mr-1 h-4 w-4" />
                 {errors.return_date}
               </p>
             )}
           </div>
         </div>
 
-        {/* Note: Other fields removed to simplify flow */}
-
-        {/* Submit Error */}
-        {errors.submit && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-3">
-            <p className="text-sm text-red-600 flex items-center">
-              <AlertCircle className="h-4 w-4 mr-2" />
+        {errors.submit && selectedBookingId && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3">
+            <p className="flex items-center text-sm text-red-600">
+              <AlertCircle className="mr-2 h-4 w-4" />
               {errors.submit}
             </p>
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+        <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
           <Button variant="ghost" onClick={handleClose} disabled={loading}>
             Cancel
           </Button>

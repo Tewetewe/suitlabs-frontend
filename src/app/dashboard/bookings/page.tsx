@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardFooter } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -8,13 +9,17 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-utils';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
+import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
 import { Booking, BookingFilters, InvoiceData, Customer, Item, PackagePricing } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { BranchBadge } from '@/components/branch/BranchBadge';
+import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
-import { Plus, Edit, Calendar, User, DollarSign, Clock, Eye, FileText, Download, Shirt } from 'lucide-react';
+import { Plus, Edit, Calendar, User, DollarSign, Clock, Eye, FileText, Download, Shirt, ShoppingBag } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, Pagination, SkeletonRow } from '@/components/ui/DataDisplay';
@@ -48,19 +53,22 @@ export default function BookingsPage() {
     customer_id: string;
     booking_date: string;
     appointment_date?: string;
+    booking_guarantee: string;
+    booking_guarantee_other?: string;
     notes?: string;
     status: Booking['status'];
     payment_status: Booking['payment_status'];
     payment_method: NonNullable<Booking['payment_method']>;
-    items: Array<{ item_id: string; quantity: number; unit_price: number; discount_amount?: number }>;
+    items: Array<{ item_id: string; quantity: number; unit_price: number; discount_amount?: number; catalogue?: 'any' | 'trousers' }>;
   }>({
     customer_id: '',
     booking_date: new Date().toISOString().slice(0, 10),
+    booking_guarantee: 'KTP',
     status: 'pending',
     payment_status: 'pending',
     payment_method: 'dp_transfer',
     items: [
-      { item_id: '', quantity: 1, unit_price: 0, discount_amount: 0 }
+      { item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue: 'any' }
     ],
   });
 
@@ -80,42 +88,72 @@ export default function BookingsPage() {
 
   const updateItemField = (index: number, field: keyof (typeof bookingForm)['items'][number], value: string | number) => {
     setBookingForm(prev => {
-      const items = prev.items.map((it, i) => i === index ? { ...it, [field]: typeof value === 'string' ? (field === 'item_id' ? value : Number(value)) : value } : it);
+      const items = prev.items.map((it, i) => {
+        if (i !== index) return it;
+        if (field === 'item_id' || field === 'catalogue') return { ...it, [field]: String(value) };
+        return { ...it, [field]: typeof value === 'string' ? Number(value) : value };
+      });
       return { ...prev, items };
     });
   };
 
-  // Auto-fill item unit price when item_id selected (with cache to avoid repeated calls)
-  const itemPriceCacheRef = useRef<Map<string, number>>(new Map());
+  const itemCacheRef = useRef<Map<string, Item>>(new Map());
   const itemIdsKey = useMemo(() => Array.from(new Set(bookingForm.items.map(it => it.item_id).filter(Boolean))).sort().join(','), [bookingForm.items]);
   useEffect(() => {
-    const fillPrices = async () => {
+    const fillItemsAndPairTrousers = async () => {
       try {
         const uniqueIds = itemIdsKey ? itemIdsKey.split(',').filter(Boolean) : [];
         if (uniqueIds.length === 0) return;
-        const idsToFetch = uniqueIds.filter(id => !itemPriceCacheRef.current.has(id));
+        const idsToFetch = uniqueIds.filter(id => !itemCacheRef.current.has(id));
         if (idsToFetch.length > 0) {
           await Promise.all(idsToFetch.map(async (id) => {
             try {
               const item = await apiClient.getItem(id);
-              const price = item?.standard_price ?? item?.one_day_price ?? 0;
-              itemPriceCacheRef.current.set(id, price);
+              if (item) itemCacheRef.current.set(id, item);
             } catch {}
           }));
         }
-        setBookingForm(prev => ({
-          ...prev,
-          items: prev.items.map(it => it.item_id && (!it.unit_price || it.unit_price === 0)
-            ? { ...it, unit_price: itemPriceCacheRef.current.get(it.item_id) || 0 }
-            : it)
-        }));
+        const pairedTrousers: Item[] = [];
+        for (const id of uniqueIds) {
+          const item = itemCacheRef.current.get(id);
+          if (!item?.trousers_code || (item.type !== 'suit' && item.type !== 'jacket')) continue;
+          try {
+            const trousers = await apiClient.getItemByCode(item.trousers_code);
+            if (trousers?.id) {
+              itemCacheRef.current.set(trousers.id, trousers);
+              pairedTrousers.push(trousers);
+            }
+          } catch {}
+        }
+        setBookingForm(prev => {
+          let items = prev.items.map(it => it.item_id && (!it.unit_price || it.unit_price === 0)
+            ? { ...it, unit_price: itemCacheRef.current.get(it.item_id)?.standard_price ?? itemCacheRef.current.get(it.item_id)?.one_day_price ?? 0 }
+            : it);
+          for (const trousers of pairedTrousers) {
+            if (items.some(it => it.item_id === trousers.id)) continue;
+            const suitIndex = items.findIndex(it => itemCacheRef.current.get(it.item_id)?.trousers_code === trousers.code);
+            const line = {
+              item_id: trousers.id,
+              quantity: 1,
+              unit_price: trousers.standard_price ?? trousers.one_day_price ?? 0,
+              discount_amount: 0,
+              catalogue: 'trousers' as const,
+            };
+            if (suitIndex >= 0) {
+              items = [...items.slice(0, suitIndex + 1), line, ...items.slice(suitIndex + 1)];
+            } else {
+              items = [...items, line];
+            }
+          }
+          return { ...prev, items };
+        });
       } catch {}
     };
-    fillPrices();
+    fillItemsAndPairTrousers();
   }, [itemIdsKey]);
 
-  const addItemLine = () => {
-    setBookingForm(prev => ({ ...prev, items: [...prev.items, { item_id: '', quantity: 1, unit_price: 0, discount_amount: 0 }] }));
+  const addItemLine = (catalogue: 'any' | 'trousers' = 'any') => {
+    setBookingForm(prev => ({ ...prev, items: [...prev.items, { item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue }] }));
   };
 
   const removeItemLine = (index: number) => {
@@ -127,6 +165,10 @@ export default function BookingsPage() {
     const errs: Record<string, string> = {};
     if (!bookingForm.customer_id) errs.customer_id = 'Customer ID is required';
     if (!bookingForm.booking_date) errs.booking_date = 'Booking date is required';
+    const bookingGuarantee = bookingForm.booking_guarantee === 'Other'
+      ? bookingForm.booking_guarantee_other?.trim()
+      : bookingForm.booking_guarantee;
+    if (!bookingGuarantee) errs.booking_guarantee = 'Booking guarantee is required';
     if (bookingForm.items.length === 0) errs.items = 'At least one item is required';
     
     // Validate that all items have valid item_id
@@ -151,6 +193,7 @@ export default function BookingsPage() {
         customer_id: bookingForm.customer_id,
         booking_date: new Date(bookingForm.booking_date).toISOString(),
         appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
+        booking_guarantee: bookingGuarantee,
         notes: bookingForm.notes,
         status: bookingForm.status,
         payment_status: bookingForm.payment_status,
@@ -188,27 +231,33 @@ export default function BookingsPage() {
       setBookingForm({
         customer_id: '',
         booking_date: new Date().toISOString().slice(0, 10),
+        booking_guarantee: 'KTP',
         status: 'pending',
         payment_status: 'pending',
         payment_method: 'dp_transfer',
-        items: [{ item_id: '', quantity: 1, unit_price: 0, discount_amount: 0 }],
+        items: [{ item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue: 'any' }],
       });
       setDiscountCode('');
       setDownPayment(0);
       await loadBookings();
     } catch (e) {
       console.error('Create booking failed', e);
+      setFormErrors({ submit: apiErrorMessage(e, 'Failed to create booking. Please try again.') });
     } finally {
       setCreating(false);
     }
   };
 
   const openEdit = (booking: Booking) => {
+    const standardGuarantees = ['KTP', 'Passport', 'Student ID'];
+    const isStandardGuarantee = standardGuarantees.includes(booking.booking_guarantee);
     setActiveBooking(booking);
     setBookingForm({
       customer_id: booking.customer_id,
       booking_date: booking.booking_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
       appointment_date: booking.appointment_date?.slice(0, 10),
+      booking_guarantee: isStandardGuarantee ? booking.booking_guarantee : 'Other',
+      booking_guarantee_other: isStandardGuarantee ? '' : booking.booking_guarantee,
       notes: booking.notes || '',
       status: booking.status,
       payment_status: booking.payment_status,
@@ -218,6 +267,7 @@ export default function BookingsPage() {
         quantity: it.quantity,
         unit_price: it.unit_price || it.final_price || 0,
         discount_amount: it.discount_amount || 0,
+        catalogue: it.item?.type === 'trousers' ? 'trousers' as const : 'any' as const,
       }))
     });
     setSelectedPackageId(booking.package_pricing_id || '');
@@ -230,6 +280,10 @@ export default function BookingsPage() {
     const errs: Record<string, string> = {};
     if (!bookingForm.customer_id) errs.customer_id = 'Customer ID is required';
     if (!bookingForm.booking_date) errs.booking_date = 'Booking date is required';
+    const bookingGuarantee = bookingForm.booking_guarantee === 'Other'
+      ? bookingForm.booking_guarantee_other?.trim()
+      : bookingForm.booking_guarantee;
+    if (!bookingGuarantee) errs.booking_guarantee = 'Booking guarantee is required';
     if (bookingForm.items.length === 0) errs.items = 'At least one item is required';
     
     // Validate that all items have valid item_id
@@ -246,11 +300,13 @@ export default function BookingsPage() {
             // Lock financial edits after payment completed; allow only non-financial fields
             notes: bookingForm.notes,
             appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
+            booking_guarantee: bookingGuarantee,
           }
         : {
             customer_id: bookingForm.customer_id,
             booking_date: new Date(bookingForm.booking_date).toISOString(),
             appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
+            booking_guarantee: bookingGuarantee,
             notes: bookingForm.notes,
             status: bookingForm.status,
             payment_status: bookingForm.payment_status,
@@ -292,6 +348,7 @@ export default function BookingsPage() {
       await loadBookings();
     } catch (e) {
       console.error('Update booking failed', e);
+      setFormErrors({ submit: apiErrorMessage(e, 'Failed to update booking. Please try again.') });
     } finally {
       setCreating(false);
     }
@@ -302,21 +359,39 @@ export default function BookingsPage() {
   const fetchCustomerOptions = async (query: string) => {
     if (query && query.trim().length >= 2) {
       const results = await apiClient.searchCustomers(query.trim());
-      return results.map((c) => ({ value: c.id, label: `${c.first_name} ${c.last_name} • ${c.email}` }));
+      return results.map((c) => ({ value: c.id, label: customerOptionLabel(c) }));
     }
     const customersRes = await apiClient.getCustomers({ page: 1, limit: 50 });
     const customers = customersRes?.data?.data?.customers as Customer[] || [];
-    return customers.map((c) => ({ value: c.id, label: `${c.first_name} ${c.last_name} • ${c.email}` }));
+    return customers.map((c) => ({ value: c.id, label: customerOptionLabel(c) }));
+  };
+
+  const itemOptionLabel = (it: Item) => {
+    const type = it.type ? it.type.charAt(0).toUpperCase() + it.type.slice(1) : 'Item';
+    const size = it.size?.label ? ` · ${it.size.label}` : '';
+    return `${it.name} · ${type}${size} (${it.code})`;
   };
 
   const fetchItemOptions = async (query: string) => {
     if (query && query.trim().length >= 2) {
       const results = await apiClient.searchItems(query.trim());
-      return results.map((it) => ({ value: it.id, label: `${it.name} (${it.code})` }));
+      return results.map((it) => ({ value: it.id, label: itemOptionLabel(it) }));
     }
     const itemsRes = await apiClient.getItems();
     const items = itemsRes?.data?.data?.items as Item[] || [];
-    return items.map((it) => ({ value: it.id, label: `${it.name} (${it.code})` }));
+    return items.map((it) => ({ value: it.id, label: itemOptionLabel(it) }));
+  };
+
+  const fetchTrousersOptions = async (query: string) => {
+    if (query && query.trim().length >= 2) {
+      const results = await apiClient.searchItems(query.trim());
+      return results
+        .filter((it) => it.type === 'trousers')
+        .map((it) => ({ value: it.id, label: itemOptionLabel(it) }));
+    }
+    const itemsRes = await apiClient.getItems({ type: 'trousers', page: 1, limit: 50 });
+    const items = itemsRes?.data?.data?.items as Item[] || [];
+    return items.map((it) => ({ value: it.id, label: itemOptionLabel(it) }));
   };
 
   // Load package pricing when modal opens
@@ -458,12 +533,17 @@ export default function BookingsPage() {
       
       if (!confirmed) return;
 
-      // Update the booking with full payment
-      await apiClient.updateBooking(bookingId, {
-        paid_amount: finalAmount,
-        payment_status: 'completed',
-        remaining_amount: 0
-      });
+      const remaining = booking.remaining_amount || Math.max(0, finalAmount - (booking.paid_amount || 0));
+      if (remaining <= 0) {
+        alert('This booking is already fully paid.');
+        return;
+      }
+      await apiClient.addPayment(
+        bookingId,
+        remaining,
+        booking.payment_method || 'cash',
+        new Date().toISOString().slice(0, 10)
+      );
 
       // Refresh the bookings list
       await loadBookings();
@@ -485,10 +565,15 @@ export default function BookingsPage() {
         title="Bookings"
         subtitle="Manage customer bookings and reservations"
         action={
-          <Button size="md" onClick={() => setIsCreateModalOpen(true)}>
-            <Plus className="h-4 w-4" />
-            New Booking
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/dashboard/cashier">
+              <Button size="md" variant="secondary">Cashier POS</Button>
+            </Link>
+            <Button size="md" onClick={() => setIsCreateModalOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New Booking
+            </Button>
+          </div>
         }
       >
         <FilterBar>
@@ -535,12 +620,17 @@ export default function BookingsPage() {
                         </h3>
                         <Badge variant={bookingStatusVariant(booking.status)}>{booking.status}</Badge>
                         <Badge variant={paymentStatusVariant(booking.payment_status)}>{booking.payment_status}</Badge>
+                        <BranchBadge branch={booking.branch} />
+                        {booking.payment_method && (
+                          <Badge variant="default">{formatPaymentMethod(booking.payment_method)}</Badge>
+                        )}
                       </div>
                       {booking.customer && (
                         <div className="flex items-center text-sm text-gray-600">
                           <User className="h-4 w-4 mr-2 flex-shrink-0" />
                           <div className="min-w-0">
                             <span className="font-medium">{booking.customer.first_name} {booking.customer.last_name}</span>
+                            <div className="mt-1"><BranchBadge branch={booking.customer.branch} always /></div>
                             <div className="text-xs text-gray-500 truncate sm:inline sm:ml-2">
                               {booking.customer.email || '-'}
                             </div>
@@ -753,6 +843,14 @@ export default function BookingsPage() {
                           <span className="hidden sm:inline">Full Payment</span>
                         </Button>
                       )}
+                      {booking.status !== 'cancelled' && (
+                        <Link href={`/dashboard/sales?booking_id=${booking.id}&customer_id=${booking.customer_id}`}>
+                          <Button variant="ghost" size="sm" title="Sell add-on">
+                            <ShoppingBag className="h-4 w-4 sm:mr-1" />
+                            <span className="hidden sm:inline">Add-on sale</span>
+                          </Button>
+                        </Link>
+                      )}
                     </div>
                   </div>
                 </CardFooter>
@@ -779,6 +877,27 @@ export default function BookingsPage() {
               />
               <Input label="Booking Date" type="date" value={bookingForm.booking_date} onChange={(e) => updateBookingField('booking_date', e.target.value)} error={formErrors.booking_date} />
               <Input label="Appointment Date" type="date" value={bookingForm.appointment_date || ''} onChange={(e) => updateBookingField('appointment_date', e.target.value)} />
+              <Select
+                label="Booking Guarantee"
+                value={bookingForm.booking_guarantee}
+                onChange={(e) => updateBookingField('booking_guarantee', e.target.value)}
+                options={[
+                  { value: 'KTP', label: 'KTP' },
+                  { value: 'Passport', label: 'Passport' },
+                  { value: 'Student ID', label: 'Student ID' },
+                  { value: 'Other', label: 'Other' },
+                ]}
+                error={formErrors.booking_guarantee}
+              />
+              {bookingForm.booking_guarantee === 'Other' && (
+                <Input
+                  label="Other Guarantee"
+                  value={bookingForm.booking_guarantee_other || ''}
+                  onChange={(e) => updateBookingField('booking_guarantee_other', e.target.value)}
+                  error={formErrors.booking_guarantee}
+                  placeholder="Enter guarantee type"
+                />
+              )}
               <Input label="Notes" value={bookingForm.notes || ''} onChange={(e) => updateBookingField('notes', e.target.value)} />
               <Select
                 label="Package (optional)"
@@ -798,32 +917,36 @@ export default function BookingsPage() {
                 { value: 'partial', label: 'Partial' },
                 { value: 'completed', label: 'Completed' },
               ]} />
-              <Select label="Payment Method" value={bookingForm.payment_method} onChange={(e) => updateBookingField('payment_method', e.target.value)} options={[
-                { value: 'dp_cash', label: 'DP Cash' },
-                { value: 'full_cash', label: 'Full Cash' },
-                { value: 'dp_transfer', label: 'DP Transfer' },
-                { value: 'full_transfer', label: 'Full Transfer' },
-              ]} />
+              <Select
+                label="Payment Method"
+                value={bookingForm.payment_method}
+                onChange={(e) => updateBookingField('payment_method', e.target.value)}
+                options={[...BOOKING_PAYMENT_METHOD_OPTIONS]}
+              />
               <Input label="Discount Code (optional)" value={discountCode} onChange={(e) => setDiscountCode(e.target.value)} placeholder="Enter code" />
               <Input label="Down Payment" type="number" value={String(downPayment)} onChange={(e) => setDownPayment(Number(e.target.value))} placeholder="Enter amount" />
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <h4 className="font-medium">Items</h4>
-                <Button size="sm" onClick={addItemLine}>Add Item</Button>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')}>Add trousers</Button>
+                  <Button size="sm" onClick={() => addItemLine()}>Add Item</Button>
+                </div>
               </div>
+              <p className="text-xs text-gray-500">Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair.</p>
               {formErrors.items && <div className="text-sm text-red-600">{formErrors.items}</div>}
               <div className="space-y-3">
                 {bookingForm.items.map((it, idx) => (
                   <div key={idx} className="grid grid-cols-12 gap-2 items-end">
                     <div className="col-span-4">
                       <AutoCompleteSelect
-                        label="Item"
+                        label={it.catalogue === 'trousers' ? 'Trousers' : 'Item'}
                         value={it.item_id}
                         onChange={(val) => updateItemField(idx, 'item_id', val)}
-                        fetchOptions={fetchItemOptions}
-                        placeholder="Search items (2+ chars)"
+                        fetchOptions={it.catalogue === 'trousers' ? fetchTrousersOptions : fetchItemOptions}
+                        placeholder={it.catalogue === 'trousers' ? 'Search trousers (2+ chars)' : 'Search items (2+ chars)'}
                       />
                     </div>
                     <div className="col-span-2"><Input label="Qty" type="number" value={String(it.quantity)} onChange={(e) => updateItemField(idx, 'quantity', Number(e.target.value))} error={formErrors[`item_qty_${idx}`]} /></div>
@@ -853,6 +976,7 @@ export default function BookingsPage() {
                 <Button onClick={submitCreateBooking} loading={creating}>Create</Button>
               </div>
             </div>
+            {formErrors.submit && <div className="text-sm text-red-600">{formErrors.submit}</div>}
           </div>
         </SimpleModal>
 
@@ -868,25 +992,56 @@ export default function BookingsPage() {
               <AutoCompleteSelect label="Customer" value={bookingForm.customer_id} onChange={(val) => updateBookingField('customer_id', val)} fetchOptions={fetchCustomerOptions} error={formErrors.customer_id} placeholder="Search customers (2+ chars)" />
               <Input label="Booking Date" type="date" value={bookingForm.booking_date} onChange={(e) => updateBookingField('booking_date', e.target.value)} error={formErrors.booking_date} />
               <Input label="Appointment Date" type="date" value={bookingForm.appointment_date || ''} onChange={(e) => updateBookingField('appointment_date', e.target.value)} />
+              <Select
+                label="Booking Guarantee"
+                value={bookingForm.booking_guarantee}
+                onChange={(e) => updateBookingField('booking_guarantee', e.target.value)}
+                options={[
+                  { value: 'KTP', label: 'KTP' },
+                  { value: 'Passport', label: 'Passport' },
+                  { value: 'Student ID', label: 'Student ID' },
+                  { value: 'Other', label: 'Other' },
+                ]}
+                error={formErrors.booking_guarantee}
+              />
+              {bookingForm.booking_guarantee === 'Other' && (
+                <Input
+                  label="Other Guarantee"
+                  value={bookingForm.booking_guarantee_other || ''}
+                  onChange={(e) => updateBookingField('booking_guarantee_other', e.target.value)}
+                  error={formErrors.booking_guarantee}
+                  placeholder="Enter guarantee type"
+                />
+              )}
               <Input label="Notes" value={bookingForm.notes || ''} onChange={(e) => updateBookingField('notes', e.target.value)} />
               <Select label="Package (optional)" value={selectedPackageId} onChange={(e) => handleSelectPackage(e.target.value)} options={packageOptions.map(o => ({ value: o.value, label: o.label }))} disabled={activeBooking?.payment_status === 'completed'} />
               <Select label="Status" value={bookingForm.status} onChange={(e) => updateBookingField('status', e.target.value)} options={[{ value: 'pending', label: 'Pending' }, { value: 'confirmed', label: 'Confirmed' }, { value: 'active', label: 'Active' }, { value: 'completed', label: 'Completed' }, { value: 'cancelled', label: 'Cancelled' }]} disabled={activeBooking?.payment_status === 'completed'} />
               <Select label="Payment Status" value={bookingForm.payment_status} onChange={(e) => updateBookingField('payment_status', e.target.value)} options={[{ value: 'pending', label: 'Pending' }, { value: 'partial', label: 'Partial' }, { value: 'completed', label: 'Completed' }]} disabled={activeBooking?.payment_status === 'completed'} />
-              <Select label="Payment Method" value={bookingForm.payment_method} onChange={(e) => updateBookingField('payment_method', e.target.value)} options={[{ value: 'dp_cash', label: 'DP Cash' }, { value: 'full_cash', label: 'Full Cash' }, { value: 'dp_transfer', label: 'DP Transfer' }, { value: 'full_transfer', label: 'Full Transfer' }              ]} disabled={activeBooking?.payment_status === 'completed'} />
+              <Select
+                label="Payment Method"
+                value={bookingForm.payment_method}
+                onChange={(e) => updateBookingField('payment_method', e.target.value)}
+                options={[...BOOKING_PAYMENT_METHOD_OPTIONS]}
+                disabled={activeBooking?.payment_status === 'completed'}
+              />
               <Input label="Discount Code (optional)" value={discountCode} onChange={(e) => setDiscountCode(e.target.value)} placeholder="Enter code" disabled={activeBooking?.payment_status === 'completed'} />
               <Input label="Down Payment" type="number" value={String(downPayment)} onChange={(e) => setDownPayment(Number(e.target.value))} placeholder="Enter amount" disabled={activeBooking?.payment_status === 'completed'} />
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <h4 className="font-medium">Items</h4>
-                <Button size="sm" onClick={addItemLine}>Add Item</Button>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={activeBooking?.payment_status === 'completed'}>Add trousers</Button>
+                  <Button size="sm" onClick={() => addItemLine()} disabled={activeBooking?.payment_status === 'completed'}>Add Item</Button>
+                </div>
               </div>
+              <p className="text-xs text-gray-500">Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair.</p>
               {formErrors.items && <div className="text-sm text-red-600">{formErrors.items}</div>}
               <div className="space-y-3">
                 {bookingForm.items.map((it, idx) => (
                   <div key={idx} className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-4"><AutoCompleteSelect label="Item" value={it.item_id} onChange={(val) => { if (activeBooking?.payment_status !== 'completed') updateItemField(idx, 'item_id', val); }} fetchOptions={fetchItemOptions} placeholder="Search items (2+ chars)" /></div>
+                    <div className="col-span-4"><AutoCompleteSelect label={it.catalogue === 'trousers' ? 'Trousers' : 'Item'} value={it.item_id} onChange={(val) => { if (activeBooking?.payment_status !== 'completed') updateItemField(idx, 'item_id', val); }} fetchOptions={it.catalogue === 'trousers' ? fetchTrousersOptions : fetchItemOptions} placeholder={it.catalogue === 'trousers' ? 'Search trousers (2+ chars)' : 'Search items (2+ chars)'} /></div>
                     <div className="col-span-2"><Input label="Qty" type="number" value={String(it.quantity)} onChange={(e) => updateItemField(idx, 'quantity', Number(e.target.value))} disabled={activeBooking?.payment_status === 'completed'} /></div>
                     <div className="col-span-3"><Input label="Unit Price" type="number" value={String(it.unit_price)} onChange={(e) => updateItemField(idx, 'unit_price', Number(e.target.value))} disabled={!!selectedPackageId || activeBooking?.payment_status === 'completed'} /></div>
                     <div className="col-span-2"><Input label="Discount" type="number" value={String(it.discount_amount || 0)} onChange={(e) => updateItemField(idx, 'discount_amount', Number(e.target.value))} disabled={!!selectedPackageId || activeBooking?.payment_status === 'completed'} /></div>
@@ -914,6 +1069,7 @@ export default function BookingsPage() {
                 <Button onClick={submitEditBooking} loading={creating}>Save</Button>
               </div>
             </div>
+            {formErrors.submit && <div className="text-sm text-red-600">{formErrors.submit}</div>}
           </div>
         </SimpleModal>
 
@@ -925,8 +1081,11 @@ export default function BookingsPage() {
         >
           <div className="space-y-3 text-sm">
             <div><strong>ID:</strong> {activeBooking?.id}</div>
-            <div><strong>Customer:</strong> {activeBooking?.customer?.first_name} {activeBooking?.customer?.last_name} ({activeBooking?.customer?.email})</div>
-            <div><strong>Status:</strong> {activeBooking?.status} • <strong>Payment:</strong> {activeBooking?.payment_status}</div>
+            <div>
+              <strong>Customer:</strong> {activeBooking?.customer?.first_name} {activeBooking?.customer?.last_name} ({activeBooking?.customer?.email})
+              {activeBooking?.customer?.branch?.name ? ` · ${activeBooking.customer.branch.name}` : ''}
+            </div>
+            <div><strong>Status:</strong> {activeBooking?.status} • <strong>Payment:</strong> {activeBooking?.payment_status} • <strong>Method:</strong> {formatPaymentMethod(activeBooking?.payment_method)}</div>
             <div><strong>Dates:</strong> {activeBooking?.booking_date && formatDate(activeBooking.booking_date)} {activeBooking?.appointment_date && `→ ${formatDate(activeBooking.appointment_date)}`}</div>
             {!activeBooking?.package_pricing_id && (
               <div><strong>Total:</strong> {formatCurrency((activeBooking?.total_amount || 0) - (activeBooking?.discount_amount || 0))}</div>

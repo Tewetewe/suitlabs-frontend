@@ -11,6 +11,7 @@ function getApiBase(): string {
 
 const IOS_SCHEME = 'bprint://';
 const ANDROID_SCHEME = 'my.bluetoothprint.scheme://';
+const SUITLABS_PRINT_BRIDGE_SCHEME = 'suitlabs-print://print';
 
 function buildResponseUrl(path: string, query: string): string {
   return `${getApiBase()}${path}${query}`;
@@ -24,6 +25,11 @@ function buildAndroidUrl(path: string, query: string): string {
   return `${ANDROID_SCHEME}${buildResponseUrl(path, query)}`;
 }
 
+function buildAndroidBridgeUrl(path: string, query: string): string {
+  const responseUrl = buildResponseUrl(path, `${query}&format=array`);
+  return `${SUITLABS_PRINT_BRIDGE_SCHEME}?url=${encodeURIComponent(responseUrl)}`;
+}
+
 export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
   const fmt = format ? `&format=${format}` : '';
   return buildIosUrl('/api/v1/bprint/booking-invoice', `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`);
@@ -32,6 +38,20 @@ export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full
 export function getBprintRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
   const fmt = format ? `&format=${format}` : '';
   return buildIosUrl('/api/v1/bprint/rental-invoice', `?rental_id=${encodeURIComponent(rentalId)}${fmt}`);
+}
+
+export function getAndroidBridgeBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full'): string {
+  return buildAndroidBridgeUrl(
+    '/api/v1/bprint/booking-invoice',
+    `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}`,
+  );
+}
+
+export function getAndroidBridgeRentalInvoiceUrl(rentalId: string): string {
+  return buildAndroidBridgeUrl(
+    '/api/v1/bprint/rental-invoice',
+    `?rental_id=${encodeURIComponent(rentalId)}`,
+  );
 }
 
 export function getBprintProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {

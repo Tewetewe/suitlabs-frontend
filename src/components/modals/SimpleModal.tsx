@@ -13,6 +13,8 @@ interface SimpleModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   /** Optional footer area (buttons) */
   footer?: React.ReactNode;
+  /** Keep dropdowns visible instead of clipping them */
+  overflowVisible?: boolean;
 }
 
 const sizeClass = {
@@ -22,7 +24,7 @@ const sizeClass = {
   xl:  'max-w-5xl',
 };
 
-export default function SimpleModal({ isOpen, title, onClose, children, size = 'lg', footer }: SimpleModalProps) {
+export default function SimpleModal({ isOpen, title, onClose, children, size = 'lg', footer, overflowVisible = false }: SimpleModalProps) {
   // Close on Escape
   useEffect(() => {
     if (!isOpen) return;
@@ -65,7 +67,7 @@ export default function SimpleModal({ isOpen, title, onClose, children, size = '
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-5">
+        <div className={clsx('flex-1 px-4 py-4 md:px-5 md:py-5', overflowVisible ? 'overflow-visible' : 'overflow-y-auto')}>
           {children}
         </div>
 

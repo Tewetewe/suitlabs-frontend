@@ -6,7 +6,7 @@ import { formatCurrency } from '@/lib/currency';
 import { Rental } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { getAndroidBluetoothRentalInvoiceUrl, getBprintRentalInvoiceUrl } from '@/lib/bprint';
+import { getAndroidBridgeRentalInvoiceUrl, getBprintRentalInvoiceUrl } from '@/lib/bprint';
 import SimpleModal from '@/components/modals/SimpleModal';
 
 interface RentalInvoiceModalProps {
@@ -35,6 +35,8 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
   
   // Generate invoice number
   const invoiceNumber = `INV-${rental.id.slice(-8).toUpperCase()}`;
+  const shopSubtitle = rental.branch?.receipt_subtitle || 'Sewa Jas Jimbaran';
+  const shopAddress = rental.branch?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362';
 
   // Bprint-style date formats (match backend bprint & booking invoice)
   const bprintDate = (d: string | Date) =>
@@ -75,8 +77,8 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
           <div class="thermal-receipt">
             <div class="receipt-center">
               <div class="receipt-title">SUITLABS BALI</div>
-              <div class="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
-              <div class="receipt-line">Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362</div>
+              <div class="receipt-subtitle">${shopSubtitle}</div>
+              <div class="receipt-line">${shopAddress}</div>
             </div>
             <div class="receipt-divider"></div>
             <div class="receipt-line">Invoice: ${invoiceNumber}</div>
@@ -257,7 +259,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
       return;
     }
     if (isAndroid) {
-      window.location.href = getAndroidBluetoothRentalInvoiceUrl(rental.id);
+      window.location.href = getAndroidBridgeRentalInvoiceUrl(rental.id);
       return;
     }
     printInvoice();
@@ -383,8 +385,8 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             {/* Company Header - same as bprint/booking */}
             <div className="receipt-center">
               <div className="receipt-title">SUITLABS BALI</div>
-              <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
-              <div className="receipt-line">Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362</div>
+              <div className="receipt-subtitle">{shopSubtitle}</div>
+              <div className="receipt-line">{shopAddress}</div>
             </div>
 
             <div className="receipt-divider"></div>
@@ -509,8 +511,8 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
               {/* Company Header - same as bprint/booking */}
               <div className="receipt-center">
                 <div className="receipt-title">SUITLABS BALI</div>
-                <div className="receipt-subtitle">Sewa Jas Jimbaran & Nusadua</div>
-                <div className="receipt-line">Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362</div>
+                <div className="receipt-subtitle">{shopSubtitle}</div>
+                <div className="receipt-line">{shopAddress}</div>
               </div>
 
               <div className="receipt-divider"></div>

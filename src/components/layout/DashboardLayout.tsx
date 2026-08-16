@@ -5,6 +5,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBranch } from '@/contexts/BranchContext';
+import { ALL_BRANCHES_ID, branchAccent } from '@/lib/branch-scope';
 import { Menu as HeadlessMenu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { 
   LayoutDashboard, 
@@ -21,8 +23,16 @@ import {
   Shirt,
   FileSpreadsheet,
   BarChart3,
+  ShoppingBag,
+  Wallet,
+  Landmark,
+  Store,
+  Smartphone,
+  Monitor,
+  MapPin,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { CashierChromeProvider, useCashierChrome } from '@/components/cashier/CashierChromeContext';
 
 type NavigationRole = 'admin' | 'staff' | 'user';
 
@@ -42,9 +52,12 @@ const navigationSections: NavigationSection[] = [
   {
     title: null as string | null,
     items: [
+      { name: 'Cashier', href: '/dashboard/cashier', icon: Store, roles: ['admin', 'staff'] },
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'staff'] },
       { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar, roles: ['admin', 'staff'] },
       { name: 'Rentals', href: '/dashboard/rentals', icon: FileText, roles: ['admin', 'staff'] },
+      { name: 'Expenses', href: '/dashboard/expenses', icon: Wallet, roles: ['admin', 'staff'] },
+      { name: 'Sales', href: '/dashboard/sales', icon: ShoppingBag, roles: ['admin', 'staff'] },
     ],
   },
   {
@@ -62,7 +75,9 @@ const navigationSections: NavigationSection[] = [
     title: 'Admin',
     items: [
       { name: 'Bulk Input Sync', href: '/dashboard/admin/bulk-input-sync', icon: FileSpreadsheet, roles: ['admin'] },
+      { name: 'Assets', href: '/dashboard/admin/assets', icon: Landmark, roles: ['admin'] },
       { name: 'Financial Report', href: '/dashboard/admin/financial-report', icon: BarChart3, roles: ['admin'] },
+      { name: 'Branches', href: '/dashboard/admin/branches', icon: MapPin, roles: ['admin'] },
     ],
   },
 ] ;
@@ -74,19 +89,19 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  return (
+    <CashierChromeProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </CashierChromeProvider>
+  );
+}
+
+function DashboardLayoutInner({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, loading, isAuthenticated } = useAuth();
-
-  useEffect(() => {
-    // Tablet-first: treat <768px as mobile. iPad/tablet uses the full sidebar layout.
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
+  const { allowedBranches, currentBranch, currentBranchId, viewingAll, setCurrentBranchId } = useBranch();
 
   useEffect(() => {
     if (loading) return;
@@ -97,25 +112,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, [isAuthenticated, loading, router]);
 
   useEffect(() => {
-    if (isMobile) setSidebarOpen(false);
-  }, [pathname, isMobile]);
+    setSidebarOpen(false);
+  }, [pathname]);
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
   const role = user?.role as NavigationRole | undefined;
+  const isCashier = pathname === '/dashboard/cashier';
+  const { chrome, setChrome } = useCashierChrome();
+  const cashierPhone = isCashier && chrome === 'phone';
   const allowedNavigation = navigation.filter(item => !item.roles || (role ? item.roles.includes(role) : false));
   const mobileNavigation = allowedNavigation.filter(item =>
-    ['/dashboard', '/dashboard/items', '/dashboard/bookings', '/dashboard/rentals', '/dashboard/customers'].includes(item.href)
+    ['/dashboard/cashier', '/dashboard/bookings', '/dashboard/rentals', '/dashboard/items', '/dashboard/sales'].includes(item.href)
   );
   const activePage = navigation.find(item =>
     item.href === pathname || (item.href !== '/dashboard' && pathname?.startsWith(item.href))
   );
 
   return (
-    <div className="min-h-screen bg-transparent">
-      {/* ── Mobile drawer overlay ─────────────────────────────────── */}
+    <div className={clsx(isCashier ? 'h-dvh overflow-hidden bg-transparent' : 'min-h-screen bg-transparent')}>
+      {/* ── Drawer overlay (mobile always; cashier also on tablet) ── */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden animate-fade-in"
+          className={clsx(
+            'fixed inset-0 z-40 bg-black/40 backdrop-blur-sm animate-fade-in',
+            !isCashier && 'md:hidden'
+          )}
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -125,7 +146,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         className={clsx(
           'fixed inset-y-0 left-0 z-50 flex w-72 flex-col',
           'glass-panel-strong',
-          'transform transition-transform duration-300 ease-in-out md:translate-x-0',
+          'transform transition-transform duration-300 ease-in-out',
+          !isCashier && 'md:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -142,9 +164,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             />
           </Link>
 
-          {/* Close on mobile */}
           <button
-            className="ml-auto text-slate-500 hover:text-slate-900 md:hidden touch-manipulation"
+            className={clsx(
+              'ml-auto text-slate-500 hover:text-slate-900 touch-manipulation min-h-11 min-w-11 flex items-center justify-center',
+              !isCashier && 'md:hidden'
+            )}
             onClick={() => setSidebarOpen(false)}
           >
             <X className="h-5 w-5" />
@@ -196,28 +220,95 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </aside>
 
       {/* ── Main area ─────────────────────────────────────────────── */}
-      <div className="md:pl-72">
+      <div className={clsx(!isCashier && 'md:pl-72', isCashier && 'flex h-dvh flex-col')}>
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b border-black/5 bg-white/40 px-4 backdrop-blur-xl sm:px-6">
-          <div className="flex items-center gap-3">
-            {/* Hamburger */}
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white/40 px-3 backdrop-blur-xl sm:gap-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden -ml-1 flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 hover:bg-white/50 touch-manipulation"
+              className={clsx(
+                '-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-white/50 touch-manipulation',
+                !isCashier && 'md:hidden'
+              )}
             >
               <Menu className="h-5 w-5" />
             </button>
 
-            {/* Breadcrumb-style current page label */}
             {activePage && (
-              <span className="text-sm font-semibold text-slate-800">
+              <span className={clsx('truncate text-sm font-semibold text-slate-800', isCashier && 'hidden sm:inline')}>
                 {activePage.name}
               </span>
             )}
           </div>
 
-          {/* Right side */}
+          {isCashier && (
+            <div className="flex rounded-full bg-white/70 p-0.5 ring-1 ring-black/5">
+              <button
+                type="button"
+                onClick={() => setChrome('phone')}
+                className={clsx(
+                  'flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold touch-manipulation sm:px-3',
+                  chrome === 'phone' ? 'bg-slate-900 text-white' : 'text-slate-600'
+                )}
+              >
+                <Smartphone className="h-3.5 w-3.5" />
+                Phone
+              </button>
+              <button
+                type="button"
+                onClick={() => setChrome('counter')}
+                className={clsx(
+                  'flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold touch-manipulation sm:px-3',
+                  chrome === 'counter' ? 'bg-slate-900 text-white' : 'text-slate-600'
+                )}
+              >
+                <Monitor className="h-3.5 w-3.5" />
+                Counter
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
+            {(user?.role === 'admin' || allowedBranches.length > 1) && (
+              <label className="sr-only" htmlFor="branch-switcher">Current shop</label>
+            )}
+            {(user?.role === 'admin' || allowedBranches.length > 1) ? (
+              <div className="flex items-center gap-2">
+                <span
+                  className={clsx(
+                    'hidden h-2.5 w-2.5 rounded-full sm:block',
+                    viewingAll
+                      ? 'bg-slate-400'
+                      : branchAccent(currentBranch?.code) === 'emerald'
+                        ? 'bg-emerald-500'
+                        : 'bg-indigo-500'
+                  )}
+                />
+                <select
+                  id="branch-switcher"
+                  value={viewingAll ? ALL_BRANCHES_ID : (currentBranchId || '')}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCurrentBranchId(value === ALL_BRANCHES_ID ? null : value);
+                  }}
+                  className="max-w-[9.5rem] rounded-full bg-white/70 py-1.5 pl-3 pr-7 text-xs font-semibold text-slate-800 ring-1 ring-black/5 sm:max-w-[12rem]"
+                >
+                  {user?.role === 'admin' && <option value={ALL_BRANCHES_ID}>All branches</option>}
+                  {allowedBranches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : currentBranch ? (
+              <div className="flex items-center gap-2 rounded-full bg-white/70 px-3 py-1.5 text-xs font-semibold text-slate-800 ring-1 ring-black/5">
+                <span className={clsx(
+                  'h-2.5 w-2.5 rounded-full',
+                  branchAccent(currentBranch.code) === 'emerald' ? 'bg-emerald-500' : 'bg-indigo-500'
+                )} />
+                {currentBranch.name}
+              </div>
+            ) : null}
+
             <HeadlessMenu as="div" className="relative">
               <MenuButton
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-b from-indigo-500 to-indigo-600 text-xs font-bold text-white shrink-0 shadow-sm shadow-indigo-500/20 ring-1 ring-black/5 hover:shadow-md transition touch-manipulation"
@@ -261,14 +352,23 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="p-4 pb-24 sm:p-6 sm:pb-24 md:pb-8 md:p-6 lg:p-8">
+        <main
+          key={viewingAll ? ALL_BRANCHES_ID : (currentBranchId || 'shop')}
+          className={clsx(
+            isCashier
+              ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-0'
+              : 'p-4 pb-24 sm:p-6 sm:pb-24 md:pb-8 md:p-6 lg:p-8'
+          )}
+        >
           {children}
         </main>
       </div>
 
-      {/* ── Mobile bottom nav ───────────────────────────────────── */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white/45 px-2 pb-safe pt-1 backdrop-blur-xl md:hidden">
+      {/* ── Mobile bottom nav. Phone cashier keeps it so staff can leave POS. ─ */}
+      <nav className={clsx(
+        'fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white/45 px-2 pb-safe pt-1 backdrop-blur-xl md:hidden',
+        isCashier && !cashierPhone && 'hidden'
+      )}>
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
           {mobileNavigation.map((item) => {
             const isActive = item.href === pathname || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
