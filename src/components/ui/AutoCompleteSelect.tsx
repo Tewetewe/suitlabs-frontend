@@ -24,6 +24,7 @@ interface AutoCompleteSelectProps {
   error?: string;
   clearable?: boolean;
   minQueryLength?: number;
+  emptyMessage?: string;
 }
 
 export default function AutoCompleteSelect({
@@ -36,6 +37,7 @@ export default function AutoCompleteSelect({
   error,
   clearable = true,
   minQueryLength = 2,
+  emptyMessage = 'No matches',
 }: AutoCompleteSelectProps) {
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<AutoOption[]>([]);
@@ -224,7 +226,7 @@ export default function AutoCompleteSelect({
           className="absolute z-[60] mt-1 max-h-64 w-full overflow-auto rounded-xl border border-black/10 bg-white py-1 shadow-lg"
         >
           {options.length === 0 && !searching && (
-            <li className="px-3 py-3 text-sm text-slate-500">No bookings match that search.</li>
+            <li className="px-3 py-3 text-sm text-slate-500">{emptyMessage}</li>
           )}
           {options.map((o, idx) => (
             <li

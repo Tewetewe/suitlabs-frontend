@@ -3,10 +3,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
+import { Select } from '@/components/ui/Select';
 import { Card, CardContent } from '@/components/ui/Card';
 import { apiClient } from '@/lib/api';
-import { Discount } from '@/types';
+import { Customer, Discount } from '@/types';
 import { formatCurrency } from '@/lib/currency';
+import { customerOptionLabel } from '@/lib/branch-scope';
+import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
 import { 
   Plus, 
   Edit, 
@@ -14,10 +18,28 @@ import {
   Tag, 
   TrendingUp, 
   CheckCircle,
-  Clock
+  Clock,
+  X
 } from 'lucide-react';
 import GenericDeleteConfirmModal from '@/components/modals/GenericDeleteConfirmModal';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { Badge, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+
+type DiscountTargetType = 'category' | 'item_type' | 'customer_tier' | 'specific_items' | 'specific_customers' | 'all';
+
+function normalizeTargetValue(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((id): id is string => typeof id === 'string' && id.length > 0);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      return normalizeTargetValue(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 export function DiscountManagement() {
   const [discounts, setDiscounts] = useState<Discount[]>([]);
@@ -46,7 +68,7 @@ export function DiscountManagement() {
     min_amount: '',
     max_discount_amount: '',
     applicable_to: 'booking' as 'booking' | 'item' | 'both',
-    target_type: 'all' as 'category' | 'item_type' | 'customer_tier' | 'specific_items' | 'all',
+    target_type: 'all' as DiscountTargetType,
     target_value: [] as string[],
     start_date: '',
     end_date: '',
@@ -55,6 +77,10 @@ export function DiscountManagement() {
     is_active: true,
     priority: '0'
   });
+  const [customerLabels, setCustomerLabels] = useState<Record<string, string>>({});
+  const [customerPickerValue, setCustomerPickerValue] = useState('');
+  const [formError, setFormError] = useState('');
+  const customerLabelCache = React.useRef<Record<string, string>>({});
 
   const toRFC3339 = (dateStr: string) => {
     try {
@@ -114,6 +140,11 @@ export function DiscountManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.target_type === 'specific_customers' && formData.target_value.length === 0) {
+      setFormError('Select at least one customer for this discount.');
+      return;
+    }
+    setFormError('');
     setLoading(true);
     
     try {
@@ -235,6 +266,67 @@ export function DiscountManagement() {
     });
     setShowCreateForm(false);
     setEditingDiscount(null);
+    setCustomerPickerValue('');
+    setFormError('');
+  };
+
+  const loadCustomerLabels = async (ids: string[]) => {
+    const missing = ids.filter((id) => id && !customerLabels[id]);
+    if (missing.length === 0) return;
+    const entries: Record<string, string> = {};
+    await Promise.all(missing.map(async (id) => {
+      try {
+        const customer = await apiClient.getCustomer(id);
+        entries[id] = customerOptionLabel(customer);
+      } catch {
+        entries[id] = id;
+      }
+      customerLabelCache.current[id] = entries[id];
+    }));
+    setCustomerLabels((prev) => ({ ...prev, ...entries }));
+  };
+
+  const fetchCustomerOptions = async (query: string) => {
+    const selected = new Set(formData.target_value);
+    const toOptions = (customers: Customer[]) =>
+      customers
+        .filter((customer) => !selected.has(customer.id))
+        .map((customer) => ({ value: customer.id, label: customerOptionLabel(customer) }));
+
+    const customers = (query && query.trim().length >= 2)
+      ? await apiClient.searchCustomers(query.trim())
+      : ((await apiClient.getCustomers({ page: 1, limit: 50 }))?.data?.data?.customers as Customer[] | undefined) || [];
+
+    const options = toOptions(customers);
+    setCustomerLabels((prev) => {
+      const next = { ...prev };
+      for (const option of options) {
+        next[option.value] = option.label;
+        customerLabelCache.current[option.value] = option.label;
+      }
+      return next;
+    });
+    return options;
+  };
+
+  const addTargetCustomer = (id: string, label?: string) => {
+    if (!id || formData.target_value.includes(id)) {
+      setCustomerPickerValue('');
+      return;
+    }
+    const resolvedLabel = label || customerLabelCache.current[id];
+    if (resolvedLabel) {
+      setCustomerLabels((prev) => ({ ...prev, [id]: resolvedLabel }));
+    } else {
+      void loadCustomerLabels([id]);
+    }
+    setFormData({ ...formData, target_value: [...formData.target_value, id] });
+    setCustomerPickerValue('');
+    setFormError('');
+  };
+
+  const removeTargetCustomer = (id: string) => {
+    setFormData({ ...formData, target_value: formData.target_value.filter((customerId) => customerId !== id) });
   };
 
   const startEdit = (discount: Discount) => {
@@ -247,8 +339,8 @@ export function DiscountManagement() {
       min_amount: discount.min_amount?.toString() || '',
       max_discount_amount: discount.max_discount_amount?.toString() || '',
       applicable_to: discount.applicable_to,
-      target_type: discount.target_type || 'all',
-      target_value: discount.target_value || [],
+      target_type: (discount.target_type || 'all') as DiscountTargetType,
+      target_value: normalizeTargetValue(discount.target_value),
       start_date: toDateInputValue(discount.start_date),
       end_date: toDateInputValue(discount.end_date),
       usage_limit: discount.usage_limit?.toString() || '',
@@ -258,26 +350,28 @@ export function DiscountManagement() {
     });
     setEditingDiscount(discount);
     setShowCreateForm(true);
+    setFormError('');
+    void loadCustomerLabels(normalizeTargetValue(discount.target_value));
   };
 
   const getDiscountStatus = (discount: Discount) => {
-    if (!discount.is_active) return { status: 'inactive', color: 'text-gray-500' };
+    if (!discount.is_active) return { status: 'inactive', variant: 'default' as const };
     
     const now = new Date();
     const startDate = discount.start_date ? new Date(discount.start_date) : null;
     const endDate = discount.end_date ? new Date(discount.end_date) : null;
     
-    if (startDate && now < startDate) return { status: 'scheduled', color: 'text-blue-500' };
-    if (endDate && now > endDate) return { status: 'expired', color: 'text-red-500' };
+    if (startDate && now < startDate) return { status: 'scheduled', variant: 'primary' as const };
+    if (endDate && now > endDate) return { status: 'expired', variant: 'danger' as const };
     if (discount.usage_limit && discount.usage_count && discount.usage_count >= discount.usage_limit) {
-      return { status: 'limit reached', color: 'text-orange-500' };
+      return { status: 'limit reached', variant: 'warning' as const };
     }
     
-    return { status: 'active', color: 'text-green-500' };
+    return { status: 'active', variant: 'success' as const };
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -341,61 +435,55 @@ export function DiscountManagement() {
                   placeholder="e.g., SUMMER2024"
                 />
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Discount Type
-                  </label>
-                  <select
-                    value={formData.discount_type}
-                    onChange={(e) => setFormData({ ...formData, discount_type: e.target.value as 'percentage' | 'amount' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    <option value="percentage">Percentage</option>
-                    <option value="amount">Fixed Amount</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Applicable To
-                  </label>
-                  <select
-                    value={formData.applicable_to}
-                    onChange={(e) => setFormData({ ...formData, applicable_to: e.target.value as 'booking' | 'item' | 'both' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    <option value="booking">Booking Only</option>
-                    <option value="item">Item Only</option>
-                    <option value="both">Both Booking & Item</option>
-                  </select>
-                </div>
-                
-                <Input
-                  label={`Discount Value (${formData.discount_type === 'percentage' ? '%' : 'Rp'})`}
-                  type="number"
-                  value={formData.discount_value}
-                  onChange={(e) => setFormData({ ...formData, discount_value: e.target.value })}
-                  required
-                  min="0"
-                  step="0.01"
+                <Select
+                  label="Discount Type"
+                  value={formData.discount_type}
+                  onChange={(e) => setFormData({ ...formData, discount_type: e.target.value as 'percentage' | 'amount' })}
+                  options={[
+                    { value: 'percentage', label: 'Percentage' },
+                    { value: 'amount', label: 'Fixed Amount' },
+                  ]}
+                />
+                <Select
+                  label="Applicable To"
+                  value={formData.applicable_to}
+                  onChange={(e) => setFormData({ ...formData, applicable_to: e.target.value as 'booking' | 'item' | 'both' })}
+                  options={[
+                    { value: 'booking', label: 'Booking Only' },
+                    { value: 'item', label: 'Item Only' },
+                    { value: 'both', label: 'Both Booking & Item' },
+                  ]}
                 />
                 
-                <Input
-                  label="Minimum Amount (Rp)"
-                  type="number"
+                {formData.discount_type === 'percentage' ? (
+                  <Input
+                    label="Discount Value (%)"
+                    type="number"
+                    value={formData.discount_value}
+                    onChange={(e) => setFormData({ ...formData, discount_value: e.target.value })}
+                    required
+                    min="0"
+                    step="0.01"
+                  />
+                ) : (
+                  <CurrencyInput
+                    label="Discount Value"
+                    value={formData.discount_value}
+                    onChange={(n) => setFormData({ ...formData, discount_value: n ? String(n) : '' })}
+                    required
+                  />
+                )}
+                
+                <CurrencyInput
+                  label="Minimum Amount"
                   value={formData.min_amount}
-                  onChange={(e) => setFormData({ ...formData, min_amount: e.target.value })}
-                  min="0"
-                  step="0.01"
+                  onChange={(n) => setFormData({ ...formData, min_amount: n ? String(n) : '' })}
                 />
                 
-                <Input
-                  label="Maximum Discount Amount (Rp)"
-                  type="number"
+                <CurrencyInput
+                  label="Maximum Discount Amount"
                   value={formData.max_discount_amount}
-                  onChange={(e) => setFormData({ ...formData, max_discount_amount: e.target.value })}
-                  min="0"
-                  step="0.01"
+                  onChange={(n) => setFormData({ ...formData, max_discount_amount: n ? String(n) : '' })}
                 />
                 
                 <Input
@@ -420,22 +508,27 @@ export function DiscountManagement() {
                   min="1"
                 />
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Target Type
-                  </label>
-                  <select
-                    value={formData.target_type}
-                    onChange={(e) => setFormData({ ...formData, target_type: e.target.value as 'category' | 'item_type' | 'customer_tier' | 'specific_items' | 'all' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    <option value="all">All Items</option>
-                    <option value="category">Specific Category</option>
-                    <option value="item_type">Item Type</option>
-                    <option value="customer_tier">Customer Tier</option>
-                    <option value="specific_items">Specific Items</option>
-                  </select>
-                </div>
+                <Select
+                  label="Target Type"
+                  value={formData.target_type}
+                  onChange={(e) => {
+                    const target_type = e.target.value as DiscountTargetType;
+                    setFormData({
+                      ...formData,
+                      target_type,
+                      target_value: target_type === formData.target_type ? formData.target_value : [],
+                    });
+                    setFormError('');
+                  }}
+                  options={[
+                    { value: 'all', label: 'All customers & items' },
+                    { value: 'specific_customers', label: 'Specific customers' },
+                    { value: 'category', label: 'Specific Category' },
+                    { value: 'item_type', label: 'Item Type' },
+                    { value: 'customer_tier', label: 'Customer Tier' },
+                    { value: 'specific_items', label: 'Specific Items' },
+                  ]}
+                />
 
                 <Input
                   label="Priority (Higher = Applied First)"
@@ -445,6 +538,47 @@ export function DiscountManagement() {
                   min="0"
                 />
               </div>
+
+              {formData.target_type === 'specific_customers' && (
+                <div className="space-y-2">
+                  <AutoCompleteSelect
+                    label="Customers"
+                    value={customerPickerValue}
+                    onChange={(id) => addTargetCustomer(id)}
+                    fetchOptions={fetchCustomerOptions}
+                    placeholder="Search customers to include"
+                    minQueryLength={2}
+                    emptyMessage="No matching customers"
+                  />
+                  {formData.target_value.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.target_value.map((id) => (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800 ring-1 ring-indigo-200"
+                        >
+                          {customerLabels[id] || id}
+                          <button
+                            type="button"
+                            aria-label="Remove customer"
+                            className="rounded-full p-0.5 text-indigo-500 hover:bg-indigo-100 hover:text-indigo-800"
+                            onClick={() => removeTargetCustomer(id)}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-500">
+                    This discount can only be applied to bookings for the selected customers.
+                  </p>
+                </div>
+              )}
+
+              {formError && (
+                <p className="text-sm text-red-600">{formError}</p>
+              )}
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -496,7 +630,7 @@ export function DiscountManagement() {
       )}
 
       {/* Discounts List */}
-      <div className="grid grid-cols-1 gap-4">
+      <div className="space-y-2">
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => (
             <Card key={i}>
@@ -526,124 +660,51 @@ export function DiscountManagement() {
         ) : Array.isArray(discounts) ? (
           discounts.map((discount) => {
             const status = getDiscountStatus(discount);
+            const value = discount.discount_type === 'percentage'
+              ? `${discount.discount_value}%`
+              : formatCurrency(discount.discount_value);
+            const used = discount.usage_limit && discount.usage_limit > 0
+              ? `${discount.usage_count || 0}/${discount.usage_limit}`
+              : `${discount.usage_count || 0} used`;
+            const customerCount = discount.target_type === 'specific_customers'
+              ? normalizeTargetValue(discount.target_value).length
+              : 0;
+            const meta = [
+              discount.code,
+              value,
+              discount.applicable_to,
+              customerCount > 0 ? `${customerCount} customer${customerCount === 1 ? '' : 's'}` : null,
+              used,
+              discount.end_date ? `until ${new Date(discount.end_date).toLocaleDateString()}` : 'No expiry',
+            ].filter(Boolean).join(' · ');
+
             return (
-              <Card key={discount.id}>
-                <CardContent>
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center mb-2">
-                        <h3 className="text-lg font-semibold">{discount.name}</h3>
-                        {discount.code && (
-                          <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
-                            {discount.code}
-                          </span>
-                        )}
-                        <span className={`ml-2 text-sm font-medium ${status.color}`}>
-                          {status.status}
-                        </span>
-                      </div>
-                      
-                      <p className="text-gray-600 mb-3">{discount.description}</p>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <p className="text-gray-500">Value</p>
-                          <p className="font-semibold">
-                            {discount.discount_type === 'percentage' 
-                              ? `${discount.discount_value}%` 
-                              : formatCurrency(discount.discount_value)}
-                          </p>
-                        </div>
-                        
-                        <div>
-                          <p className="text-gray-500">Used</p>
-                          <p className="font-semibold">
-                            {discount.usage_count || 0}
-                            {discount.usage_limit && discount.usage_limit > 0 && ` / ${discount.usage_limit}`}
-                          </p>
-                        </div>
-                        
-                        <div>
-                          <p className="text-gray-500">Applicable To</p>
-                          <p className="font-semibold capitalize">
-                            {discount.applicable_to}
-                          </p>
-                        </div>
-                        
-                        <div>
-                          <p className="text-gray-500">Priority</p>
-                          <p className="font-semibold">
-                            {discount.priority || 0}
-                          </p>
-                        </div>
-                        
-                        <div>
-                          <p className="text-gray-500">Min Amount</p>
-                          <p className="font-semibold">
-                            {discount.min_amount ? formatCurrency(discount.min_amount) : 'None'}
-                          </p>
-                        </div>
-                        
-                        <div>
-                          <p className="text-gray-500">Max Discount</p>
-                          <p className="font-semibold">
-                            {discount.max_discount_amount ? formatCurrency(discount.max_discount_amount) : 'None'}
-                          </p>
-                        </div>
-                        
-                        <div>
-                          <p className="text-gray-500">Target</p>
-                          <p className="font-semibold capitalize">
-                            {discount.target_type || 'all'}
-                          </p>
-                        </div>
-                        
-                        <div>
-                          <p className="text-gray-500">Valid Until</p>
-                          <p className="font-semibold">
-                            {discount.end_date 
-                              ? new Date(discount.end_date).toLocaleDateString()
-                              : 'No expiry'}
-                          </p>
-                        </div>
-                      </div>
+              <Card key={discount.id} padding="sm" className="relative z-0 [&:has(details[open])]:z-30">
+                <CardContent className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-900">{discount.name}</span>
+                      <Badge variant={status.variant} className="capitalize">{status.status}</Badge>
                     </div>
-                    
-                    <div className="flex space-x-2 ml-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => startEdit(discount)}
-                        title="Edit Discount"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewStats(discount.id)}
-                        title="View Statistics"
-                      >
-                        <TrendingUp className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewApplications(discount.id)}
-                        title="View Applications"
-                      >
-                        <CheckCircle className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(discount.id)}
-                        title="Delete Discount"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <p className="mt-0.5 truncate text-sm text-slate-500">{meta}</p>
+                    {discount.description && (
+                      <p className="mt-0.5 truncate text-xs text-slate-400">{discount.description}</p>
+                    )}
                   </div>
+                  <OverflowMenu>
+                    <OverflowMenuItem icon={<Edit className="h-4 w-4 text-slate-400" />} onClick={() => startEdit(discount)}>
+                      Edit
+                    </OverflowMenuItem>
+                    <OverflowMenuItem icon={<TrendingUp className="h-4 w-4 text-slate-400" />} onClick={() => handleViewStats(discount.id)}>
+                      Statistics
+                    </OverflowMenuItem>
+                    <OverflowMenuItem icon={<CheckCircle className="h-4 w-4 text-slate-400" />} onClick={() => handleViewApplications(discount.id)}>
+                      Applications
+                    </OverflowMenuItem>
+                    <OverflowMenuItem danger icon={<Trash2 className="h-4 w-4" />} onClick={() => handleDelete(discount.id)}>
+                      Delete
+                    </OverflowMenuItem>
+                  </OverflowMenu>
                 </CardContent>
               </Card>
             );

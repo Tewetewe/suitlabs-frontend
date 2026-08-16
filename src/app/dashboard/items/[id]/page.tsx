@@ -10,13 +10,15 @@ import { BarcodeLabel } from '@/components/ui/BarcodeLabel';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api';
-import { Item, Rental, Booking } from '@/types';
+import { Item, Rental, Booking, CreateItemRequest } from '@/types';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
 import { getAndroidBluetoothProductLabelUrl, getBprintProductLabelUrl } from '@/lib/bprint';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
-import { ArrowRightLeft } from 'lucide-react';
+import EditItemModal from '@/components/modals/EditItemModal';
+import { useToast } from '@/contexts/ToastContext';
+import { ArrowRightLeft, Edit } from 'lucide-react';
 
 const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -26,7 +28,9 @@ export default function ItemDetailPage() {
   const id = routeParams?.id as string;
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const { success, error: toastError } = useToast();
   const [item, setItem] = useState<Item | null>(null);
+  const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadingThumb, setUploadingThumb] = useState(false);
@@ -113,10 +117,31 @@ export default function ItemDetailPage() {
     try {
       const refreshedItem = await apiClient.getItem(id);
       setItem(refreshedItem);
+      if (refreshedItem.trousers_code && refreshedItem.type !== 'trousers') {
+        try {
+          setPairedTrousers(await apiClient.getItemByCode(refreshedItem.trousers_code));
+        } catch {
+          setPairedTrousers(null);
+        }
+      } else {
+        setPairedTrousers(null);
+      }
     } catch (e) {
       console.error('Failed to refresh item:', e);
     }
   }, [id]);
+
+  const handleUpdateItem = async (itemId: string, itemData: Partial<CreateItemRequest>) => {
+    try {
+      await apiClient.updateItem(itemId, itemData);
+      success('Item Updated Successfully!', `${item?.name || 'Item'} has been updated.`);
+      await refreshItem();
+    } catch (e) {
+      console.error('Failed to update item:', e);
+      toastError('Failed to Update Item', 'Please try again.');
+      throw e;
+    }
+  };
 
   const uploadThumbnail = async (file?: File | null) => {
     if (!file || !item) return;
@@ -211,11 +236,19 @@ export default function ItemDetailPage() {
   return (
     <DashboardLayout>
       <div className="space-y-4 sm:space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Item Detail</h1>
-          <Link href="/dashboard/items">
-            <Button variant="ghost">Back to Items</Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {item && (
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                <Edit className="h-4 w-4" />
+                Edit
+              </Button>
+            )}
+            <Link href="/dashboard/items">
+              <Button variant="ghost">Back to Items</Button>
+            </Link>
+          </div>
         </div>
 
         {loading ? (
@@ -227,10 +260,10 @@ export default function ItemDetailPage() {
         ) : (
           <>
           <Card>
-            <CardContent className="p-4 sm:p-6">
+            <CardContent>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1">
-                  <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
+                  <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-100">
                     <SafeImage
                       src={item.thumbnail_url}
                       alt={item.name}
@@ -273,6 +306,14 @@ export default function ItemDetailPage() {
                     <p className="text-gray-500">Code: #{item.code}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <BranchBadge branch={item.branch} always />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setEditing(true)}
+                      >
+                        <Edit className="h-4 w-4" />
+                        Edit
+                      </Button>
                       <Button
                         variant="secondary"
                         size="sm"
@@ -425,6 +466,14 @@ export default function ItemDetailPage() {
                             <span className="font-medium">{formatCurrency(item.purchase_price)}</span>
                           </div>
                         )}
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm text-gray-500 w-16">Sell</span>
+                          <span className="font-medium">{formatCurrency(item.selling_price || 0)}</span>
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm text-gray-500 w-16">Sellable</span>
+                          <span className="font-medium">{item.is_sellable ? 'Yes' : 'No'}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -622,7 +671,7 @@ export default function ItemDetailPage() {
           {/* Rental and Booking Information */}
           {(rentals.length > 0 || bookings.length > 0) && (
             <Card>
-              <CardContent className="p-4 sm:p-6">
+              <CardContent>
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Current Rentals & Bookings</h2>
                 
                 {/* Active Rentals */}
@@ -705,6 +754,12 @@ export default function ItemDetailPage() {
         </>
         )}
       </div>
+      <EditItemModal
+        isOpen={editing}
+        onClose={() => setEditing(false)}
+        onUpdate={handleUpdateItem}
+        item={item}
+      />
       <TransferItemModal
         isOpen={transferOpen}
         item={item}

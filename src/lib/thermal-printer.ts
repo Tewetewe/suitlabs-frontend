@@ -390,7 +390,7 @@ export class ThermalPrinterService {
       ) && (invoice.total_amount || 0) > 0;
 
       invoice.items.forEach((item) => {
-        if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+        if ((item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
           generator.text(`  ${item.description}`).lineFeed();
         } else {
           generator

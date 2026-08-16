@@ -290,7 +290,8 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <li><b>Fill the ticket.</b><span>Tap tiles, or hit the scan button and scan the tag. Adjust quantity with − and + in the ticket. Same-day rentals are fine — return date can equal rental date.</span></li>
     <li><b>Attach the customer.</b><span>Search by name or phone. If they are new, tap <b>New</b> and enter first name, last name, phone. Phone is what you will search on next time, so get it right.</span></li>
     <li><b>Pick the guarantee.</b><span>KTP, Passport, or Student ID — whatever they are leaving with you.</span></li>
-    <li><b>Choose a package, or leave it on item total.</b><span>A package price <b>replaces</b> the item total and switches the discount box off. Only use one if the customer is actually on that package.</span></li>
+    <li><b>Pick the occasion.</b><span>Wedding, wedding guest, corporate, or school. Analytics uses this for the occasion mix — it is not guessed from the customer.</span></li>
+    <li><b>Choose a package, or leave it on item total.</b><span>A package price covers every item on the ticket by default. Tap a line’s badge to mark it as an add-on if it should be charged on top. The discount box stays off while a package is selected.</span></li>
     <li><b>DP or Full, then the method.</b><span>DP: type the amount, or use the 50% shortcut. Full: the total fills in automatically. Then tap how they are actually paying.</span></li>
     <li><b>Charge booking.</b><span>The green confirmation shows the booking number. Print the DP invoice from the Bookings page and hand it over.</span></li>
   </ol>

@@ -46,7 +46,11 @@ export function SafeImage({
   }, [resolvedSrc]);
 
   if (!resolvedSrc || failed) {
-    return <>{fallback ?? null}</>;
+    return (
+      <span className="flex h-full w-full items-center justify-center">
+        {fallback ?? null}
+      </span>
+    );
   }
 
   return (

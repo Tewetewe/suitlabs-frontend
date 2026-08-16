@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { apiClient } from '@/lib/api';
 import { Rental } from '@/types';
@@ -159,13 +160,10 @@ export function EditRentalModal({ isOpen, onClose, onSuccess, rental }: EditRent
             <DollarSign className="h-4 w-4 inline mr-2" />
             Security Deposit
           </label>
-          <Input
-            type="number"
+          <CurrencyInput
             value={form.security_deposit}
-            onChange={(e) => setForm({ ...form, security_deposit: parseFloat(e.target.value) || 0 })}
+            onChange={(n) => setForm({ ...form, security_deposit: n })}
             placeholder="0"
-            min="0"
-            step="1000"
             disabled={rental.status !== 'pending'}
           />
           {errors.security_deposit && (

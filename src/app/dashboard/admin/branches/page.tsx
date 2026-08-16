@@ -26,6 +26,7 @@ type BranchForm = {
   latitude: string;
   longitude: string;
   geofence_km: string;
+  spreadsheet_id: string;
   is_active: boolean;
 };
 
@@ -40,6 +41,7 @@ const emptyForm = (): BranchForm => ({
   latitude: '',
   longitude: '',
   geofence_km: '0.1',
+  spreadsheet_id: '',
   is_active: true,
 });
 
@@ -55,6 +57,7 @@ function toForm(branch: Branch): BranchForm {
     latitude: String(branch.latitude ?? ''),
     longitude: String(branch.longitude ?? ''),
     geofence_km: String(branch.geofence_km ?? 0.1),
+    spreadsheet_id: branch.spreadsheet_id || branch.spreadsheet_url || '',
     is_active: branch.is_active,
   };
 }
@@ -124,6 +127,7 @@ export default function BranchesPage() {
       latitude: Number(form.latitude) || 0,
       longitude: Number(form.longitude) || 0,
       geofence_km: Number(form.geofence_km) || 0.1,
+      spreadsheet_id: form.spreadsheet_id,
       is_active: form.is_active,
     };
     try {
@@ -153,7 +157,7 @@ export default function BranchesPage() {
     <DashboardLayout>
       <PageShell
         title="Branches"
-        subtitle="Physical shops, receipt text, and geofence"
+        subtitle="Physical shops, receipt text, geofence, and each shop's Google Sheet"
         action={<Button onClick={openCreate}><Plus className="h-4 w-4" /> Add shop</Button>}
       >
         {loading ? (
@@ -166,24 +170,24 @@ export default function BranchesPage() {
             action={<Button onClick={openCreate}><Plus className="h-4 w-4" /> Add shop</Button>}
           />
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="space-y-1">
             {branches.map((branch) => (
-              <Card key={branch.id}>
-                <CardContent className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900">{branch.name}</h3>
-                      <p className="text-sm text-slate-500">{branch.receipt_subtitle}</p>
+              <Card key={branch.id} padding="sm">
+                <CardContent className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-900">{branch.name}</span>
+                      {!branch.is_active && <Badge variant="danger">Inactive</Badge>}
                     </div>
-                    <Badge variant={branch.is_active ? 'success' : 'default'}>
-                      {branch.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
+                    <p className="mt-0.5 truncate text-sm text-slate-500">
+                      {[branch.receipt_subtitle, branch.address].filter(Boolean).join(' · ')}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {branch.geofence_km} km geofence
+                      {branch.spreadsheet_id || branch.spreadsheet_url ? ' · Google Sheet configured' : ' · Google Sheet not set'}
+                    </p>
                   </div>
-                  <p className="text-sm text-slate-600">{branch.address}</p>
-                  <p className="text-xs text-slate-500">
-                    GPS {branch.latitude}, {branch.longitude} · {branch.geofence_km} km
-                  </p>
-                  <Button variant="secondary" size="sm" onClick={() => openEdit(branch)}>Edit</Button>
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(branch)}>Edit</Button>
                 </CardContent>
               </Card>
             ))}
@@ -218,6 +222,17 @@ export default function BranchesPage() {
           <Input label="Geofence (km)" value={form.geofence_km} onChange={(e) => setForm({ ...form, geofence_km: e.target.value })} />
           <Input label="Latitude" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} />
           <Input label="Longitude" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} />
+          <div className="md:col-span-2">
+            <Input
+              label="Google Sheet URL or ID"
+              value={form.spreadsheet_id}
+              onChange={(e) => setForm({ ...form, spreadsheet_id: e.target.value })}
+              placeholder="https://docs.google.com/spreadsheets/d/…"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              This shop&apos;s items and bookings are mirrored only to this spreadsheet. Share it with the service account as Editor.
+            </p>
+          </div>
           <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
             <input
               type="checkbox"

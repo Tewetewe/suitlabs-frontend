@@ -5,6 +5,7 @@ import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
 import { CreateSaleRequest, Customer, Item, RentalItem, SaleLineType, SalePaymentMethod } from '@/types';
@@ -187,13 +188,10 @@ export function SaleComposer({
                         {item.name} <span className="text-slate-400">({item.code})</span>
                       </span>
                     </label>
-                    <Input
+                    <CurrencyInput
                       label="Replacement fee"
-                      type="number"
-                      min={0}
-                      step="1000"
                       value={lostFees[line.item_id] || ''}
-                      onChange={(e) => setLostFees((prev) => ({ ...prev, [line.item_id]: e.target.value }))}
+                      onChange={(n) => setLostFees((prev) => ({ ...prev, [line.item_id]: n ? String(n) : '' }))}
                       className="sm:w-40"
                     />
                   </div>
@@ -271,19 +269,15 @@ export function SaleComposer({
                       }}
                       disabled={!!line.replacement_for_item_id}
                     />
-                    <Input
+                    <CurrencyInput
                       label="Price"
-                      type="number"
-                      min={0}
-                      step="1000"
                       value={line.unit_price}
-                      onChange={(e) => {
-                        const price = Number(e.target.value) || 0;
+                      onChange={(n) => {
                         if (line.replacement_for_item_id) {
-                          setLostFees((prev) => ({ ...prev, [line.replacement_for_item_id as string]: String(price) }));
+                          setLostFees((prev) => ({ ...prev, [line.replacement_for_item_id as string]: String(n) }));
                           return;
                         }
-                        setCart((prev) => prev.map((entry) => (entry.key === line.key ? { ...entry, unit_price: price } : entry)));
+                        setCart((prev) => prev.map((entry) => (entry.key === line.key ? { ...entry, unit_price: n } : entry)));
                       }}
                     />
                   </div>
@@ -313,12 +307,10 @@ export function SaleComposer({
             onChange={(e) => setPaymentMethod(e.target.value as SalePaymentMethod)}
             options={[...SALE_PAYMENT_METHOD_OPTIONS]}
           />
-          <Input
+          <CurrencyInput
             label="Discount"
-            type="number"
-            min={0}
             value={discount}
-            onChange={(e) => setDiscount(e.target.value)}
+            onChange={(n) => setDiscount(n ? String(n) : '')}
           />
           <Input
             label="Notes"

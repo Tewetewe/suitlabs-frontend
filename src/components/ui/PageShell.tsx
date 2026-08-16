@@ -27,7 +27,7 @@ interface PageShellProps {
 
 export function PageShell({ title, subtitle, action, toolbar, children, className }: PageShellProps) {
   return (
-    <div className={clsx('space-y-4 md:space-y-6 animate-slide-up', className)}>
+    <div className={clsx('space-y-4 animate-slide-up', className)}>
       {/* Header row */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
@@ -46,7 +46,7 @@ export function PageShell({ title, subtitle, action, toolbar, children, classNam
       </div>
 
       {/* Page body */}
-      <div className="space-y-6">
+      <div className="space-y-4">
         {children}
       </div>
     </div>

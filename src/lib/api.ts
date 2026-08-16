@@ -16,6 +16,7 @@ import {
   Booking, 
   Rental, 
   Category,
+  ItemFacets,
   PackagePricing,
   Discount,
   PaginationMeta,
@@ -56,6 +57,8 @@ import {
   MaintenanceItem,
   FinancialGroupBy,
   FinancialReportRow,
+  RentalItemAnalytics,
+  OwnerAnalytics,
   GoogleSheetsStatus,
   GoogleSyncJobType,
   GoogleSyncRun,
@@ -63,6 +66,7 @@ import {
   Branch
 } from '@/types';
 import { emitAPIStatus } from '@/lib/api-status';
+import { unwrapNamedRecord } from '@/lib/api-utils';
 import { headerBranchId } from '@/lib/branch-scope';
 
 // Backend category structure (uses 'children' instead of 'subcategories')
@@ -228,6 +232,11 @@ class APIClient {
   }
 
   // Items
+  async getItemFacets(): Promise<ItemFacets> {
+    const response = await this.client.get<APIResponse<ItemFacets>>('/api/v1/items/facets');
+    return response.data.data || { types: [], brands: [], colors: [], sizes: [], statuses: [], conditions: [] };
+  }
+
   async getItems(filters?: ItemFilters): Promise<ItemPaginatedResponse> {
     const params = new URLSearchParams();
     if (filters) {
@@ -395,9 +404,10 @@ class APIClient {
     return response.data.data?.runs || [];
   }
 
-  async syncItemsFromGoogleSheets(): Promise<{ result: ItemSyncResult; run: GoogleSyncRun }> {
+  async syncItemsFromGoogleSheets(branchId?: string): Promise<{ result: ItemSyncResult; run: GoogleSyncRun }> {
     const response = await this.client.post<APIResponse<{ result: ItemSyncResult; run: GoogleSyncRun }>>(
-      '/api/v1/admin/google-sheets/items/sync'
+      '/api/v1/admin/google-sheets/items/sync',
+      branchId ? { branch_id: branchId } : {}
     );
     return this.handleResponse<{ result: ItemSyncResult; run: GoogleSyncRun }>(response);
   }
@@ -465,18 +475,18 @@ class APIClient {
   }
 
   async getCustomer(id: string): Promise<Customer> {
-    const response = await this.client.get<APIResponse<Customer>>(`/api/v1/customers/${id}`);
-    return response.data.data!;
+    const response = await this.client.get<APIResponse<{ customer: Customer } | Customer>>(`/api/v1/customers/${id}`);
+    return unwrapNamedRecord<Customer>(response.data.data, 'customer');
   }
 
   async createCustomer(customer: CreateCustomerRequest): Promise<Customer> {
-    const response = await this.client.post<CreateResponse<Customer>>('/api/v1/customers', customer);
-    return response.data.data;
+    const response = await this.client.post<CreateResponse<{ customer: Customer } | Customer>>('/api/v1/customers', customer);
+    return unwrapNamedRecord<Customer>(response.data.data, 'customer');
   }
 
   async updateCustomer(id: string, customer: Partial<CreateCustomerRequest>): Promise<Customer> {
-    const response = await this.client.put<UpdateResponse<Customer>>(`/api/v1/customers/${id}`, customer);
-    return response.data.data;
+    const response = await this.client.put<UpdateResponse<{ customer: Customer } | Customer>>(`/api/v1/customers/${id}`, customer);
+    return unwrapNamedRecord<Customer>(response.data.data, 'customer');
   }
 
   async deleteCustomer(id: string): Promise<void> {
@@ -484,8 +494,8 @@ class APIClient {
   }
 
   async findOrCreateCustomer(customerData: CreateCustomerRequest): Promise<Customer> {
-    const response = await this.client.post<APIResponse<Customer>>('/api/v1/customers/find-or-create', customerData);
-    return response.data.data!;
+    const response = await this.client.post<APIResponse<{ customer: Customer } | Customer>>('/api/v1/customers/find-or-create', customerData);
+    return unwrapNamedRecord<Customer>(response.data.data, 'customer');
   }
 
   async searchCustomers(query: string): Promise<Customer[]> {
@@ -500,8 +510,14 @@ class APIClient {
     const params = new URLSearchParams();
     if (email) params.append('email', email);
     if (phone) params.append('phone', phone);
-    const response = await this.client.get<APIResponse<Customer>>(`/api/v1/customers/find?${params}`);
-    return response.data.data || null;
+    const response = await this.client.get<APIResponse<{ customer?: Customer; can_create?: boolean } | Customer>>(`/api/v1/customers/find?${params}`);
+    const payload = response.data.data;
+    if (!payload) return null;
+    if (typeof payload === 'object' && 'can_create' in payload && !('customer' in payload && payload.customer)) {
+      return null;
+    }
+    const customer = unwrapNamedRecord<Customer>(payload, 'customer');
+    return customer?.id ? customer : null;
   }
 
   async getCustomerBookings(customerId: string): Promise<Booking[]> {
@@ -1101,6 +1117,26 @@ class APIClient {
     }>>(`/api/v1/admin/financial-report?${search.toString()}`);
 
     return response.data.data!;
+  }
+
+  async getOwnerAnalytics(params: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<OwnerAnalytics> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    const response = await this.client.get<APIResponse<OwnerAnalytics>>(
+      `/api/v1/admin/analytics?${search.toString()}`
+    );
+    return response.data.data!;
+  }
+
+  async getRentalItemAnalytics(params: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<OwnerAnalytics> {
+    return this.getOwnerAnalytics(params);
   }
 
   async downloadFinancialReportCSV(params: {

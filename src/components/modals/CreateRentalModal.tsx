@@ -179,6 +179,7 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
             fetchPage={fetchBookingPage}
             minQueryLength={0}
             placeholder="Search name, invoice, or phone…"
+            emptyMessage="No bookings match that search."
             error={errors.submit && !selectedBookingId ? errors.submit : undefined}
           />
           <p className="mt-1.5 text-xs text-slate-500">

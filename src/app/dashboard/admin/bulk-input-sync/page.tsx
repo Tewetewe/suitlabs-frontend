@@ -9,20 +9,22 @@ import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBranch } from '@/contexts/BranchContext';
 import apiClient from '@/lib/api';
 import type { GoogleSheetsStatus, GoogleSyncRun, ItemSyncResult } from '@/types';
 
 export default function BulkInputSyncPage() {
   const router = useRouter();
   const { user, loading: authLoading, isAuthenticated } = useAuth();
+  const { currentBranch, viewingAll } = useBranch();
 
   const isAdmin = user?.role === 'admin';
 
-  const [sheetSyncing, setSheetSyncing] = useState(false);
+  const [sheetSyncing, setSheetSyncing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ItemSyncResult | null>(null);
   const [sheetStatus, setSheetStatus] = useState<GoogleSheetsStatus | null>(null);
-  const [lastSheetRun, setLastSheetRun] = useState<GoogleSyncRun | null>(null);
+  const [sheetRuns, setSheetRuns] = useState<GoogleSyncRun[]>([]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -34,31 +36,35 @@ export default function BulkInputSyncPage() {
     if (!isAdmin) return;
     Promise.all([
       apiClient.getGoogleSheetsStatus(),
-      apiClient.getGoogleSheetsRuns('item_import', 1),
+      apiClient.getGoogleSheetsRuns('item_import', viewingAll ? 20 : 1),
     ])
       .then(([status, runs]) => {
         setSheetStatus(status);
-        setLastSheetRun(runs[0] || null);
+        setSheetRuns(runs);
       })
       .catch(() => {
         setSheetStatus(null);
+        setSheetRuns([]);
       });
-  }, [isAdmin]);
+  }, [isAdmin, currentBranch?.id, viewingAll]);
 
-  async function onSheetSync() {
-    setSheetSyncing(true);
+  async function onSheetSync(branchId?: string) {
+    setSheetSyncing(branchId || 'all');
     setError(null);
     setResult(null);
     try {
-      const response = await apiClient.syncItemsFromGoogleSheets();
+      const response = await apiClient.syncItemsFromGoogleSheets(branchId);
       setResult(response.result);
-      setLastSheetRun(response.run);
+      setSheetRuns((prev) => [response.run, ...prev.filter((run) => run.id !== response.run.id)]);
     } catch (e: unknown) {
       setError(getErrorMessage(e, 'Google Sheets sync failed'));
     } finally {
-      setSheetSyncing(false);
+      setSheetSyncing(null);
     }
   }
+
+  const lastSheetRun = sheetRuns[0] || null;
+  const shopSheets = sheetStatus?.branches || [];
 
   function getErrorMessage(errorValue: unknown, fallback: string) {
     const value = errorValue as { response?: { data?: { error?: string; message?: string } }; message?: string };
@@ -101,7 +107,11 @@ export default function BulkInputSyncPage() {
     <DashboardLayout>
       <PageShell
         title="Item Data Sync"
-        subtitle="Synchronize item inventory with Google Sheets."
+        subtitle={
+          viewingAll
+            ? 'All shops. Sync one spreadsheet, or all of them together.'
+            : `Synchronize ${currentBranch?.name || 'this shop'}'s inventory with its Google Sheet.`
+        }
       >
         <div className="space-y-4">
           <Card>
@@ -110,6 +120,64 @@ export default function BulkInputSyncPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {viewingAll ? (
+                  <>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="font-medium text-slate-900">
+                          {sheetStatus?.configured ? 'Connected' : 'Not configured'}
+                        </div>
+                        <div className="text-sm text-slate-600">
+                          Each shop has its own spreadsheet. Sync one row, or all shops at once.
+                        </div>
+                      </div>
+                      <Button
+                        variant="primary"
+                        loading={sheetSyncing === 'all'}
+                        disabled={!sheetStatus?.configured || !!sheetSyncing}
+                        onClick={() => onSheetSync()}
+                      >
+                        <RefreshCcw className="h-4 w-4" />
+                        Sync all shops
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {shopSheets.map((shop) => {
+                        const run = sheetRuns.find((row) => row.branch_id === shop.branch_id);
+                        return (
+                          <div key={shop.branch_id} className="flex flex-col gap-2 rounded-xl ring-1 ring-black/5 bg-white/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="font-medium text-slate-900">{shop.branch_name}</div>
+                              <div className="text-xs text-slate-500">
+                                {shop.configured ? 'Google Sheet configured' : 'No spreadsheet yet — set it on Branches'}
+                                {run ? ` · Last run: ${run.status}` : ''}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {shop.spreadsheet_url && (
+                                <a href={shop.spreadsheet_url} target="_blank" rel="noreferrer">
+                                  <Button variant="outline" size="sm">
+                                    <ExternalLink className="h-4 w-4" />
+                                    Open sheet
+                                  </Button>
+                                </a>
+                              )}
+                              <Button
+                                size="sm"
+                                loading={sheetSyncing === shop.branch_id}
+                                disabled={!shop.configured || !!sheetSyncing}
+                                onClick={() => onSheetSync(shop.branch_id)}
+                              >
+                                <RefreshCcw className="h-4 w-4" />
+                                Sync
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="font-medium text-slate-900">
@@ -117,8 +185,8 @@ export default function BulkInputSyncPage() {
                     </div>
                     <div className="text-sm text-slate-600">
                       {sheetStatus?.configured
-                        ? `Suit: ${sheetStatus.suit_range} · Accessories: ${sheetStatus.accessory_range}`
-                        : 'Add the service-account credentials and spreadsheet ID to the backend environment.'}
+                        ? `${currentBranch?.name || sheetStatus.branch_name || 'This shop'} · Suit: ${sheetStatus.suit_range} · Accessories: ${sheetStatus.accessory_range}`
+                        : 'Set this shop\'s Google Sheet on Admin → Branches. Share it with the service account as Editor.'}
                     </div>
                     {lastSheetRun && (
                       <div className="mt-1 text-xs text-slate-500">
@@ -137,15 +205,16 @@ export default function BulkInputSyncPage() {
                     )}
                     <Button
                       variant="primary"
-                      loading={sheetSyncing}
-                      disabled={!sheetStatus?.configured || sheetSyncing}
-                      onClick={onSheetSync}
+                      loading={!!sheetSyncing}
+                      disabled={!sheetStatus?.configured || !!sheetSyncing}
+                      onClick={() => onSheetSync()}
                     >
                       <RefreshCcw className="h-4 w-4" />
                       Sync items now
                     </Button>
                   </div>
                 </div>
+                )}
 
                 {error && (
                   <div className="rounded-xl bg-red-50 ring-1 ring-red-200 px-4 py-3 text-sm text-red-700">

@@ -32,9 +32,11 @@ import {
   MapPin,
   Receipt,
   BookOpen,
+  TrendingUp,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CashierChromeProvider, useCashierChrome } from '@/components/cashier/CashierChromeContext';
+import { Select } from '@/components/ui/Select';
 
 type NavigationRole = 'admin' | 'staff' | 'user';
 
@@ -78,6 +80,7 @@ const navigationSections: NavigationSection[] = [
     items: [
       { name: 'Bulk Input Sync', href: '/dashboard/admin/bulk-input-sync', icon: FileSpreadsheet, roles: ['admin'] },
       { name: 'Assets', href: '/dashboard/admin/assets', icon: Landmark, roles: ['admin'] },
+      { name: 'Analytics', href: '/dashboard/admin/rental-analytics', icon: TrendingUp, roles: ['admin'] },
       { name: 'Financial Report', href: '/dashboard/admin/financial-report', icon: BarChart3, roles: ['admin'] },
       { name: 'Branches', href: '/dashboard/admin/branches', icon: MapPin, roles: ['admin'] },
     ],
@@ -208,8 +211,8 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
                       className={clsx(
                         'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation',
                         isActive
-                          ? 'bg-white/70 text-slate-900 ring-1 ring-black/5 shadow-sm'
-                          : 'text-slate-600 hover:bg-white/40 hover:text-slate-900'
+                          ? 'bg-indigo-50 text-indigo-950'
+                          : 'text-slate-600 hover:bg-indigo-50/70 hover:text-slate-900'
                       )}
                     >
                       <item.icon
@@ -231,12 +234,12 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
       {/* ── Main area ─────────────────────────────────────────────── */}
       <div className={clsx(!isCashier && 'md:pl-72', isCashier && 'flex h-dvh flex-col')}>
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white/40 px-3 backdrop-blur-xl sm:gap-4 sm:px-6">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white px-3 sm:gap-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
               className={clsx(
-                '-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-white/50 touch-manipulation',
+                '-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-indigo-50 touch-manipulation',
                 !isCashier && 'md:hidden'
               )}
             >
@@ -251,7 +254,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
           </div>
 
           {isCashier && (
-            <div className="flex rounded-full bg-white/70 p-0.5 ring-1 ring-black/5">
+            <div className="flex rounded-full bg-white p-0.5 ring-1 ring-black/10">
               <button
                 type="button"
                 onClick={() => setChrome('phone')}
@@ -293,23 +296,27 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
                         : 'bg-indigo-500'
                   )}
                 />
-                <select
-                  id="branch-switcher"
-                  value={viewingAll ? ALL_BRANCHES_ID : (currentBranchId || '')}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setCurrentBranchId(value === ALL_BRANCHES_ID ? null : value);
-                  }}
-                  className="max-w-[9.5rem] rounded-full bg-white/70 py-1.5 pl-3 pr-7 text-xs font-semibold text-slate-800 ring-1 ring-black/5 sm:max-w-[12rem]"
-                >
-                  {user?.role === 'admin' && <option value={ALL_BRANCHES_ID}>All branches</option>}
-                  {allowedBranches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>{branch.name}</option>
-                  ))}
-                </select>
+                <div className="w-40 sm:w-48">
+                  <Select
+                    id="branch-switcher"
+                    size="sm"
+                    searchable
+                    value={viewingAll ? ALL_BRANCHES_ID : (currentBranchId || '')}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setCurrentBranchId(next === ALL_BRANCHES_ID ? null : next);
+                    }}
+                    options={[
+                      ...(user?.role === 'admin' ? [{ value: ALL_BRANCHES_ID, label: 'All branches' }] : []),
+                      ...allowedBranches.map((branch) => ({ value: branch.id, label: branch.name })),
+                    ]}
+                    searchPlaceholder="Shop"
+                    emptyMessage="No shops"
+                  />
+                </div>
               </div>
             ) : currentBranch ? (
-              <div className="flex items-center gap-2 rounded-full bg-white/70 px-3 py-1.5 text-xs font-semibold text-slate-800 ring-1 ring-black/5">
+              <div className="flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 ring-1 ring-black/10">
                 <span className={clsx(
                   'h-2.5 w-2.5 rounded-full',
                   branchAccent(currentBranch.code) === 'emerald' ? 'bg-emerald-500' : 'bg-indigo-500'
@@ -375,7 +382,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
 
       {/* ── Mobile bottom nav. Phone cashier keeps it so staff can leave POS. ─ */}
       <nav className={clsx(
-        'fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white/45 px-2 pb-safe pt-1 backdrop-blur-xl md:hidden',
+        'fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white px-2 pb-safe pt-1 md:hidden',
         isCashier && !cashierPhone && 'hidden'
       )}>
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
@@ -387,7 +394,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
                 href={item.href}
                 className={clsx(
                   'flex min-h-[56px] flex-col items-center justify-center rounded-lg px-1 py-1.5 text-[11px] font-medium transition-colors',
-                  isActive ? 'text-indigo-700 bg-white/70 ring-1 ring-black/5' : 'text-slate-600 hover:bg-white/50'
+                  isActive ? 'text-indigo-700 bg-indigo-50' : 'text-slate-600 hover:bg-indigo-50/70'
                 )}
               >
                 <item.icon className={clsx('mb-0.5 h-4 w-4', isActive ? 'text-indigo-600' : 'text-slate-500')} />

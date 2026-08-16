@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
-import { CreateItemRequest, Category } from '@/types';
+import { CreateItemRequest, Category, ItemFacets } from '@/types';
 import { apiClient } from '@/lib/api';
 import { X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { facetOptions } from '@/lib/select-options';
 
 const PURCHASE_PAYMENT_OPTIONS = [
   { value: 'cash', label: 'Cash' },
@@ -55,13 +57,30 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
+  const [facets, setFacets] = useState<ItemFacets>({
+    types: [],
+    brands: [],
+    colors: [],
+    sizes: [],
+    statuses: [],
+    conditions: [],
+  });
 
   // Load categories when modal opens
   useEffect(() => {
     if (isOpen) {
       loadCategories();
+      loadFacets();
     }
   }, [isOpen]);
+
+  const loadFacets = async () => {
+    try {
+      setFacets(await apiClient.getItemFacets());
+    } catch (error) {
+      console.error('Failed to load item facets:', error);
+    }
+  };
 
   const loadCategories = async () => {
     try {
@@ -109,22 +128,30 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
 
   const typeOptions = [
     { value: '', label: 'Select Type' },
-    { value: 'suit', label: 'Suit' },
-    { value: 'accessory', label: 'Accessory' },
-    { value: 'retail', label: 'Retail (socks, tumbler, etc.)' },
-    { value: 'shoes', label: 'Shoes' },
-    { value: 'tie', label: 'Tie' },
-    { value: 'belt', label: 'Belt' },
-    { value: 'trousers', label: 'Trousers' },
-    { value: 'shirt', label: 'Shirts' },
-    { value: 'vest', label: 'Vest' },
+    ...facetOptions(facets.types),
   ];
 
-  const conditionOptions = [
-    { value: 'excellent', label: 'Excellent' },
-    { value: 'good', label: 'Good' },
-    { value: 'fair', label: 'Fair' },
-    { value: 'poor', label: 'Poor' },
+  const conditionOptions = facetOptions(facets.conditions);
+  const brandOptions = [
+    { value: '', label: 'Select brand' },
+    ...facetOptions(facets.brands, undefined, false),
+    ...(formData.brand && !facets.brands.includes(formData.brand)
+      ? [{ value: formData.brand, label: formData.brand }]
+      : []),
+  ];
+  const colorOptions = [
+    { value: '', label: 'Select color' },
+    ...facetOptions(facets.colors, undefined, false),
+    ...(formData.color && !facets.colors.includes(formData.color)
+      ? [{ value: formData.color, label: formData.color }]
+      : []),
+  ];
+  const sizeOptions = [
+    { value: '', label: 'Select size' },
+    ...facetOptions(facets.sizes, undefined, false),
+    ...(formData.size_label && !facets.sizes.includes(formData.size_label)
+      ? [{ value: formData.size_label, label: formData.size_label }]
+      : []),
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -290,48 +317,32 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               placeholder="0"
             />
 
-            <Input
+            <CurrencyInput
               label="Standard Price (3-day) *"
-              type="number"
-              step="0.01"
-              min="0"
               value={formData.standard_price}
-              onChange={(e) => handleInputChange('standard_price', e.target.value)}
+              onChange={(n) => handleInputChange('standard_price', n ? String(n) : '')}
               error={errors.standard_price}
-              placeholder="0.00"
             />
 
-            <Input
+            <CurrencyInput
               label="One Day Price *"
-              type="number"
-              step="0.01"
-              min="0"
               value={formData.one_day_price}
-              onChange={(e) => handleInputChange('one_day_price', e.target.value)}
+              onChange={(n) => handleInputChange('one_day_price', n ? String(n) : '')}
               error={errors.one_day_price}
-              placeholder="0.00"
             />
 
-            <Input
+            <CurrencyInput
               label="Four Hour Price *"
-              type="number"
-              step="0.01"
-              min="0"
               value={formData.four_hour_price}
-              onChange={(e) => handleInputChange('four_hour_price', e.target.value)}
+              onChange={(n) => handleInputChange('four_hour_price', n ? String(n) : '')}
               error={errors.four_hour_price}
-              placeholder="0.00"
             />
 
             {isAdmin && (
-              <Input
+              <CurrencyInput
                 label="Buying Price"
-                type="number"
-                step="0.01"
-                min="0"
                 value={formData.purchase_price}
-                onChange={(e) => handleInputChange('purchase_price', e.target.value)}
-                placeholder="0.00"
+                onChange={(n) => handleInputChange('purchase_price', n ? String(n) : '')}
               />
             )}
 
@@ -356,14 +367,10 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               </>
             )}
 
-            <Input
+            <CurrencyInput
               label="Selling Price"
-              type="number"
-              step="0.01"
-              min="0"
               value={formData.selling_price}
-              onChange={(e) => handleInputChange('selling_price', e.target.value)}
-              placeholder="0.00"
+              onChange={(n) => handleInputChange('selling_price', n ? String(n) : '')}
             />
 
             <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
@@ -376,25 +383,31 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               Sellable (socks, tumbler, clearance stock)
             </label>
 
-            <Input
+            <Select
               label="Size"
+              options={sizeOptions}
               value={formData.size_label}
               onChange={(e) => handleInputChange('size_label', e.target.value)}
-              placeholder="e.g., M, L, XL"
+              searchPlaceholder="Search or type a size"
+              allowCustom
             />
 
-            <Input
+            <Select
               label="Color"
+              options={colorOptions}
               value={formData.color}
               onChange={(e) => handleInputChange('color', e.target.value)}
-              placeholder="e.g., Black, Navy, Gray"
+              searchPlaceholder="Search or type a color"
+              allowCustom
             />
 
-            <Input
+            <Select
               label="Brand"
+              options={brandOptions}
               value={formData.brand}
               onChange={(e) => handleInputChange('brand', e.target.value)}
-              placeholder="e.g., Mubeng, Goldy"
+              searchPlaceholder="Search or type a brand"
+              allowCustom
             />
 
             <Select

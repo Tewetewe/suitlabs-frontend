@@ -19,6 +19,8 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
     first_name: '',
     last_name: '',
     phone: '',
+    instagram: '',
+    tiktok: '',
     address: '',
     notes: ''
   });
@@ -34,8 +36,10 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
         first_name: customer.first_name || '',
         last_name: customer.last_name || '',
         phone: customer.phone || '',
+        instagram: customer.instagram || '',
+        tiktok: customer.tiktok || '',
         address: customer.address || '',
-        notes: ''
+        notes: customer.notes || ''
       });
     }
   }, [customer]);
@@ -77,6 +81,12 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
       }
       if (formData.phone !== customer.phone) {
         updateData.phone = formData.phone;
+      }
+      if ((formData.instagram || '') !== (customer.instagram || '')) {
+        updateData.instagram = formData.instagram;
+      }
+      if ((formData.tiktok || '') !== (customer.tiktok || '')) {
+        updateData.tiktok = formData.tiktok;
       }
       
       // Always include address and notes if they have values
@@ -173,6 +183,29 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
               placeholder="+1 (555) 123-4567"
               error={errors.phone}
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Instagram
+              </label>
+              <Input
+                value={formData.instagram || ''}
+                onChange={(e) => handleInputChange('instagram', e.target.value)}
+                placeholder="@username"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                TikTok
+              </label>
+              <Input
+                value={formData.tiktok || ''}
+                onChange={(e) => handleInputChange('tiktok', e.target.value)}
+                placeholder="@username"
+              />
+            </div>
           </div>
           
           <div>

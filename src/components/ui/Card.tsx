@@ -13,7 +13,7 @@ interface CardProps {
   onClick?: () => void;
 }
 
-export function Card({ children, className, padding = 'md', clickable = false, onClick }: CardProps) {
+export function Card({ children, className, padding = 'sm', clickable = false, onClick }: CardProps) {
   const paddingClasses = {
     none: '',
     sm:   'p-3 sm:p-4',

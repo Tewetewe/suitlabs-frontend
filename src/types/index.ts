@@ -37,6 +37,7 @@ export interface GoogleSyncRun {
   id: string;
   job_type: GoogleSyncJobType;
   period_key: string;
+  branch_id?: string;
   spreadsheet_id?: string;
   sheet_name?: string;
   status: GoogleSyncStatus;
@@ -52,8 +53,19 @@ export interface GoogleSyncRun {
   updated_at: string;
 }
 
+export interface GoogleSheetsBranchStatus {
+  branch_id: string;
+  branch_name: string;
+  configured: boolean;
+  spreadsheet_id?: string;
+  spreadsheet_url?: string;
+}
+
 export interface GoogleSheetsStatus {
   configured: boolean;
+  requires_branch?: boolean;
+  branch_id?: string;
+  branch_name?: string;
   spreadsheet_id?: string;
   spreadsheet_url?: string;
   items_range: string;
@@ -61,6 +73,7 @@ export interface GoogleSheetsStatus {
   accessory_range: string;
   booking_tab_pattern: string;
   timezone: string;
+  branches?: GoogleSheetsBranchStatus[];
 }
 
 export interface ResponseMeta {
@@ -189,6 +202,8 @@ export interface Branch {
   latitude: number;
   longitude: number;
   geofence_km: number;
+  spreadsheet_id?: string;
+  spreadsheet_url?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -217,6 +232,118 @@ export interface FinancialReportRow {
   final_amount: number;
   paid_amount: number;
   remaining: number;
+}
+
+export type RentalAnalyticsSource = 'rentals' | 'bookings';
+
+export interface RentalAnalyticsSummary {
+  rental_count: number;
+  booking_count: number;
+  items_out: number;
+  items_booked: number;
+  unique_items: number;
+  revenue: number;
+  prev_rental_count: number;
+  prev_items_out: number;
+  catalogue_items: number;
+  idle_count: number;
+}
+
+export interface RentalAnalyticsPeriod {
+  period: string;
+  rentals: number;
+  items_out: number;
+  bookings: number;
+  items_booked: number;
+  revenue: number;
+}
+
+export interface RentalAnalyticsBucket {
+  key: string;
+  label: string;
+  items_out: number;
+  rentals: number;
+  revenue: number;
+  share: number;
+}
+
+export interface RentalAnalyticsItemRow {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  size_label: string;
+  color: string;
+  brand: string;
+  items_out: number;
+  revenue: number;
+  status?: string;
+}
+
+export interface RentalInsight {
+  kind: string;
+  title: string;
+  detail: string;
+}
+
+export interface RentalItemAnalytics {
+  start_date: string;
+  end_date: string;
+  source: RentalAnalyticsSource;
+  summary: RentalAnalyticsSummary;
+  monthly: RentalAnalyticsPeriod[];
+  by_type: RentalAnalyticsBucket[];
+  by_size: RentalAnalyticsBucket[];
+  by_color: RentalAnalyticsBucket[];
+  by_branch: RentalAnalyticsBucket[];
+  top_items: RentalAnalyticsItemRow[];
+  idle_items: RentalAnalyticsItemRow[];
+  insights?: RentalInsight[];
+}
+
+export interface OwnerBookingPeriod {
+  period: string;
+  bookings: number;
+  cancelled: number;
+  final: number;
+  paid: number;
+  remaining: number;
+}
+
+export interface OwnerBookingAnalytics {
+  count: number;
+  cancelled: number;
+  final_amount: number;
+  paid_amount: number;
+  remaining_amount: number;
+  prev_count: number;
+  prev_final: number;
+  upcoming: number;
+  monthly: OwnerBookingPeriod[];
+  by_institution: RentalAnalyticsBucket[];
+  by_package: RentalAnalyticsBucket[];
+  by_payment: RentalAnalyticsBucket[];
+  by_status: RentalAnalyticsBucket[];
+}
+
+export interface OwnerSaleAnalytics {
+  count: number;
+  revenue: number;
+  prev_count: number;
+  prev_revenue: number;
+  monthly: RentalAnalyticsPeriod[];
+  by_line_type: RentalAnalyticsBucket[];
+  by_source: RentalAnalyticsBucket[];
+  top_items: RentalAnalyticsItemRow[];
+}
+
+export interface OwnerAnalytics {
+  start_date: string;
+  end_date: string;
+  stock: RentalItemAnalytics;
+  bookings: OwnerBookingAnalytics;
+  sales: OwnerSaleAnalytics;
+  insights: RentalInsight[];
 }
 
 export interface LoginRequest {
@@ -271,6 +398,8 @@ export interface Customer {
   first_name: string;
   last_name: string;
   phone: string;
+  instagram?: string;
+  tiktok?: string;
   address?: string;
   notes?: string;
   is_active: boolean;
@@ -294,6 +423,16 @@ export type BookingPaymentMethod =
 
 export type SalePaymentMethod = 'cash' | 'transfer' | 'qris' | 'debit' | 'cc';
 
+export type BookingInstitution =
+  | 'wedding'
+  | 'wedding_guest'
+  | 'corporate'
+  | 'university'
+  | 'sma_smk'
+  | 'smp'
+  | 'sd'
+  | 'tk';
+
 // Booking Types
 export interface Booking {
   id: string;
@@ -302,6 +441,7 @@ export interface Booking {
   booking_date: string;
   appointment_date?: string;
   booking_guarantee: string;
+  institution?: BookingInstitution | '';
   total_amount: number;
   discount_amount: number;
   paid_amount: number;
@@ -338,6 +478,7 @@ export interface BookingItem {
   total_price: number;
   discount_amount: number;
   final_price: number;
+  is_addon?: boolean;
 }
 
 // Rental Types (align with backend entity/rental.go)
@@ -890,7 +1031,7 @@ export interface Discount {
   min_amount?: number;
   max_discount_amount?: number;
   applicable_to: 'booking' | 'item' | 'both';
-  target_type?: 'category' | 'item_type' | 'customer_tier' | 'specific_items' | 'all';
+  target_type?: 'category' | 'item_type' | 'customer_tier' | 'specific_items' | 'specific_customers' | 'all';
   target_value?: string[];
   start_date?: string;
   end_date?: string;
@@ -906,6 +1047,15 @@ export interface Discount {
 
 
 // Filter Types
+export interface ItemFacets {
+  types: string[];
+  brands: string[];
+  colors: string[];
+  sizes: string[];
+  statuses: string[];
+  conditions: string[];
+}
+
 export interface ItemFilters {
   search?: string;
   type?: string;
@@ -970,6 +1120,7 @@ export interface CreateBookingRequest {
   booking_date: string; // ISO string
   appointment_date?: string; // ISO string
   booking_guarantee: string;
+  institution: BookingInstitution;
   notes?: string;
   status: 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled' | 'pending_approval';
   payment_status: 'pending' | 'partial' | 'completed';
@@ -985,6 +1136,7 @@ export interface CreateBookingRequest {
     unit_price: number;
     total_price: number;
     discount_amount?: number;
+    is_addon?: boolean;
   }>;
 }
 
@@ -1001,6 +1153,8 @@ export interface CreateCustomerRequest {
   first_name: string;
   last_name: string;
   phone: string;
+  instagram?: string;
+  tiktok?: string;
   address?: string;
   notes?: string;
 }

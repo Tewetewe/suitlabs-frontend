@@ -9,10 +9,10 @@ import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/api';
 import { User, Branch } from '@/types';
 import { AddUserModal } from '@/components/modals/AddUserModal';
-import { Plus, Edit, Trash2, UserCog, Mail, Phone, Shield, User as UserIcon } from 'lucide-react';
+import { Plus, Edit, Trash2, UserCog, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, SkeletonCard } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
 
 export default function UsersPage() {
   const router = useRouter();
@@ -67,30 +67,17 @@ export default function UsersPage() {
     }
   };
 
-  const getRoleIcon = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return Shield;
-      case 'staff':
-        return UserCog;
-      case 'user':
-        return UserIcon;
-      default:
-        return UserIcon;
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
   const handleUserAdded = (newUser: User) => {
     setUsers(prev => [newUser, ...prev]);
   };
 
   const toggleUserBranch = async (user: User, branchId: string, checked: boolean) => {
     const current = (user.branches || []).map((branch) => branch.id);
-    const next = checked ? [...new Set([...current, branchId])] : current.filter((id) => id !== branchId);
+    const next = user.role === 'staff'
+      ? [branchId]
+      : checked
+        ? [...new Set([...current, branchId])]
+        : current.filter((id) => id !== branchId);
     try {
       setSavingUserId(user.id);
       const updated = await apiClient.assignUserBranches(user.id, next);
@@ -164,149 +151,79 @@ export default function UsersPage() {
           />
         </FilterBar>
 
-        {/* Users Grid */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        {/* Users List */}
+        <div className="space-y-2">
           {loading ? (
-            Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
+            Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
           ) : filteredUsers.length === 0 ? (
-            <div className="col-span-full">
-              <EmptyState
-                icon={<UserCog className="h-10 w-10" />}
-                title="No users found"
-                description={searchTerm ? 'Try adjusting your search term' : 'Get started by adding your first user'}
-                action={canAddUsers ? <Button onClick={() => setIsAddUserModalOpen(true)}><Plus className="h-4 w-4" /> Add User</Button> : undefined}
-              />
-            </div>
+            <EmptyState
+              icon={<UserCog className="h-10 w-10" />}
+              title="No users found"
+              description={searchTerm ? 'Try adjusting your search term' : 'Get started by adding your first user'}
+              action={canAddUsers ? <Button onClick={() => setIsAddUserModalOpen(true)}><Plus className="h-4 w-4" /> Add User</Button> : undefined}
+            />
           ) : (
-            filteredUsers.map((user) => {
-              return (
-                <Card key={user.id}>
-                  <CardContent>
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center">
-                        <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center">
-                          {(() => { const RoleIcon = getRoleIcon(user.role); return <RoleIcon className="h-6 w-6 text-slate-600" />; })()}
-                        </div>
-                        <div className="ml-3">
-                          <h3 className="text-sm font-medium text-slate-900">
-                            {user.first_name} {user.last_name}
-                          </h3>
-                          <Badge variant={roleVariant(user.role)}>{user.role}</Badge>
-                        </div>
-                      </div>
-                      <Badge variant={user.is_active ? 'success' : 'danger'}>
-                        {user.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
+            filteredUsers.map((user) => (
+              <Card key={user.id} padding="sm">
+                <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-900">
+                        {user.first_name} {user.last_name}
+                      </span>
+                      <Badge variant={roleVariant(user.role)} className="capitalize">{user.role}</Badge>
+                      {!user.is_active && <Badge variant="danger">Inactive</Badge>}
                     </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center text-sm text-gray-600">
-                        <Mail className="h-4 w-4 mr-2" />
-                        <span className="truncate">{user.email}</span>
+                    <p className="mt-0.5 truncate text-sm text-slate-500">
+                      {[user.email, user.phone].filter(Boolean).join(' · ')}
+                    </p>
+                    {(user.role === 'admin' || user.role === 'staff') && (
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="text-xs font-medium text-slate-400">
+                          {user.role === 'staff' ? 'Shop' : 'Shops'}
+                        </span>
+                        {branches.map((branch) => {
+                          const checked = (user.branches || []).some((mine) => mine.id === branch.id);
+                          return (
+                            <label key={branch.id} className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+                              <input
+                                type={user.role === 'staff' ? 'radio' : 'checkbox'}
+                                name={user.role === 'staff' ? `staff-shop-${user.id}` : undefined}
+                                checked={checked}
+                                disabled={savingUserId === user.id}
+                                onChange={(e) => toggleUserBranch(user, branch.id, e.target.checked)}
+                              />
+                              {branch.name}
+                            </label>
+                          );
+                        })}
                       </div>
-                      {user.phone && (
-                        <div className="flex items-center text-sm text-gray-600">
-                          <Phone className="h-4 w-4 mr-2" />
-                          <span>{user.phone}</span>
-                        </div>
-                      )}
-                      {(user.role === 'admin' || user.role === 'staff') && (
-                        <div className="pt-2">
-                          <div className="text-xs font-medium text-slate-500 mb-1">Shops</div>
-                          <div className="flex flex-wrap gap-2">
-                            {branches.map((branch) => {
-                              const checked = (user.branches || []).some((mine) => mine.id === branch.id);
-                              return (
-                                <label key={branch.id} className="inline-flex items-center gap-1.5 text-xs text-slate-700">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    disabled={savingUserId === user.id}
-                                    onChange={(e) => toggleUserBranch(user, branch.id, e.target.checked)}
-                                  />
-                                  {branch.name}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                      <div className="text-xs text-gray-500 mb-3">
-                        <div>Created: {formatDate(user.created_at)}</div>
-                        <div>Updated: {formatDate(user.updated_at)}</div>
-                      </div>
-                      
-                      <div className="flex justify-between">
-                        {canEditUsers && (
-                          <Button variant="ghost" size="sm">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {canDeleteUsers && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            disabled={currentUser?.id === user.id}
-                            title={currentUser?.id === user.id ? "Cannot delete your own account" : "Delete user"}
-                            className={currentUser?.id === user.id ? "opacity-50 cursor-not-allowed" : ""}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
+                    )}
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    {canEditUsers && (
+                      <Button variant="ghost" size="sm">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canDeleteUsers && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={currentUser?.id === user.id}
+                        title={currentUser?.id === user.id ? "Cannot delete your own account" : "Delete user"}
+                        className={currentUser?.id === user.id ? "opacity-50 cursor-not-allowed" : ""}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
           )}
         </div>
 
-
-        {/* Role Distribution */}
-        {!loading && filteredUsers.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Role Distribution</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="text-center">
-                  <div className="flex items-center justify-center mb-2">
-                    <Shield className="h-8 w-8 text-red-600" />
-                  </div>
-                  <div className="text-2xl font-bold text-red-600">
-                    {Array.isArray(filteredUsers) ? filteredUsers.filter(u => u.role === 'admin').length : 0}
-                  </div>
-                  <div className="text-sm text-gray-500">Administrators</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="text-center">
-                  <div className="flex items-center justify-center mb-2">
-                    <UserCog className="h-8 w-8 text-blue-600" />
-                  </div>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {Array.isArray(filteredUsers) ? filteredUsers.filter(u => u.role === 'staff').length : 0}
-                  </div>
-                  <div className="text-sm text-gray-500">Staff Members</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="text-center">
-                  <div className="flex items-center justify-center mb-2">
-                    <UserIcon className="h-8 w-8 text-green-600" />
-                  </div>
-                  <div className="text-2xl font-bold text-green-600">
-                    {Array.isArray(filteredUsers) ? filteredUsers.filter(u => u.role === 'user').length : 0}
-                  </div>
-                  <div className="text-sm text-gray-500">Regular Users</div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        )}
 
         {/* Add User Modal - Only for Admins */}
         {canAddUsers && (

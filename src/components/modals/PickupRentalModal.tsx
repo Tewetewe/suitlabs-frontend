@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import SimpleModal from './SimpleModal';
 import { apiClient } from '@/lib/api';
+import { formatCurrency } from '@/lib/currency';
 import { Rental } from '@/types';
 
 interface PickupRentalModalProps {
@@ -81,7 +82,7 @@ export function PickupRentalModal({ isOpen, onClose, onSuccess, rental }: Pickup
             <div className="text-sm text-gray-600 space-y-1">
               <div>Rental ID: #{rental.id.slice(-8)}</div>
               <div>Customer: {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : 'Unknown'}</div>
-              <div>Total Cost: ${rental.total_cost.toFixed(2)}</div>
+              <div>Total Cost: {formatCurrency(rental.total_cost)}</div>
             </div>
           </div>
         )}

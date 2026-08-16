@@ -4,7 +4,7 @@ import Link from 'next/link';
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardFooter } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -25,20 +25,22 @@ const SimpleBarcodeScanner = dynamic(() => import('@/components/ui/SimpleBarcode
 });
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
-import { Item, ItemFilters, CreateItemRequest, Category } from '@/types';
+import { Item, ItemFilters, CreateItemRequest, Category, ItemFacets } from '@/types';
 import { formatCurrency } from '@/lib/currency';
+import { facetOptions } from '@/lib/select-options';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, Pagination, SkeletonCard } from '@/components/ui/DataDisplay';
-import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck, ArrowRightLeft } from 'lucide-react';
+import { Badge, FilterBar, EmptyState, Pagination, Skeleton } from '@/components/ui/DataDisplay';
+import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck, ArrowRightLeft, MoreHorizontal } from 'lucide-react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { BranchBadge } from '@/components/branch/BranchBadge';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBranch } from '@/contexts/BranchContext';
 
 type ViewMode = 'grid' | 'list';
 
 export default function ItemsPage() {
   const { user } = useAuth();
+  const { viewingAll } = useBranch();
   const isAdmin = user?.role === 'admin';
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +61,14 @@ export default function ItemsPage() {
   const [useSimpleScanner, setUseSimpleScanner] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
+  const [facets, setFacets] = useState<ItemFacets>({
+    types: [],
+    brands: [],
+    colors: [],
+    sizes: [],
+    statuses: [],
+    conditions: [],
+  });
   const { success, error } = useToast();
   const [availabilityForItem, setAvailabilityForItem] = useState<Item | null>(null);
   const [availabilityDates, setAvailabilityDates] = useState<{ start: string; end: string }>({ start: '', end: '' });
@@ -71,6 +81,7 @@ export default function ItemsPage() {
   // Load categories for filter dropdown
   useEffect(() => {
     loadCategories();
+    loadFacets();
   }, []);
 
   useEffect(() => {
@@ -80,6 +91,15 @@ export default function ItemsPage() {
       setFilters((prev) => (prev.type === type ? prev : { ...prev, type }));
     }
   }, []);
+
+  const loadFacets = async () => {
+    try {
+      const data = await apiClient.getItemFacets();
+      setFacets(data);
+    } catch (err) {
+      console.error('Failed to load item facets:', err);
+    }
+  };
 
   const loadCategories = async () => {
     try {
@@ -232,277 +252,180 @@ export default function ItemsPage() {
     }
   };
 
-  const itemConditionVariant = (s: string): 'success' | 'primary' | 'warning' | 'danger' | 'default' => {
-    switch (s) {
-      case 'excellent': return 'success';
-      case 'good':      return 'primary';
-      case 'fair':      return 'warning';
-      case 'poor':      return 'danger';
-      default:          return 'default';
-    }
+  const typeOptions = facetOptions(facets.types, 'All Types');
+  const statusOptions = facetOptions(facets.statuses, 'All Status');
+  const conditionOptions = facetOptions(facets.conditions, 'All Conditions');
+  const brandOptions = facetOptions(facets.brands, 'All Brands', false);
+  const colorOptions = facetOptions(facets.colors, 'All Colors', false);
+
+  const itemFacts = (item: Item) =>
+    [item.color, item.size?.label, `Qty ${item.quantity}`].filter(Boolean).join(' · ');
+
+  const closeItemMenu = (e: React.MouseEvent<HTMLElement>) => {
+    e.currentTarget.closest('details')?.removeAttribute('open');
   };
 
-  const typeOptions = [
-    { value: '', label: 'All Types' },
-    { value: 'suit', label: 'Suit' },
-    { value: 'accessory', label: 'Accessory' },
-    { value: 'retail', label: 'Retail' },
-    { value: 'shoes', label: 'Shoes' },
-    { value: 'tie', label: 'Tie' },
-    { value: 'belt', label: 'Belt' },
-    { value: 'trousers', label: 'Trousers' },
-    { value: 'shirt', label: 'Shirts' },
-    { value: 'vest', label: 'Vest' },
-  ];
-
-  const statusOptions = [
-    { value: '', label: 'All Status' },
-    { value: 'available', label: 'Available' },
-    { value: 'rented', label: 'Rented' },
-    { value: 'maintenance', label: 'Maintenance' },
-    { value: 'retired', label: 'Retired' },
-  ];
-
-  const conditionOptions = [
-    { value: '', label: 'All Conditions' },
-    { value: 'excellent', label: 'Excellent' },
-    { value: 'good', label: 'Good' },
-    { value: 'fair', label: 'Fair' },
-    { value: 'poor', label: 'Poor' },
-  ];
-
-  const brandOptions = [
-    { value: '', label: 'All Brands' },
-    { value: 'SuitLabs Standard', label: 'SuitLabs Standard' },
-    { value: 'Goldy', label: 'Goldy' },
-    { value: 'Mubeng', label: 'Mubeng' },
-    { value: 'Parayu', label: 'Parayu' },
-  ];
-
-  const colorOptions = [
-    { value: '', label: 'All Colors' },
-    { value: 'Black', label: 'Black' },
-    { value: 'Navy', label: 'Navy' },
-    { value: 'Gray', label: 'Gray' },
-    { value: 'Brown', label: 'Brown' },
-    { value: 'White', label: 'White' },
-    { value: 'Blue', label: 'Blue' },
-  ];
-
-
-  const ItemCard = ({ item }: { item: Item }) => (
-    <Card key={item.id}>
-      <CardContent className="space-y-3">
-        {/* Item Image */}
-        <Link href={`/dashboard/items/${item.id}`} className="block">
-          <div className="aspect-square rounded-2xl flex items-center justify-center overflow-hidden bg-black/5 ring-1 ring-black/5">
-            <SafeImage
-              src={item.thumbnail_url}
-              alt={item.name}
-              width={200}
-              height={200}
-              className="h-full w-full object-cover"
-              fallback={<Package className="h-12 w-12 text-slate-400" />}
-            />
-          </div>
-        </Link>
-
-        {/* Item Details */}
-        <div className="space-y-2">
-          <div className="flex items-start justify-between gap-2">
-            <Link href={`/dashboard/items/${item.id}`} className="font-semibold text-slate-900 hover:underline flex-1 min-w-0">
-              <span className="leading-snug [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical] overflow-hidden">
-                {item.name}
-              </span>
-            </Link>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5 max-w-full overflow-hidden">
-            <Badge variant={itemStatusVariant(item.status)}>{item.status}</Badge>
-            <Badge variant="default">{item.type}</Badge>
-            <Badge variant={itemConditionVariant(item.condition)}>{item.condition}</Badge>
-            <BranchBadge branch={item.branch} />
-            {item.is_sellable && <Badge variant="primary">Sellable</Badge>}
-            {/* Category is usually redundant in dense cards — keep only if short */}
-            {item.category?.name && item.category.name.length <= 18 && (
-              <span className="inline-flex items-center rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-black/5 truncate max-w-[10rem]">
-                {item.category.name}
-              </span>
-            )}
-          </div>
-
-          <div className="text-sm text-slate-600">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="font-medium text-slate-700 truncate max-w-[11rem]">{item.brand}</span>
-              <span className="text-slate-300">•</span>
-              <span className="truncate max-w-[7rem]">{item.color}</span>
-              <span className="text-slate-300">•</span>
-              <span className="tabular-nums">Size {item.size.label}</span>
-              <span className="text-slate-300">•</span>
-              <span className="tabular-nums">Qty {item.quantity}</span>
-            </div>
-          </div>
-
-          {/* Tags */}
-          {item.tags && item.tags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex items-center rounded-full bg-white/50 px-2 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-black/5 truncate max-w-[10rem]">
-                {item.tags[0]}
-              </span>
-              {item.tags.length > 1 && (
-                <span className="inline-flex items-center rounded-full bg-white/50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-black/5">
-                  +{item.tags.length - 1}
-                </span>
-              )}
-            </div>
-          )}
-
-          <div className="pt-1">
-            <p className="text-base font-semibold text-slate-900 tabular-nums">
-              {formatCurrency(item.one_day_price)}
-              <span className="text-xs font-medium text-slate-500">/day</span>
-            </p>
-          </div>
-        </div>
-      </CardContent>
-      
-      <CardFooter>
-        <div className="flex w-full items-center justify-between gap-2">
-          <div className="text-[11px] text-slate-500 tabular-nums">
-            {item.code ? `ID • ${item.code}` : ''}
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => { setAvailabilityForItem(item); setAvailabilityDates({ start: '', end: '' }); setAvailabilityResult(''); }}
-            title="Check Availability"
-            aria-label="Check Availability"
-            className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
+  const ItemActions = ({ item }: { item: Item }) => (
+    <details className="relative" onClick={(e) => e.stopPropagation()}>
+      <summary
+        className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full bg-white/95 text-slate-700 shadow-sm ring-1 ring-black/10 backdrop-blur hover:bg-white [&::-webkit-details-marker]:hidden"
+        aria-label="Item actions"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </summary>
+      <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/10">
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          onClick={(e) => {
+            closeItemMenu(e);
+            setAvailabilityForItem(item);
+            setAvailabilityDates({ start: '', end: '' });
+            setAvailabilityResult('');
+          }}
+        >
+          <CalendarCheck className="h-4 w-4 text-slate-400" />
+          Check dates
+        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            onClick={(e) => {
+              closeItemMenu(e);
+              setTransferringItem(item);
+            }}
           >
-            <CalendarCheck className="h-4 w-4" />
-          </Button>
-          {isAdmin && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setTransferringItem(item)}
-              title="Transfer"
-              aria-label="Transfer"
-              className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
-            >
-              <ArrowRightLeft className="h-4 w-4" />
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleEditItem(item)}
-            title="Edit"
-            aria-label="Edit"
-            className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleDeleteItem(item)}
-            title="Delete"
-            aria-label="Delete"
-            className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-red-500/10 text-red-600"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardFooter>
-    </Card>
+            <ArrowRightLeft className="h-4 w-4 text-slate-400" />
+            Transfer
+          </button>
+        )}
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          onClick={(e) => {
+            closeItemMenu(e);
+            handleEditItem(item);
+          }}
+        >
+          <Edit className="h-4 w-4 text-slate-400" />
+          Edit
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+          onClick={(e) => {
+            closeItemMenu(e);
+            handleDeleteItem(item);
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete
+        </button>
+      </div>
+    </details>
   );
 
-  const ItemListItem = ({ item }: { item: Item }) => (
-    <Card key={item.id}>
+  const ItemCard = ({ item }: { item: Item }) => (
+    <Card padding="sm" className="relative z-0 h-full [&:has(details[open])]:z-30">
       <CardContent>
-        <div className="flex space-x-4">
-          {/* Item Image */}
-          <Link href={`/dashboard/items/${item.id}`} className="w-16 h-16 sm:w-20 sm:h-20 bg-black/5 rounded-2xl flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-black/5">
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/dashboard/items/${item.id}`}
+            className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-20 sm:w-20"
+          >
             <SafeImage
               src={item.thumbnail_url}
               alt={item.name}
               width={80}
               height={80}
               className="h-full w-full object-cover"
-              fallback={<Package className="h-6 w-6 sm:h-8 sm:w-8 text-slate-400" />}
+              fallback={<Package className="h-7 w-7 text-slate-300" />}
+            />
+            {viewingAll && item.branch?.name && (
+              <span className="absolute bottom-1 left-1 max-w-[90%] truncate rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white">
+                {item.branch.name}
+              </span>
+            )}
+          </Link>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <Link
+                href={`/dashboard/items/${item.id}`}
+                className="min-w-0 line-clamp-2 text-sm font-semibold leading-snug text-slate-900 hover:text-indigo-700"
+              >
+                {item.name}
+              </Link>
+              <ItemActions item={item} />
+            </div>
+            <p className="mt-0.5 truncate text-xs text-slate-500">{itemFacts(item)}</p>
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold tabular-nums text-slate-900">
+                {formatCurrency(item.one_day_price)}
+                <span className="text-[11px] font-medium text-slate-400">/day</span>
+              </p>
+              <Badge variant={itemStatusVariant(item.status)} dot className="capitalize">
+                {item.status}
+              </Badge>
+            </div>
+            {item.code && (
+              <p className="mt-0.5 truncate font-mono text-[10px] tracking-wide text-slate-400" title={item.code}>
+                {item.code}
+              </p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const ItemListItem = ({ item }: { item: Item }) => (
+    <Card padding="sm">
+      <CardContent>
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/dashboard/items/${item.id}`}
+            className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-20 sm:w-20"
+          >
+            <SafeImage
+              src={item.thumbnail_url}
+              alt={item.name}
+              width={80}
+              height={80}
+              className="h-full w-full object-cover"
+              fallback={<Package className="h-7 w-7 text-slate-300" />}
             />
           </Link>
 
-          {/* Item Details */}
-          <div className="flex-1 min-w-0">
-            <div className="flex justify-between items-start mb-2">
-              <Link href={`/dashboard/items/${item.id}`} className="font-semibold text-slate-900 hover:underline flex-1 min-w-0">
-                <span className="leading-snug [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical] overflow-hidden">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <Link
+                  href={`/dashboard/items/${item.id}`}
+                  className="line-clamp-1 font-semibold text-slate-900 hover:text-indigo-700"
+                >
                   {item.name}
-                </span>
-              </Link>
-              {item.code && <span className="text-xs text-slate-500 ml-2 shrink-0 tabular-nums">#{item.code}</span>}
-            </div>
-
-            <div className="flex flex-wrap gap-1 mb-2">
-              <Badge variant={itemStatusVariant(item.status)}>{item.status}</Badge>
-              <Badge variant={itemConditionVariant(item.condition)}>{item.condition}</Badge>
-              <BranchBadge branch={item.branch} />
-            </div>
-
-            <div className="flex justify-between items-end">
-              <div className="text-sm text-slate-600">
-                <p>{item.brand} • {item.color} • Size {item.size.label} • Qty {item.quantity}</p>
-                {item.category && (
-                  <p className="text-xs text-slate-600 font-medium mb-1">{item.category.name}</p>
+                </Link>
+                <p className="mt-0.5 truncate text-sm text-slate-500">
+                  {itemFacts(item)}
+                  {viewingAll && item.branch?.name ? ` · ${item.branch.name}` : ''}
+                </p>
+                {item.code && (
+                  <p className="mt-0.5 truncate font-mono text-[11px] text-slate-400">{item.code}</p>
                 )}
-                <p className="font-semibold text-slate-900 tabular-nums">{formatCurrency(item.one_day_price)}<span className="text-xs font-medium text-slate-500">/day</span></p>
               </div>
-              
-              <div className="flex space-x-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => { setAvailabilityForItem(item); setAvailabilityDates({ start: '', end: '' }); setAvailabilityResult(''); }}
-                  title="Check Availability"
-                  aria-label="Check Availability"
-                  className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
-                >
-                  <CalendarCheck className="h-4 w-4" />
-                </Button>
-                {isAdmin && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setTransferringItem(item)}
-                    title="Transfer"
-                    aria-label="Transfer"
-                    className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
-                  >
-                    <ArrowRightLeft className="h-4 w-4" />
-                  </Button>
-                )}
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => handleEditItem(item)}
-                  title="Edit"
-                  aria-label="Edit"
-                  className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => handleDeleteItem(item)}
-                  title="Delete"
-                  aria-label="Delete"
-                  className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-red-500/10 text-red-600"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+              <div className="flex shrink-0 items-center gap-3">
+                <div className="text-right">
+                  <p className="text-sm font-semibold tabular-nums text-slate-900">
+                    {formatCurrency(item.one_day_price)}
+                    <span className="text-[11px] font-medium text-slate-400">/day</span>
+                  </p>
+                  <Badge variant={itemStatusVariant(item.status)} dot className="mt-1 capitalize">
+                    {item.status}
+                  </Badge>
+                </div>
+                <ItemActions item={item} />
               </div>
             </div>
           </div>
@@ -587,18 +510,21 @@ export default function ItemsPage() {
                   {/* Filter Dropdowns */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                     <Select
+                      searchable={false}
                       label="Type"
                       options={typeOptions}
                       value={filters.type || ''}
                       onChange={(e) => setFilters({ ...filters, type: e.target.value || undefined })}
                     />
                     <Select
+                      searchable={false}
                       label="Status"
                       options={statusOptions}
                       value={filters.status || ''}
                       onChange={(e) => setFilters({ ...filters, status: e.target.value || undefined })}
                     />
                     <Select
+                      searchable={false}
                       label="Condition"
                       options={conditionOptions}
                       value={filters.condition || ''}
@@ -711,10 +637,29 @@ export default function ItemsPage() {
         {/* Items Grid/List */}
         {loading ? (
           <div className={viewMode === 'grid'
-            ? "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-            : "space-y-4"
+            ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            : "space-y-3"
           }>
-            {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+            {Array.from({ length: 8 }).map((_, i) => (
+              viewMode === 'grid' ? (
+                <div key={i} className="flex items-center gap-3 rounded-2xl glass-panel p-3">
+                  <Skeleton className="h-16 w-16 shrink-0 rounded-xl sm:h-20 sm:w-20" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                    <Skeleton className="h-4 w-1/3" />
+                  </div>
+                </div>
+              ) : (
+                <div key={i} className="flex items-center gap-4 rounded-2xl glass-panel p-4">
+                  <Skeleton className="h-16 w-16 shrink-0 rounded-xl" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              )
+            ))}
           </div>
         ) : items.length === 0 ? (
           <EmptyState
@@ -725,8 +670,8 @@ export default function ItemsPage() {
           />
         ) : (
           <div className={viewMode === 'grid' 
-            ? "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" 
-            : "space-y-4"
+            ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" 
+            : "space-y-3"
           }>
             {items.map((item) => 
               viewMode === 'grid' ? (
@@ -797,7 +742,7 @@ export default function ItemsPage() {
 
       {/* Availability Modal */}
       {availabilityForItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-semibold mb-4">Check Availability</h3>
             <p className="text-sm text-gray-600 mb-4 truncate">Item: {availabilityForItem.name} #{availabilityForItem.code}</p>

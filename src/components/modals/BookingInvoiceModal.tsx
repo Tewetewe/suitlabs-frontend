@@ -37,7 +37,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
     const buildInvoiceHTML = () => {
       const itemsHTML = invoice.items && invoice.items.length > 0 ? (
         invoice.items.map((item) => {
-          if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+          if ((item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
             return `<div class="receipt-item"><div class="receipt-line">  ${item.description}</div></div>`;
           }
           return `
@@ -384,7 +384,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
             {invoice.items && invoice.items.length > 0 ? (
               <>
                 {invoice.items.map((item, idx) => {
-                  if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+                  if ((item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
                     return (
                       <div key={idx} className="receipt-item">
                         <div className="receipt-line">  {item.description}</div>
@@ -489,7 +489,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
                   {invoice.items && invoice.items.length > 0 ? (
                     <>
                       {invoice.items.map((item, idx) => {
-                        if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+                        if ((item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
                           return (
                             <div key={idx} className="receipt-item">
                               <div className="receipt-line">  {item.description}</div>

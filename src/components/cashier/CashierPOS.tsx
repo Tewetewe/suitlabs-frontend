@@ -31,12 +31,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
+import { Select } from '@/components/ui/Select';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useCashierChrome } from '@/components/cashier/CashierChromeContext';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { customerOptionLabel } from '@/lib/branch-scope';
+import { BOOKING_OCCASION_OPTIONS, facetLabel } from '@/lib/select-options';
 import {
+  BookingInstitution,
   BookingPaymentMethod,
   CreateBookingRequest,
   CreateSaleRequest,
@@ -60,6 +64,7 @@ type CartLine = {
   item: Item;
   quantity: number;
   unit_price: number;
+  is_addon?: boolean;
 };
 
 type DoneReceipt = {
@@ -67,19 +72,6 @@ type DoneReceipt = {
   subtitle: string;
   amount: number;
 };
-
-const TYPE_CHIPS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'All' },
-  { value: 'suit', label: 'Suit' },
-  { value: 'jacket', label: 'Jacket' },
-  { value: 'shirt', label: 'Shirt' },
-  { value: 'trousers', label: 'Trousers' },
-  { value: 'shoes', label: 'Shoes' },
-  { value: 'tie', label: 'Tie' },
-  { value: 'vest', label: 'Vest' },
-  { value: 'accessory', label: 'Acc' },
-  { value: 'retail', label: 'Retail' },
-];
 
 const PAY_CHANNELS: Array<{ value: PayChannel; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { value: 'cash', label: 'Cash', icon: Banknote },
@@ -130,6 +122,9 @@ export function CashierPOS() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 250);
   const [type, setType] = useState('');
+  const [typeOptions, setTypeOptions] = useState<Array<{ value: string; label: string }>>([
+    { value: '', label: 'All types' },
+  ]);
   const [rentalDate, setRentalDate] = useState(todayISO);
   const [returnDate, setReturnDate] = useState('');
   const [items, setItems] = useState<Item[]>([]);
@@ -142,6 +137,7 @@ export function CashierPOS() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
   const catalogRequestRef = useRef(0);
+  const customersByIdRef = useRef<Map<string, Customer>>(new Map());
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [packages, setPackages] = useState<PackagePricing[]>([]);
@@ -153,12 +149,13 @@ export function CashierPOS() {
   const [discount, setDiscount] = useState('');
   const [notes, setNotes] = useState('');
   const [guarantee, setGuarantee] = useState('KTP');
+  const [occasion, setOccasion] = useState<BookingInstitution>('wedding');
   const [submitting, setSubmitting] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [datesOpen, setDatesOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({ first_name: '', last_name: '', phone: '' });
+  const [newCustomer, setNewCustomer] = useState({ first_name: '', last_name: '', phone: '', instagram: '', tiktok: '' });
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [done, setDone] = useState<DoneReceipt | null>(null);
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -166,8 +163,11 @@ export function CashierPOS() {
   const selectedPackage = packages.find((pkg) => pkg.id === packageId);
   const subtotal = cart.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
   const packagePrice = selectedPackage?.price || 0;
+  const addonTotal = cart
+    .filter((line) => line.is_addon)
+    .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
   const discountAmount = Number(discount) || 0;
-  const gross = mode === 'rental' && packagePrice > 0 ? packagePrice : subtotal;
+  const gross = mode === 'rental' && packagePrice > 0 ? packagePrice + addonTotal : subtotal;
   const total = Math.max(0, gross - (mode === 'rental' && packagePrice > 0 ? 0 : discountAmount));
   const paidAmount = mode === 'rental' && payCoverage === 'full' ? total : Number(paidInput) || 0;
   const remaining = Math.max(0, total - paidAmount);
@@ -251,6 +251,12 @@ export function CashierPOS() {
     apiClient.getPackagePricing().then((rows) => {
       setPackages(rows.filter((row) => row.is_active));
     }).catch(() => setPackages([]));
+    apiClient.getItemFacets().then((facets) => {
+      setTypeOptions([
+        { value: '', label: 'All types' },
+        ...facets.types.map((value) => ({ value, label: facetLabel(value) })),
+      ]);
+    }).catch(() => undefined);
   }, []);
 
   const fetchCustomerPage = useCallback(async (query: string, nextPage: number): Promise<AutoPageResult> => {
@@ -262,6 +268,7 @@ export function CashierPOS() {
         is_active: true,
       });
       const rows = res?.data?.data?.customers || [];
+      for (const row of rows) customersByIdRef.current.set(row.id, row);
       return {
         options: rows.map((row) => ({
           value: row.id,
@@ -279,8 +286,17 @@ export function CashierPOS() {
       setCustomer(null);
       return;
     }
+    const cached = customersByIdRef.current.get(id);
+    if (cached?.first_name) {
+      setCustomer(cached);
+      return;
+    }
     try {
       const row = await apiClient.getCustomer(id);
+      if (!row?.id) {
+        error('Customer not found', 'Try searching again.');
+        return;
+      }
       setCustomer(row);
     } catch {
       error('Customer not found', 'Try searching again.');
@@ -306,6 +322,7 @@ export function CashierPOS() {
           item,
           quantity: 1,
           unit_price: catalogPrice(item, mode),
+          is_addon: false,
         },
       ];
     });
@@ -319,6 +336,10 @@ export function CashierPOS() {
       return;
     }
     setCart((prev) => prev.map((line) => (line.key === key ? { ...line, quantity } : line)));
+  };
+
+  const toggleAddon = (key: string) => {
+    setCart((prev) => prev.map((line) => (line.key === key ? { ...line, is_addon: !line.is_addon } : line)));
   };
 
   const resetTicket = () => {
@@ -359,10 +380,13 @@ export function CashierPOS() {
         first_name: newCustomer.first_name.trim(),
         last_name: newCustomer.last_name.trim(),
         phone: newCustomer.phone.trim(),
+        instagram: newCustomer.instagram.trim() || undefined,
+        tiktok: newCustomer.tiktok.trim() || undefined,
       });
+      if (created?.id) customersByIdRef.current.set(created.id, created);
       setCustomer(created);
       setNewCustomerOpen(false);
-      setNewCustomer({ first_name: '', last_name: '', phone: '' });
+      setNewCustomer({ first_name: '', last_name: '', phone: '', instagram: '', tiktok: '' });
       success('Customer ready', `${created.first_name} ${created.last_name}`);
     } catch (e) {
       error('Could not save customer', e instanceof Error ? e.message : 'Try again.');
@@ -380,6 +404,11 @@ export function CashierPOS() {
     }
     if (mode === 'rental' && !rentalDate) {
       error('Date required', 'Set the rental date.');
+      return;
+    }
+    if (mode === 'rental' && !occasion) {
+      error('Occasion required', 'Pick why they are renting — wedding, school, corporate.');
+      setCartOpen(true);
       return;
     }
 
@@ -414,6 +443,7 @@ export function CashierPOS() {
           booking_date: new Date(rentalDate).toISOString(),
           appointment_date: returnDate ? new Date(returnDate).toISOString() : undefined,
           booking_guarantee: guarantee,
+          institution: occasion,
           notes,
           status: paidAmount > 0 ? 'confirmed' : 'pending',
           payment_status: paymentStatus,
@@ -430,6 +460,7 @@ export function CashierPOS() {
             unit_price: line.unit_price,
             total_price: line.unit_price * line.quantity,
             discount_amount: 0,
+            is_addon: !!packageId && !!line.is_addon,
           })),
         } as unknown as CreateBookingRequest;
         const booking = await apiClient.createBooking(payload);
@@ -496,15 +527,15 @@ export function CashierPOS() {
         ) : (
           cart.map((line) => (
             <div key={line.key} className="rounded-2xl glass-panel p-3">
-              <div className="flex gap-3">
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-black/5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
                   <SafeImage
                     src={line.item.thumbnail_url}
                     alt={line.item.name}
                     width={56}
                     height={56}
                     className="h-full w-full object-cover"
-                    fallback={<Package className="m-auto h-6 w-6 text-slate-400" />}
+                    fallback={<Package className="h-6 w-6 text-slate-400" />}
                   />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -514,6 +545,20 @@ export function CashierPOS() {
                       <div className="text-xs text-slate-500">
                         {line.item.size?.label ? `Size ${line.item.size.label}` : line.item.code}
                       </div>
+                      {mode === 'rental' && !!packageId && (
+                        <button
+                          type="button"
+                          onClick={() => toggleAddon(line.key)}
+                          className={clsx(
+                            'mt-1 inline-flex min-h-8 items-center rounded-full px-2.5 text-[11px] font-semibold touch-manipulation',
+                            line.is_addon
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-slate-100 text-slate-600'
+                          )}
+                        >
+                          {line.is_addon ? 'Add-on' : 'Included'}
+                        </button>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -543,7 +588,9 @@ export function CashierPOS() {
                       </button>
                     </div>
                     <div className="text-sm font-semibold tabular-nums text-slate-900">
-                      {formatCurrency(line.quantity * line.unit_price)}
+                      {mode === 'rental' && packageId && !line.is_addon
+                        ? 'Included'
+                        : formatCurrency(line.quantity * line.unit_price)}
                     </div>
                   </div>
                 </div>
@@ -563,6 +610,9 @@ export function CashierPOS() {
                 </Chip>
               ))}
             </div>
+            {packageId && (
+              <p className="mt-1 text-xs text-slate-500">Items are included in the package by default. Tap the badge to charge one as an add-on.</p>
+            )}
           </div>
         )}
 
@@ -621,6 +671,23 @@ export function CashierPOS() {
 
         {mode === 'rental' && (
           <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Occasion</div>
+            <div className="flex flex-wrap gap-2">
+              {BOOKING_OCCASION_OPTIONS.map((option) => (
+                <Chip
+                  key={option.value}
+                  selected={occasion === option.value}
+                  onClick={() => setOccasion(option.value)}
+                >
+                  {option.label}
+                </Chip>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mode === 'rental' && (
+          <div>
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Pay</div>
             <div className="mb-2 grid grid-cols-2 gap-2">
               <Chip selected={payCoverage === 'dp'} onClick={() => setPayCoverage('dp')} block>DP</Chip>
@@ -662,16 +729,13 @@ export function CashierPOS() {
 
         {mode === 'rental' && payCoverage === 'dp' && (
           <div>
-            <Input
+            <CurrencyInput
               label="Down payment"
-              type="number"
-              min={0}
-              inputMode="numeric"
               value={paidInput}
-              onChange={(e) => setPaidInput(e.target.value)}
+              onChange={(n) => setPaidInput(n ? String(n) : '')}
             />
             <div className="mt-2 flex gap-2">
-              <Chip onClick={() => setPaidInput('0')}>Rp 0</Chip>
+              <Chip onClick={() => setPaidInput('0')}>{formatCurrency(0)}</Chip>
               <Chip onClick={() => setPaidInput(String(Math.round(total / 2)))}>50%</Chip>
               <Chip onClick={() => { setPayCoverage('full'); setPaidInput(String(total)); }}>100%</Chip>
             </div>
@@ -679,13 +743,10 @@ export function CashierPOS() {
         )}
 
         {!(mode === 'rental' && packageId) && (
-          <Input
+          <CurrencyInput
             label="Discount"
-            type="number"
-            min={0}
-            inputMode="numeric"
             value={discount}
-            onChange={(e) => setDiscount(e.target.value)}
+            onChange={(n) => setDiscount(n ? String(n) : '')}
           />
         )}
 
@@ -699,10 +760,25 @@ export function CashierPOS() {
 
       <div className="shrink-0 border-t border-black/5 bg-white/50 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
         <div className="mb-3 space-y-1 text-sm">
-          <div className="flex justify-between text-slate-500">
-            <span>Subtotal</span>
-            <span className="tabular-nums">{formatCurrency(gross)}</span>
-          </div>
+          {mode === 'rental' && packagePrice > 0 ? (
+            <>
+              <div className="flex justify-between text-slate-500">
+                <span>Package</span>
+                <span className="tabular-nums">{formatCurrency(packagePrice)}</span>
+              </div>
+              {addonTotal > 0 && (
+                <div className="flex justify-between text-slate-500">
+                  <span>Add-ons</span>
+                  <span className="tabular-nums">{formatCurrency(addonTotal)}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex justify-between text-slate-500">
+              <span>Subtotal</span>
+              <span className="tabular-nums">{formatCurrency(gross)}</span>
+            </div>
+          )}
           {mode === 'rental' && (
             <div className="flex justify-between text-slate-500">
               <span>Remaining</span>
@@ -803,13 +879,13 @@ export function CashierPOS() {
             )
           )}
 
-          <div className="flex gap-2 overflow-x-auto pb-0.5">
-            {TYPE_CHIPS.map((chip) => (
-              <Chip key={chip.value || 'all'} selected={type === chip.value} onClick={() => setType(chip.value)}>
-                {chip.label}
-              </Chip>
-            ))}
-          </div>
+          <Select
+            options={typeOptions}
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            searchPlaceholder="All types"
+            emptyMessage="No types found"
+          />
         </div>
 
         <div
@@ -848,14 +924,14 @@ export function CashierPOS() {
                         !available && mode === 'sale' && 'opacity-50'
                       )}
                     >
-                      <div className="relative aspect-square bg-slate-100">
+                      <div className="relative flex aspect-square items-center justify-center bg-slate-100">
                         <SafeImage
                           src={item.thumbnail_url}
                           alt={item.name}
                           width={320}
                           height={320}
                           className="h-full w-full object-cover"
-                          fallback={<Package className="absolute inset-0 m-auto h-10 w-10 text-slate-300" />}
+                          fallback={<Package className="h-10 w-10 text-slate-300" />}
                         />
                         <div className="absolute left-2 top-2 flex flex-wrap gap-1">
                           {item.size?.label && (
@@ -870,8 +946,8 @@ export function CashierPOS() {
                           </span>
                         )}
                       </div>
-                      <div className="space-y-1 p-3">
-                        <div className="line-clamp-2 min-h-10 text-sm font-semibold leading-snug text-slate-900">
+                      <div className="space-y-0.5 p-2.5">
+                        <div className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">
                           {item.name}
                         </div>
                         <div className="flex items-center justify-between gap-2">
@@ -984,6 +1060,18 @@ export function CashierPOS() {
             inputMode="tel"
             value={newCustomer.phone}
             onChange={(e) => setNewCustomer((prev) => ({ ...prev, phone: e.target.value }))}
+          />
+          <Input
+            label="Instagram (optional)"
+            value={newCustomer.instagram}
+            onChange={(e) => setNewCustomer((prev) => ({ ...prev, instagram: e.target.value }))}
+            placeholder="@username"
+          />
+          <Input
+            label="TikTok (optional)"
+            value={newCustomer.tiktok}
+            onChange={(e) => setNewCustomer((prev) => ({ ...prev, tiktok: e.target.value }))}
+            placeholder="@username"
           />
         </div>
       </SimpleModal>

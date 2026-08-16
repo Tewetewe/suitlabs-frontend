@@ -282,3 +282,15 @@ export function isRetryableError(error: APIError): boolean {
   
   return retryableCodes.includes(error.code);
 }
+
+/**
+ * Backend single-record payloads are often `{ [key]: record }`.
+ * Returns the nested record when present, otherwise the payload itself.
+ */
+export function unwrapNamedRecord<T>(payload: unknown, key: string): T {
+  if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+    const nested = (payload as Record<string, unknown>)[key];
+    if (nested && typeof nested === 'object') return nested as T;
+  }
+  return payload as T;
+}

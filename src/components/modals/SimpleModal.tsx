@@ -42,7 +42,7 @@ export default function SimpleModal({ isOpen, title, onClose, children, size = '
       role="dialog"
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/35 backdrop-blur-md" onClick={onClose} />
+      <div className="absolute inset-0 bg-white/90 backdrop-blur-md" onClick={onClose} />
 
       {/* Panel */}
       <div
@@ -73,7 +73,7 @@ export default function SimpleModal({ isOpen, title, onClose, children, size = '
 
         {/* Footer */}
         {footer && (
-          <div className="shrink-0 border-t border-black/5 bg-white/35 px-4 py-3 md:px-5 flex justify-end gap-2 md:rounded-b-2xl backdrop-blur-md">
+          <div className="shrink-0 border-t border-black/5 bg-white/35 px-4 py-3 md:px-5 flex flex-wrap justify-end gap-2 md:rounded-b-2xl backdrop-blur-md">
             {footer}
           </div>
         )}

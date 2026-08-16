@@ -123,6 +123,10 @@ export function AddUserModal({ isOpen, onClose, onUserAdded, branches = [] }: Ad
       newErrors['address.country'] = 'Country is required';
     }
 
+    if (formData.role === 'staff' && formData.branch_ids.length !== 1) {
+      newErrors.branch_ids = 'Staff must be assigned to one shop';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -315,7 +319,13 @@ export function AddUserModal({ isOpen, onClose, onUserAdded, branches = [] }: Ad
                 </label>
                 <Select
                   value={formData.role}
-                  onChange={(e) => handleInputChange('role', e.target.value)}
+                  onChange={(e) => {
+                    const role = e.target.value;
+                    handleInputChange('role', role);
+                    if (role === 'staff' && formData.branch_ids.length > 1) {
+                      setFormData((prev) => ({ ...prev, role: 'staff', branch_ids: prev.branch_ids.slice(0, 1) }));
+                    }
+                  }}
                   options={[
                     { value: 'customer', label: 'Customer' },
                     { value: 'staff', label: 'Staff' },
@@ -328,21 +338,29 @@ export function AddUserModal({ isOpen, onClose, onUserAdded, branches = [] }: Ad
 
           {(formData.role === 'admin' || formData.role === 'staff') && branches.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-lg font-medium text-gray-900">Shops</h3>
+              <h3 className="text-lg font-medium text-gray-900">
+                {formData.role === 'staff' ? 'Shop' : 'Shops'}
+              </h3>
+              {formData.role === 'staff' && errors.branch_ids && (
+                <p className="text-sm text-red-600">{errors.branch_ids}</p>
+              )}
               <div className="flex flex-wrap gap-3">
                 {branches.map((branch) => {
                   const checked = formData.branch_ids.includes(branch.id);
                   return (
                     <label key={branch.id} className="inline-flex items-center gap-2 text-sm text-slate-700">
                       <input
-                        type="checkbox"
+                        type={formData.role === 'staff' ? 'radio' : 'checkbox'}
+                        name={formData.role === 'staff' ? 'staff-shop' : undefined}
                         checked={checked}
                         onChange={(e) => {
                           setFormData((prev) => ({
                             ...prev,
-                            branch_ids: e.target.checked
-                              ? [...prev.branch_ids, branch.id]
-                              : prev.branch_ids.filter((id) => id !== branch.id),
+                            branch_ids: formData.role === 'staff'
+                              ? [branch.id]
+                              : e.target.checked
+                                ? [...prev.branch_ids, branch.id]
+                                : prev.branch_ids.filter((id) => id !== branch.id),
                           }));
                         }}
                       />

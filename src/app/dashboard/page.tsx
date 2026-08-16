@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, formatNumber } from '@/lib/currency';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { PageShell, StatGrid } from '@/components/ui/PageShell';
@@ -181,7 +181,7 @@ export default function DashboardPage() {
                         ? ''
                         : s.format === 'currency'
                           ? formatCurrency(stats?.[s.key] as number ?? 0)
-                          : (stats?.[s.key] as number ?? 0).toLocaleString(),
+                          : formatNumber(stats?.[s.key] as number ?? 0),
             icon:      s.icon,
             iconBg:    s.iconBg,
             iconColor: s.iconColor,
@@ -192,11 +192,16 @@ export default function DashboardPage() {
         {isAdmin && (
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <CardTitle>This month (accrual)</CardTitle>
-                <Link href="/dashboard/admin/financial-report" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-                  Full report →
-                </Link>
+                <div className="flex items-center gap-3">
+                  <Link href="/dashboard/admin/rental-analytics" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                    Analytics →
+                  </Link>
+                  <Link href="/dashboard/admin/financial-report" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                    Full report →
+                  </Link>
+                </div>
               </div>
             </CardHeader>
             <CardContent>

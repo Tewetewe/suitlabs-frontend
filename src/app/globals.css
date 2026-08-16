@@ -2,21 +2,17 @@
 
 :root {
   /* Base */
-  --background: #f8fafc;
+  --background: #ffffff;
   --foreground: #0f172a;
 
-  /* Soft-glass (2026) tokens */
-  --canvas-0: #f8fafc;
-  --canvas-1: #eef2ff;
-  --canvas-2: #ecfeff;
-  --canvas-3: #fff7ed;
+  --canvas-0: #ffffff;
 
-  --glass-bg: rgba(255, 255, 255, 0.68);
-  --glass-bg-strong: rgba(255, 255, 255, 0.82);
-  --glass-border: rgba(15, 23, 42, 0.10);
-  --glass-border-soft: rgba(15, 23, 42, 0.06);
-  --glass-shadow: 0 24px 60px rgba(15, 23, 42, 0.10), 0 4px 14px rgba(15, 23, 42, 0.06);
-  --glass-shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.08), 0 2px 10px rgba(15, 23, 42, 0.05);
+  --glass-bg: #ffffff;
+  --glass-bg-strong: #ffffff;
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-border-soft: rgba(15, 23, 42, 0.07);
+  --glass-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
+  --glass-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.05);
 
   --focus-ring: rgba(99, 102, 241, 0.9);
 }
@@ -24,7 +20,7 @@
 /* Keep light mode always — intentional override */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #f8fafc;
+    --background: #ffffff;
     --foreground: #0f172a;
   }
 }
@@ -49,33 +45,24 @@ body {
 
 .app-canvas {
   min-height: 100vh;
-  background:
-    radial-gradient(1200px 800px at 12% 10%, rgba(99, 102, 241, 0.16), transparent 60%),
-    radial-gradient(900px 700px at 85% 18%, rgba(34, 211, 238, 0.12), transparent 55%),
-    radial-gradient(900px 700px at 70% 92%, rgba(251, 146, 60, 0.10), transparent 55%),
-    linear-gradient(180deg, var(--canvas-0), var(--canvas-0));
+  background: #ffffff;
 }
 
 .glass-panel {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border-soft);
   box-shadow: var(--glass-shadow-soft);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
 .glass-panel-strong {
   background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
 }
 
 .glass-control {
-  background: rgba(255, 255, 255, 0.70);
+  background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.10);
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
 }
 
 .hairline-border {

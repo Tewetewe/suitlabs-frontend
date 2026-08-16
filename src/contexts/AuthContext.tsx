@@ -3,13 +3,35 @@
 import React, { createContext, useCallback, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
 import { apiClient } from '@/lib/api';
-import { persistBranchScope, readStoredBranchId } from '@/lib/branch-scope';
+import { persistBranchScope, readStoredBranchId, ALL_BRANCHES_ID } from '@/lib/branch-scope';
 
-function ensureBranchStorage(user: User | null) {
+function applyUserBranchStorage(user: User | null) {
   if (!user) return;
-  if (readStoredBranchId()) return;
-  const first = user.branches?.[0]?.id;
-  if (first) persistBranchScope(first, first);
+  const assigned = user.branches || [];
+  const allowed = new Set(assigned.map((branch) => branch.id));
+  const stored = readStoredBranchId();
+
+  if (user.role === 'admin') {
+    if (stored === ALL_BRANCHES_ID) {
+      persistBranchScope(ALL_BRANCHES_ID, assigned[0]?.id ?? undefined);
+      return;
+    }
+    // Admins can open any shop, not only assigned ones. Keep the saved
+    // selection across refresh; BranchContext validates it against the live list.
+    if (stored) {
+      persistBranchScope(stored, stored);
+      return;
+    }
+    persistBranchScope(ALL_BRANCHES_ID, assigned[0]?.id ?? undefined);
+    return;
+  }
+
+  const first = assigned[0]?.id;
+  if (stored && stored !== ALL_BRANCHES_ID && allowed.has(stored)) {
+    persistBranchScope(stored, stored);
+    return;
+  }
+  persistBranchScope(first ?? null, first ?? null);
 }
 
 interface AuthContextType {
@@ -32,7 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) {
         apiClient.setToken(token);
         const userData = await apiClient.getProfile();
-        ensureBranchStorage(userData);
         setUser(userData);
       }
     } catch (error: unknown) {
@@ -53,13 +74,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const response = await apiClient.login({ email, password });
-    ensureBranchStorage(response.user);
+    applyUserBranchStorage(response.user);
     setUser(response.user);
   };
 
   const logout = () => {
     apiClient.clearToken();
     localStorage.removeItem('auth_token');
+    persistBranchScope(null, null);
     setUser(null);
   };
 

@@ -1,5 +1,7 @@
 import React from 'react';
+import Link from 'next/link';
 import clsx from 'clsx';
+import { MoreHorizontal } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Badge — consistent status pill / chip
@@ -254,5 +256,65 @@ export function FilterBar({ children, className }: FilterBarProps) {
     >
       {children}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OverflowMenu — collapse secondary row actions into a ⋯ menu
+// ---------------------------------------------------------------------------
+
+export function OverflowMenu({ children, label = 'Actions' }: { children: React.ReactNode; label?: string }) {
+  return (
+    <details className="relative" onClick={(e) => e.stopPropagation()}>
+      <summary
+        className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-800 [&::-webkit-details-marker]:hidden"
+        aria-label={label}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </summary>
+      <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/10">
+        {children}
+      </div>
+    </details>
+  );
+}
+
+export function OverflowMenuItem({
+  children,
+  onClick,
+  href,
+  icon,
+  danger = false,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  href?: string;
+  icon?: React.ReactNode;
+  danger?: boolean;
+}) {
+  const className = clsx(
+    'flex w-full items-center gap-2 px-3 py-2 text-left text-sm',
+    danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-slate-50',
+  );
+
+  const close = (e: React.MouseEvent<HTMLElement>) => {
+    e.currentTarget.closest('details')?.removeAttribute('open');
+    onClick?.();
+  };
+
+  if (href) {
+    return (
+      <Link href={href} className={className} onClick={close}>
+        {icon}
+        {children}
+      </Link>
+    );
+  }
+
+  return (
+    <button type="button" className={className} onClick={close}>
+      {icon}
+      {children}
+    </button>
   );
 }

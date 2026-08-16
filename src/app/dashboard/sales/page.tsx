@@ -19,7 +19,6 @@ import { CreateSaleRequest, Rental, Sale, SaleSource } from '@/types';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ShoppingBag } from 'lucide-react';
-import { BranchBadge } from '@/components/branch/BranchBadge';
 
 function sourceLabel(source: SaleSource) {
   switch (source) {
@@ -146,6 +145,7 @@ function SalesPageInner() {
             onChange={(e) => setSearch(e.target.value)}
           />
           <Select
+            searchable={false}
             value={source}
             onChange={(e) => setSource(e.target.value as SaleSource | '')}
             options={[
@@ -168,34 +168,34 @@ function SalesPageInner() {
         ) : (
           <div className="space-y-3">
             {sales.map((sale) => (
-              <Card key={sale.id}>
-                <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
+              <Card key={sale.id} padding="sm">
+                <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-slate-900">{sale.sale_number}</span>
-                      <Badge variant={sale.status === 'completed' ? 'success' : 'danger'}>{sale.status}</Badge>
-                      <BranchBadge branch={sale.branch} />
-                      <Badge variant="default">{sourceLabel(sale.source)}</Badge>
-                      {sale.payment_method && (
-                        <Badge variant="default">{formatPaymentMethod(sale.payment_method)}</Badge>
-                      )}
+                      <Badge variant={sale.status === 'completed' ? 'success' : 'danger'} dot className="capitalize">{sale.status}</Badge>
                     </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      {sale.customer ? `${sale.customer.first_name} ${sale.customer.last_name}` : 'Walk-in'}
-                      {sale.customer?.branch?.name ? ` · ${sale.customer.branch.name}` : ''}
-                      {' · '}
-                      {formatDateTime(sale.created_at)}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      {(sale.items || []).map((line) => line.item?.name || 'Item').join(', ')}
-                    </div>
+                    <p className="mt-0.5 truncate text-sm text-slate-500">
+                      {[
+                        sale.customer ? `${sale.customer.first_name} ${sale.customer.last_name}` : 'Walk-in',
+                        sourceLabel(sale.source),
+                        sale.payment_method ? formatPaymentMethod(sale.payment_method) : '',
+                        sale.branch?.name,
+                        formatDateTime(sale.created_at),
+                      ].filter(Boolean).join(' · ')}
+                    </p>
+                    {(sale.items || []).length > 0 && (
+                      <p className="mt-0.5 truncate text-xs text-slate-400">
+                        {(sale.items || []).map((line) => line.item?.name || 'Item').join(', ')}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <div className="font-semibold text-slate-900">{formatCurrency(sale.total_amount)}</div>
+                      <div className="text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(sale.total_amount)}</div>
                       {isAdmin && (
-                        <div className="text-xs text-slate-500">
-                          Buying {formatCurrency((sale.items || []).reduce((sum, line) => sum + line.quantity * (line.unit_cost || 0), 0))}
+                        <div className="text-[11px] text-slate-400">
+                          Cost {formatCurrency((sale.items || []).reduce((sum, line) => sum + line.quantity * (line.unit_cost || 0), 0))}
                         </div>
                       )}
                     </div>

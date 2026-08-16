@@ -5,6 +5,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { Select } from '@/components/ui/Select';
@@ -252,18 +253,11 @@ export default function PackagePricingPage() {
                 helperText="How long the rental lasts."
               />
 
-              <Input
-                label="Price (Rp)"
-                type="number"
-                inputMode="numeric"
-                placeholder="e.g. 1200000"
+              <CurrencyInput
+                label="Price"
                 value={form.price}
-                onChange={e => {
-                  const raw = e.target.value;
-                  setForm({ ...form, price: raw === '' ? '' : Number(raw) });
-                }}
+                onChange={(n) => setForm({ ...form, price: n || '' })}
                 helperText="Total package price."
-                min={0}
               />
 
               <TextAreaField
@@ -287,7 +281,7 @@ export default function PackagePricingPage() {
             />
           ) : (
             filtered.map(p => (
-              <Card key={p.id}>
+              <Card key={p.id} padding="sm">
                 <CardContent>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">

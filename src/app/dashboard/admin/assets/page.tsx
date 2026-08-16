@@ -9,6 +9,7 @@ import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { Badge, EmptyState, Pagination } from '@/components/ui/DataDisplay';
 import SimpleModal from '@/components/modals/SimpleModal';
@@ -407,6 +408,7 @@ export default function AssetsPage() {
             onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
           />
           <Select
+            searchable={false}
             label="Category"
             options={CATEGORY_OPTIONS}
             value={form.category}
@@ -420,17 +422,16 @@ export default function AssetsPage() {
             value={form.quantity || ''}
             onChange={(e) => setForm((prev) => ({ ...prev, quantity: Number(e.target.value) }))}
           />
-          <Input
-            label="Buying price (per unit, IDR)"
-            type="number"
-            min={0}
+          <CurrencyInput
+            label="Buying price (per unit)"
             required
             value={form.purchase_price || ''}
-            onChange={(e) => setForm((prev) => ({ ...prev, purchase_price: Number(e.target.value) }))}
+            onChange={(n) => setForm((prev) => ({ ...prev, purchase_price: n }))}
           />
           {form.purchase_price > 0 && (
             <>
               <Select
+                searchable={false}
                 label="Paid with"
                 options={PURCHASE_PAYMENT_OPTIONS}
                 value={form.payment_method || 'cash'}

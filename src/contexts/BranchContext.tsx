@@ -60,6 +60,17 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    const stored = readStoredBranchId();
+    const storedWrite = readStoredWriteBranchId();
+    if (stored === ALL_BRANCHES_ID) {
+      setCurrentBranchIdState(null);
+    } else if (stored) {
+      setCurrentBranchIdState(stored);
+    }
+    if (storedWrite) {
+      setWriteBranchId(storedWrite);
+    }
+
     let cancelled = false;
     const load = async () => {
       try {
@@ -70,17 +81,21 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         const membership = user.role === 'admin'
           ? rows.filter((branch) => branch.is_active)
           : rows.filter((branch) => (user.branches || []).some((mine) => mine.id === branch.id));
-        const stored = readStoredBranchId();
-        const storedWrite = readStoredWriteBranchId();
+        const latestStored = readStoredBranchId();
+        const latestWrite = readStoredWriteBranchId();
         const allowedIds = new Set(membership.map((branch) => branch.id));
         const fallback = membership[0]?.id ?? null;
 
-        if (user.role === 'admin' && stored === ALL_BRANCHES_ID) {
-          applySelection(null, storedWrite && allowedIds.has(storedWrite) ? storedWrite : fallback);
+        if (user.role === 'admin' && latestStored === ALL_BRANCHES_ID) {
+          applySelection(null, latestWrite && allowedIds.has(latestWrite) ? latestWrite : fallback);
           return;
         }
-        if (stored && stored !== ALL_BRANCHES_ID && allowedIds.has(stored)) {
-          applySelection(stored, stored);
+        if (user.role !== 'admin' && latestStored === ALL_BRANCHES_ID) {
+          applySelection(fallback, fallback);
+          return;
+        }
+        if (latestStored && latestStored !== ALL_BRANCHES_ID && allowedIds.has(latestStored)) {
+          applySelection(latestStored, latestStored);
           return;
         }
         if (membership.length === 1) {
@@ -93,8 +108,12 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         const fromUser = user.branches || [];
         if (!cancelled) {
           setBranches(fromUser);
-          const stored = readStoredBranchId();
-          const match = fromUser.find((branch) => branch.id === stored);
+          const latestStored = readStoredBranchId();
+          const match = fromUser.find((branch) => branch.id === latestStored);
+          if (latestStored && latestStored !== ALL_BRANCHES_ID && (user.role === 'admin' || match)) {
+            applySelection(match?.id ?? latestStored, match?.id ?? latestStored);
+            return;
+          }
           applySelection(match?.id ?? fromUser[0]?.id ?? null, match?.id ?? fromUser[0]?.id ?? null);
         }
       } finally {
@@ -110,11 +129,19 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
 
   const setCurrentBranchId = useCallback((id: string | null) => {
     if (id === null) {
+      if (!isAdmin) {
+        applySelection(allowedBranches[0]?.id ?? null, allowedBranches[0]?.id ?? null);
+        return;
+      }
       applySelection(null, writeBranchId ?? allowedBranches[0]?.id ?? null);
       return;
     }
+    if (!isAdmin && !allowedBranches.some((branch) => branch.id === id)) {
+      applySelection(allowedBranches[0]?.id ?? null, allowedBranches[0]?.id ?? null);
+      return;
+    }
     applySelection(id, id);
-  }, [allowedBranches, applySelection, writeBranchId]);
+  }, [allowedBranches, applySelection, isAdmin, writeBranchId]);
 
   const currentBranch = allowedBranches.find((branch) => branch.id === currentBranchId)
     ?? branches.find((branch) => branch.id === currentBranchId)

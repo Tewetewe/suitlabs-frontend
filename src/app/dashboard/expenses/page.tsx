@@ -8,6 +8,7 @@ import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { Badge, EmptyState, FilterBar, Pagination } from '@/components/ui/DataDisplay';
 import SimpleModal from '@/components/modals/SimpleModal';
@@ -410,43 +411,43 @@ export default function ExpensesPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
-          <select
-            className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm min-h-[40px]"
-            value={selectedYear}
+          <Select
+            searchable={false}
+            value={String(selectedYear)}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
-          >
-            {[today.getFullYear(), today.getFullYear() - 1, today.getFullYear() - 2].map((year) => (
-              <option key={year} value={year}>{year}</option>
-            ))}
-          </select>
-          <select
-            className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm min-h-[40px]"
-            value={selectedMonth}
+            options={[today.getFullYear(), today.getFullYear() - 1, today.getFullYear() - 2].map((year) => ({
+              value: String(year),
+              label: String(year),
+            }))}
+          />
+          <Select
+            searchable={false}
+            value={String(selectedMonth)}
             onChange={(e) => setSelectedMonth(Number(e.target.value))}
-          >
-            {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((name, i) => (
-              <option key={name} value={i + 1}>{name}</option>
-            ))}
-          </select>
-          <select
-            className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm min-h-[40px]"
+            options={['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((name, i) => ({
+              value: String(i + 1),
+              label: name,
+            }))}
+          />
+          <Select
+            searchable={false}
             value={category}
             onChange={(e) => setCategory(e.target.value as ExpenseCategory | '')}
-          >
-            <option value="">All categories</option>
-            {CATEGORY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <select
-            className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm min-h-[40px]"
+            options={[
+              { value: '', label: 'All categories' },
+              ...CATEGORY_OPTIONS,
+            ]}
+          />
+          <Select
+            searchable={false}
             value={status}
             onChange={(e) => setStatus(e.target.value as ExpenseStatus | '')}
-          >
-            <option value="">All statuses</option>
-            <option value="recorded">Recorded</option>
-            <option value="voided">Voided</option>
-          </select>
+            options={[
+              { value: '', label: 'All statuses' },
+              { value: 'recorded', label: 'Recorded' },
+              { value: 'voided', label: 'Voided' },
+            ]}
+          />
         </FilterBar>
 
         {loading ? (
@@ -543,6 +544,7 @@ export default function ExpensesPage() {
             onChange={(e) => setForm((prev) => ({ ...prev, expense_date: e.target.value }))}
           />
           <Select
+            searchable={false}
             label="Category"
             options={CATEGORY_OPTIONS}
             value={form.category}
@@ -555,15 +557,14 @@ export default function ExpensesPage() {
             value={form.description}
             onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
           />
-          <Input
-            label="Amount (IDR)"
-            type="number"
-            min={1}
+          <CurrencyInput
+            label="Amount"
             required
             value={form.amount || ''}
-            onChange={(e) => setForm((prev) => ({ ...prev, amount: Number(e.target.value) }))}
+            onChange={(n) => setForm((prev) => ({ ...prev, amount: n }))}
           />
           <Select
+            searchable={false}
             label="Payment method"
             options={PAYMENT_OPTIONS}
             value={form.payment_method || 'cash'}
@@ -622,18 +623,17 @@ export default function ExpensesPage() {
             onChange={(e) => setRecurringForm((prev) => ({ ...prev, description: e.target.value }))}
           />
           <Select
+            searchable={false}
             label="Category"
             options={CATEGORY_OPTIONS}
             value={recurringForm.category}
             onChange={(e) => setRecurringForm((prev) => ({ ...prev, category: e.target.value as ExpenseCategory }))}
           />
-          <Input
-            label="Amount (IDR)"
-            type="number"
-            min={1}
+          <CurrencyInput
+            label="Amount"
             required
             value={recurringForm.amount || ''}
-            onChange={(e) => setRecurringForm((prev) => ({ ...prev, amount: Number(e.target.value) }))}
+            onChange={(n) => setRecurringForm((prev) => ({ ...prev, amount: n }))}
           />
           <Input
             label="Day of month (1-28)"
@@ -651,6 +651,7 @@ export default function ExpensesPage() {
             onChange={(e) => setRecurringForm((prev) => ({ ...prev, start_date: e.target.value }))}
           />
           <Select
+            searchable={false}
             label="Payment method"
             options={PAYMENT_OPTIONS}
             value={recurringForm.payment_method}

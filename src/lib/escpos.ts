@@ -3,6 +3,8 @@
  * Supports 58mm thermal printers with ESC/POS compatible command set
  */
 
+import { formatCurrency } from './currency';
+
 // ESC/POS Command Constants
 const ESC = '\x1B';
 const GS = '\x1D';
@@ -229,12 +231,7 @@ export class ESCPOSGenerator {
  * Format currency for printing
  */
 export function formatCurrencyForPrint(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return formatCurrency(amount);
 }
 
 /**

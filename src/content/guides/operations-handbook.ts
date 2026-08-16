@@ -248,9 +248,10 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <thead><tr><th style="width:22%">Screen</th><th style="width:38%">What it is for</th><th>The thing people get wrong</th></tr></thead>
       <tbody>
         <tr><td><b>Users</b></td><td>Create accounts, set role, assign branches, deactivate leavers.</td><td>Deactivate, don't delete. And no shared logins.</td></tr>
-        <tr><td><b>Branches</b></td><td>Each shop's name, code, receipt subtitle, address, phone, and geofence.</td><td>Receipt text here is what prints on customers' invoices. Check it after any edit.</td></tr>
+        <tr><td><b>Branches</b></td><td>Each shop's name, code, receipt subtitle, address, phone, geofence, and Google Sheet.</td><td>Receipt text here is what prints on customers' invoices. The spreadsheet ID is this shop only — Jimbaran and Nusa Dua do not share a sheet.</td></tr>
         <tr><td><b>Assets</b></td><td>Fixed assets — racks, steamers, chairs — with buying price, purchase date, vendor, and how they were paid for. In use, or disposed.</td><td>Recording a purchase here moves real money. Paying by cash or bank reduces cash; on credit it creates a payable.</td></tr>
         <tr><td><b>Financial Report</b></td><td>P&amp;L, Balance Sheet, Cash Flow, per month or full year, per shop or the group. Opening Balance, Payables, Loans, Dividends. Excel export. Lock month.</td><td>All of it is accrual. Reconcile before you lock, not after.</td></tr>
+        <tr><td><b>Analytics</b></td><td>Owner decision board: booking value and outstanding, occasion and package mix, how money arrived, sales vs clearance, hottest and idle stock, with advice cards. Replaces reading the monthly Google Sheet.</td><td>This is operational demand and mix, not P&amp;L. Use Financial Report for the books. The sheet is a mirror, not the place to decide.</td></tr>
         <tr><td><b>Bulk Input Sync</b></td><td>Pull item changes in from the Google Sheet when someone has edited it in bulk.</td><td>The database is the source of truth. Blank cells in the sheet preserve the database value — they don't clear it.</td></tr>
       </tbody>
     </table>
@@ -480,7 +481,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 <section id="sheets">
   <span class="eyebrow">08 — The spreadsheet</span>
   <h2>What Google Sheets is, and is not</h2>
-  <p class="measure">There is one spreadsheet with three kinds of tab: two item tabs and one tab per month of bookings. It exists so the people who think in spreadsheets can read the shop. It is a <b>mirror</b> — and the two directions of that mirror behave completely differently, which is where every misunderstanding starts.</p>
+  <p class="measure">Each shop has its own spreadsheet, with three kinds of tab: two item tabs and one tab per month of bookings. It exists so the people who think in spreadsheets can read <b>that shop</b>. It is a <b>mirror</b> — and the two directions of that mirror behave completely differently, which is where every misunderstanding starts. Paste the spreadsheet URL on Admin → Branches. Share it with the service account as Editor.</p>
 
   <figure>
     <div class="fig-scroll">
@@ -530,13 +531,13 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <tbody>
         <tr>
           <td><b>Suit</b><br><span style="color:var(--ink-3);font-size:.85rem">items of type suit</span></td>
-          <td class="num"><code>A:K</code></td>
-          <td><code>TYPE</code> <code>COLOUR</code> <code>DETAIL</code> <code>MATERIAL</code> <code>CODE</code> <code>SIZE</code> <code>TROUSERS CODE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code><br><span style="color:var(--ink-3);font-size:.85rem">TYPE carries gender — Mens, Women, Kids, Unisex. DETAIL is the item name. SIZE is written as "Jas &amp; Celana Size M".</span></td>
+          <td class="num"><code>A:R</code></td>
+          <td><code>TYPE</code> <code>COLOUR</code> <code>DETAIL</code> <code>MATERIAL</code> <code>CODE</code> <code>SIZE</code> <code>TROUSERS CODE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>CATEGORY</code> <code>SUBCATEGORY</code> <code>BUYING PRICE</code> <code>SELLING PRICE</code> <code>4H PRICE</code> <code>1D PRICE</code> <code>3D PRICE</code><br><span style="color:var(--ink-3);font-size:.85rem">TYPE carries gender — Mens, Women, Kids, Unisex. DETAIL is the item name. SIZE is written as "Jas &amp; Celana Size M". 3D PRICE is the standard rental rate. SUBCATEGORY is stored under CATEGORY.</span></td>
         </tr>
         <tr>
           <td><b>Acc</b><br><span style="color:var(--ink-3);font-size:.85rem">everything else</span></td>
-          <td class="num"><code>A:I</code></td>
-          <td><code>COLOUR</code> <code>BRAND</code> <code>DETAIL</code> <code>CODE</code> <code>SIZE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code><br><span style="color:var(--ink-3);font-size:.85rem">SIZE is written as "Size M".</span></td>
+          <td class="num"><code>A:P</code></td>
+          <td><code>COLOUR</code> <code>BRAND</code> <code>DETAIL</code> <code>CODE</code> <code>SIZE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>CATEGORY</code> <code>SUBCATEGORY</code> <code>BUYING PRICE</code> <code>SELLING PRICE</code> <code>4H PRICE</code> <code>1D PRICE</code> <code>3D PRICE</code><br><span style="color:var(--ink-3);font-size:.85rem">SIZE is written as "Size M". The commercial columns match the Suit tab.</span></td>
         </tr>
         <tr>
           <td><b>Month</b><br><span style="color:var(--ink-3);font-size:.85rem">one per month, created automatically, named like <code>JAN 2026</code></span></td>
@@ -550,14 +551,14 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <h3>Running an item import</h3>
   <ol class="steps">
     <li><b>Edit the sheet, keeping every code intact.</b><span>The code is the item's identity. Changing a code in the sheet does not rename an item — the import will create a second one.</span></li>
-    <li><b>Admin › Bulk Input Sync › sync.</b><span>Items only. There is no import path for bookings, by design.</span></li>
+    <li><b>Admin › Bulk Input Sync › sync.</b><span>Items only. One shop in the header syncs that shop. All branches lists each spreadsheet — sync one row, or all shops together. There is no import path for bookings, by design.</span></li>
     <li><b>Read the result, not just the headline.</b><span>You get created, updated and skipped counts, plus a row number and reason for every rejection. A row with no code is skipped. A brand-new row also needs name, type, gender, brand and colour before it can be created.</span></li>
     <li><b>Check the same numbers on the Financial Report page.</b><span>Every sync run — item imports and monthly exports alike — is logged with its status and row count, and a failed export can be retried there.</span></li>
   </ol>
 
   <div class="flag care">
     <span class="flag-t">The tab names and column widths live in configuration, not in the app</span>
-    <p>Which tabs are read, and how many columns of them, comes from the backend's environment — currently <code>'Suit Dev'!A:K</code> and <code>'Acc Dev'!A:I</code>. Two consequences. Adding a twelfth column to the suit tab puts it <b>outside</b> the synced range, where it will be ignored in both directions. And renaming a tab in the spreadsheet breaks the sync silently until someone updates the configuration to match — so rename in the config first, or not at all.</p>
+    <p>Which tabs are read, and how many columns of them, comes from the backend's environment — currently <code>'Suit Dev'!A:R</code> and <code>'Acc Dev'!A:P</code>. Two consequences. Adding a column past that range puts it <b>outside</b> the synced range, where it will be ignored in both directions. And renaming a tab in the spreadsheet breaks the sync silently until someone updates the configuration to match — so rename in the config first, or not at all.</p>
   </div>
 
   <div class="flag stop">
@@ -631,7 +632,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <div class="flag stop">
     <span class="flag-t">The one setting that breaks printing on every device at once</span>
-    <p>The web app is built with an API address in it, and that address is handed to the printing app on the phone. If it is left as <code>localhost</code>, the phone looks for the API <b>on the phone itself</b>, finds nothing, and printing fails with no useful message. In the shop it must be the machine's address on the shop network; in production it must be the real HTTPS address. Change it, rebuild the web app, and reinstall or reload on every device — a stale build keeps the old address.</p>
+    <p>The web app is built with an API address in it, and that address is handed to the printing app on the phone. In the shop it must be the machine's address on the shop network; in production it must be the real HTTPS address. Change it, rebuild the web app, and reinstall or reload on every device — a stale build keeps the old address.</p>
   </div>
 
   <h3>Setting up a device</h3>
@@ -863,7 +864,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   </div>
   <div class="flag">
     <span class="flag-t">Package pricing used as a discount</span>
-    <p>A package replaces the item total outright and disables the discount field. It is a product, not a lever. Watch for staff reaching for it to give a friend a deal.</p>
+    <p>A package covers the included items and disables the discount field. Extra pieces marked as add-ons stack on top of the package price. It is a product, not a lever. Watch for staff reaching for it to give a friend a deal.</p>
   </div>
   <div class="flag">
     <span class="flag-t">Renaming categories mid-year</span>

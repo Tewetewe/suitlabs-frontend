@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBranch } from '@/contexts/BranchContext';
 import apiClient from '@/lib/api';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
 import { formatCurrency } from '@/lib/currency';
 import { AccountingReports } from '@/components/admin/AccountingReports';
 import type { Booking, ClosedMonth, GoogleSheetsStatus, GoogleSyncRun, ProfitAndLossReport } from '@/types';
@@ -35,7 +36,7 @@ const MONTHS = [
 export default function FinancialReportPage() {
   const router = useRouter();
   const { user, loading: authLoading, isAuthenticated } = useAuth();
-  const { currentBranch, viewingAll } = useBranch();
+  const { currentBranch, viewingAll, branches } = useBranch();
 
   const isAdmin = user?.role === 'admin';
 
@@ -255,7 +256,7 @@ export default function FinancialReportPage() {
     try {
       const [status, runs] = await Promise.all([
         apiClient.getGoogleSheetsStatus(),
-        apiClient.getGoogleSheetsRuns('booking_export', 12),
+        apiClient.getGoogleSheetsRuns('booking_export', viewingAll ? 24 : 12),
       ]);
       setSheetStatus(status);
       setExportRuns(runs);
@@ -285,7 +286,7 @@ export default function FinancialReportPage() {
     loadGoogleSheetExports();
     loadClosedMonths();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isAdmin]);
+  }, [isAuthenticated, isAdmin, currentBranch?.id, viewingAll]);
 
   // Auto-refresh when filters/range change (debounced)
   useEffect(() => {
@@ -410,16 +411,20 @@ export default function FinancialReportPage() {
                 <div>
                   <div className="font-semibold text-slate-900">Monthly Google Sheets export</div>
                   <div className="mt-1 text-sm text-slate-600">
-                    Previous-month bookings are upserted automatically on the 1st in {sheetStatus?.timezone || 'Asia/Makassar'}.
+                    {viewingAll
+                      ? 'Each shop writes last month\'s bookings to its own spreadsheet. Totals below are all shops; the table is per shop.'
+                      : `Previous-month bookings for ${currentBranch?.name || 'this shop'} are upserted automatically on the 1st in ${sheetStatus?.timezone || 'Asia/Makassar'}.`}
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    {sheetStatus?.configured
-                      ? `Monthly tabs: ${sheetStatus.booking_tab_pattern} (for example, JAN 2026)`
-                      : 'Google Sheets is not configured on the backend.'}
+                    {viewingAll
+                      ? `Monthly tabs: ${sheetStatus?.booking_tab_pattern || 'MMM YYYY'} (for example, JAN 2026)`
+                      : sheetStatus?.configured
+                        ? `Monthly tabs: ${sheetStatus.booking_tab_pattern} (for example, JAN 2026)`
+                        : 'Set this shop\'s Google Sheet on Admin → Branches.'}
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  {sheetStatus?.spreadsheet_url && (
+                  {!viewingAll && sheetStatus?.spreadsheet_url && (
                     <a href={sheetStatus.spreadsheet_url} target="_blank" rel="noreferrer">
                       <Button variant="outline">
                         <ExternalLink className="h-4 w-4" />
@@ -434,12 +439,34 @@ export default function FinancialReportPage() {
                 </div>
               </div>
 
+              {viewingAll && (sheetStatus?.branches?.length || 0) > 0 && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(sheetStatus?.branches || []).map((shop) => (
+                    <div key={shop.branch_id} className="flex items-center justify-between gap-2 rounded-xl ring-1 ring-black/5 bg-white/50 px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-slate-900">{shop.branch_name}</div>
+                        <div className="text-xs text-slate-500">{shop.configured ? 'Sheet configured' : 'No spreadsheet'}</div>
+                      </div>
+                      {shop.spreadsheet_url && (
+                        <a href={shop.spreadsheet_url} target="_blank" rel="noreferrer">
+                          <Button variant="outline" size="sm">
+                            <ExternalLink className="h-4 w-4" />
+                            Open
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {exportRuns.length > 0 ? (
                 <div className="overflow-x-auto rounded-2xl border border-black/5">
                   <table className="min-w-full text-sm">
                     <thead className="bg-white/60">
                       <tr className="text-left text-slate-600">
                         <th className="px-4 py-3 font-semibold">Period</th>
+                        {viewingAll && <th className="px-4 py-3 font-semibold">Shop</th>}
                         <th className="px-4 py-3 font-semibold">Sheet</th>
                         <th className="px-4 py-3 font-semibold">Status</th>
                         <th className="px-4 py-3 font-semibold text-right">Rows</th>
@@ -451,6 +478,13 @@ export default function FinancialReportPage() {
                       {exportRuns.map((run) => (
                         <tr key={run.id}>
                           <td className="px-4 py-3 font-medium text-slate-900">{run.period_key}</td>
+                          {viewingAll && (
+                            <td className="px-4 py-3 text-slate-700">
+                              {branches.find((branch) => branch.id === run.branch_id)?.name
+                                || sheetStatus?.branches?.find((shop) => shop.branch_id === run.branch_id)?.branch_name
+                                || '—'}
+                            </td>
+                          )}
                           <td className="px-4 py-3 text-slate-700">{run.sheet_name || '—'}</td>
                           <td className="px-4 py-3">
                             <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
@@ -692,53 +726,44 @@ export default function FinancialReportPage() {
 
               {/* Dashboard filters (affect summary + monthly view + export) */}
               <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                <label className="block">
-                  <div className="text-xs font-semibold text-slate-600 mb-1">Status</div>
-                  <select
-                    className="w-full rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm"
-                    value={bookingStatus}
-                    onChange={(e) => setBookingStatus(e.target.value)}
-                  >
-                    <option value="">All</option>
-                    <option value="pending">pending</option>
-                    <option value="confirmed">confirmed</option>
-                    <option value="active">active</option>
-                    <option value="completed">completed</option>
-                    <option value="cancelled">cancelled</option>
-                    <option value="pending_approval">pending_approval</option>
-                  </select>
-                </label>
-
-                <label className="block">
-                  <div className="text-xs font-semibold text-slate-600 mb-1">Payment status</div>
-                  <select
-                    className="w-full rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm"
-                    value={bookingPaymentStatus}
-                    onChange={(e) => setBookingPaymentStatus(e.target.value)}
-                  >
-                    <option value="">All</option>
-                    <option value="pending">pending</option>
-                    <option value="partial">partial</option>
-                    <option value="completed">completed</option>
-                    <option value="refunded">refunded</option>
-                  </select>
-                </label>
-
-                <label className="block">
-                  <div className="text-xs font-semibold text-slate-600 mb-1">Payment method</div>
-                  <select
-                    className="w-full rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm"
-                    value={bookingPaymentMethod}
-                    onChange={(e) => setBookingPaymentMethod(e.target.value)}
-                  >
-                    <option value="">All</option>
-                    {BOOKING_PAYMENT_METHOD_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <Select
+                  searchable={false}
+                  label="Status"
+                  value={bookingStatus}
+                  onChange={(e) => setBookingStatus(e.target.value)}
+                  options={[
+                    { value: '', label: 'All' },
+                    { value: 'pending', label: 'pending' },
+                    { value: 'confirmed', label: 'confirmed' },
+                    { value: 'active', label: 'active' },
+                    { value: 'completed', label: 'completed' },
+                    { value: 'cancelled', label: 'cancelled' },
+                    { value: 'pending_approval', label: 'pending_approval' },
+                  ]}
+                />
+                <Select
+                  searchable={false}
+                  label="Payment status"
+                  value={bookingPaymentStatus}
+                  onChange={(e) => setBookingPaymentStatus(e.target.value)}
+                  options={[
+                    { value: '', label: 'All' },
+                    { value: 'pending', label: 'pending' },
+                    { value: 'partial', label: 'partial' },
+                    { value: 'completed', label: 'completed' },
+                    { value: 'refunded', label: 'refunded' },
+                  ]}
+                />
+                <Select
+                  searchable={false}
+                  label="Payment method"
+                  value={bookingPaymentMethod}
+                  onChange={(e) => setBookingPaymentMethod(e.target.value)}
+                  options={[
+                    { value: '', label: 'All' },
+                    ...BOOKING_PAYMENT_METHOD_OPTIONS,
+                  ]}
+                />
 
                 <label className="block">
                   <div className="text-xs font-semibold text-slate-600 mb-1">Search</div>

@@ -1,31 +1,49 @@
 /**
- * Currency utility functions for Indonesian Rupiah (IDR)
+ * Indonesian Rupiah display. Always `Rp 1.200.000` — dots as thousands,
+ * no decimals, same on server and browser (Intl locale data is not trusted).
  */
 
+function roundedInt(value: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n);
+}
+
+export function formatNumber(value: number): string {
+  const n = roundedInt(value);
+  const sign = n < 0 ? '-' : '';
+  return sign + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 export const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  const n = roundedInt(amount);
+  const sign = n < 0 ? '-' : '';
+  return `${sign}Rp ${formatNumber(Math.abs(n))}`;
 };
 
 export const formatCurrencyCompact = (amount: number): string => {
-  if (amount >= 1000000000) {
-    return `Rp ${(amount / 1000000000).toFixed(1)}M`;
-  } else if (amount >= 1000000) {
-    return `Rp ${(amount / 1000000).toFixed(1)}jt`;
-  } else if (amount >= 1000) {
-    return `Rp ${(amount / 1000).toFixed(0)}rb`;
+  const n = roundedInt(amount);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  const withComma = (value: number) => value.toFixed(1).replace('.', ',');
+  if (abs >= 1_000_000_000) {
+    return `${sign}Rp ${withComma(abs / 1_000_000_000)} M`;
   }
-  return formatCurrency(amount);
+  if (abs >= 1_000_000) {
+    return `${sign}Rp ${withComma(abs / 1_000_000)} jt`;
+  }
+  if (abs >= 10_000) {
+    return `${sign}Rp ${formatNumber(Math.round(abs / 1000))} rb`;
+  }
+  return formatCurrency(n);
 };
 
 export const parseCurrency = (value: string): number => {
-  // Remove all non-numeric characters except decimal point
-  const numericValue = value.replace(/[^\d.,]/g, '').replace(',', '.');
-  return parseFloat(numericValue) || 0;
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return 0;
+  const negative = trimmed.includes('-');
+  const n = Number(trimmed.replace(/[^\d]/g, '')) || 0;
+  return negative ? -n : n;
 };
 
 export const formatPrice = (amount: number, unit?: string): string => {

@@ -6,24 +6,24 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
-import { formatDate, formatDateTime } from '@/lib/date';
+import { formatDateShort } from '@/lib/date';
 import { Rental } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Edit, FileText, User, Calendar, DollarSign, Eye, Printer, ShoppingBag } from 'lucide-react';
+import { Plus, Edit, FileText, Eye, Printer, ShoppingBag, Calendar } from 'lucide-react';
 import { CreateRentalModal } from '@/components/modals/CreateRentalModal';
 import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
 import { RentalDetailsModal } from '@/components/modals/RentalDetailsModal';
 import { EditRentalModal } from '@/components/modals/EditRentalModal';
 import { PickupRentalModal } from '@/components/modals/PickupRentalModal';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { useToast } from '@/contexts/ToastContext';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
-import { BranchBadge } from '@/components/branch/BranchBadge';
 
 export default function RentalsPage() {
   const { user } = useAuth();
@@ -80,6 +80,7 @@ export default function RentalsPage() {
       case 'pending':   return 'warning';
       case 'completed': return 'default';
       case 'cancelled': return 'danger';
+      case 'overdue':   return 'danger';
       default:          return 'default';
     }
   };
@@ -251,18 +252,18 @@ export default function RentalsPage() {
           </Button>
         }
       >
-        <FilterBar>
-          <ClientOnly>
+        <ClientOnly>
+          <FilterBar>
             <Input
               placeholder="Search rentals..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-          </ClientOnly>
-        </FilterBar>
+          </FilterBar>
+        </ClientOnly>
 
         {/* Rentals List */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
           ) : filteredRentals.length === 0 ? (
@@ -273,184 +274,98 @@ export default function RentalsPage() {
               action={<Button onClick={() => setShowCreateModal(true)}><Plus className="h-4 w-4" /> New Rental</Button>}
             />
           ) : (
-            filteredRentals.map((rental) => (
-              <Card key={rental.id}>
-                <CardContent>
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-lg font-medium text-gray-900">
-                          Rental #{rental.id.slice(-8)}
-                        </h3>
-                        <Badge variant={rentalStatusVariant(rental.status)}>{rental.status}</Badge>
-                        <BranchBadge branch={rental.branch} />
-                      </div>
-                      {rental.items && rental.items.length > 0 && (
-                        <div className="flex items-center text-sm text-gray-600 mb-2">
-                          <FileText className="h-4 w-4 mr-2" />
-                          <span>{rental.items.length} item{rental.items.length > 1 ? 's' : ''}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <div className="text-lg font-semibold text-gray-900">
-                        {formatCurrency((rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0))}
-                      </div>
-                    </div>
-                  </div>
+            filteredRentals.map((rental) => {
+              const customerName = rental.customer
+                ? `${rental.customer.first_name} ${rental.customer.last_name}`.trim()
+                : `Rental #${rental.id.slice(-8)}`;
+              const itemSummary = (rental.items || [])
+                .slice(0, 2)
+                .map((line) => line.item?.name || 'Item')
+                .join(', ') + ((rental.items?.length || 0) > 2 ? ` +${rental.items!.length - 2}` : '');
+              const meta = [
+                `${formatDateShort(rental.rental_date)} – ${formatDateShort(rental.return_date)}`,
+                itemSummary,
+                rental.branch?.name,
+              ].filter(Boolean).join(' · ');
+              const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      <div>
-                        <div>Start: {formatDate(rental.rental_date)}</div>
-                        <div>Planned Return: {formatDate(rental.return_date)}</div>
-                        {rental.actual_pickup_date && (
-                          <div>Picked up: {formatDateTime(rental.actual_pickup_date)}</div>
-                        )}
-                        {rental.actual_return_date && (
-                          <div>Returned: {formatDate(rental.actual_return_date)}</div>
-                        )}
+              return (
+                <Card key={rental.id} padding="sm" className="relative z-0 [&:has(details[open])]:z-30">
+                  <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => handleViewRental(rental)}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-slate-900">{customerName}</span>
+                        <Badge variant={rentalStatusVariant(rental.status)} dot className="capitalize">{rental.status}</Badge>
                       </div>
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <DollarSign className="h-4 w-4 mr-2" />
-                      <span>Total: {formatCurrency((rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0))}</span>
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <User className="h-4 w-4 mr-2" />
-                      <div>
-                        <div className="font-medium">
-                          {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : `Customer ID: ${rental.user_id.slice(-8)}`}
-                        </div>
-                        {rental.customer?.branch?.name && (
-                          <div className="mt-1"><BranchBadge branch={rental.customer.branch} always /></div>
-                        )}
-                        {rental.customer && (
-                          <div className="text-xs text-gray-500">{rental.customer.email || '-'}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center text-xs text-gray-500">
-                      <User className="h-3 w-3 mr-1" />
-                      <span>
-                        Staff created: {rental.creator ? `${rental.creator.first_name} ${rental.creator.last_name}` : 'Unknown'}
-                      </span>
-                    </div>
-                    {rental.updater && (
-                      <div className="flex items-center text-xs text-gray-500">
-                        <User className="h-3 w-3 mr-1" />
-                        <span>Staff updated: {rental.updater.first_name} {rental.updater.last_name}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {rental.items && rental.items.length > 0 && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-900 mb-2">Items ({rental.items.length})</h4>
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <div className="space-y-2">
-                          {rental.items.map((item, index) => (
-                            <div key={index} className="text-sm border-b border-gray-200 pb-2 last:border-b-0">
-                              <div className="font-medium">{item.item?.name || 'Item'}</div>
-                              <div className="text-gray-600">
-                                Qty: {item.quantity} × {formatCurrency(item.unit_price)} = {formatCurrency(item.total_price)}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-                    <div className="text-xs text-gray-500">
-                      Created: {formatDate(rental.created_at)}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => handleViewRental(rental)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleEditRental(rental)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      {rental.status !== 'cancelled' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedRental(rental);
-                            setShowInvoiceModal(true);
-                          }}
-                          title="Print / Invoice"
-                        >
-                          <Printer className="h-4 w-4" />
-                        </Button>
-                      )}
+                      {meta && <p className="mt-0.5 truncate text-sm text-slate-500">{meta}</p>}
+                    </button>
+                    <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
                       {rental.status === 'pending' && (
-                        <Button variant="primary" size="sm" onClick={() => handlePickupRental(rental.id)}>
-                          Pickup
-                        </Button>
+                        <Button size="sm" onClick={() => handlePickupRental(rental.id)}>Pickup</Button>
                       )}
                       {(rental.status === 'active' || rental.status === 'overdue') && (
-                        <>
-                          <Link href={`/dashboard/sales?rental_id=${rental.id}&customer_id=${rental.user_id}`}>
-                            <Button variant="secondary" size="sm" title="Record lost items or add-ons before complete">
-                              <ShoppingBag className="h-4 w-4 sm:mr-1" />
-                              Lost / Add-ons
-                            </Button>
-                          </Link>
-                          <Button variant="secondary" size="sm" onClick={() => handleCompleteRental(rental.id)}>
-                            Complete Rental
-                          </Button>
-                        </>
+                        <Button size="sm" variant="secondary" onClick={() => handleCompleteRental(rental.id)}>Complete</Button>
                       )}
-                      {(rental.status === 'pending' || rental.status === 'active') && (
-                        <>
-                          <Button variant="secondary" size="sm" onClick={() => handleChangeDates(rental)}>
-                            Change Dates
-                          </Button>
-                          <Button variant="danger" size="sm" onClick={() => handleCancelRental(rental)}>
-                            Cancel
-                          </Button>
-                        </>
-                      )}
+                      <div className="text-right">
+                        <p className="text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(total)}</p>
+                      </div>
+                      <OverflowMenu>
+                        <OverflowMenuItem icon={<Eye className="h-4 w-4 text-slate-400" />} onClick={() => handleViewRental(rental)}>
+                          View
+                        </OverflowMenuItem>
+                        <OverflowMenuItem icon={<Edit className="h-4 w-4 text-slate-400" />} onClick={() => handleEditRental(rental)}>
+                          Edit
+                        </OverflowMenuItem>
+                        {rental.status !== 'cancelled' && (
+                          <OverflowMenuItem
+                            icon={<Printer className="h-4 w-4 text-slate-400" />}
+                            onClick={() => {
+                              setSelectedRental(rental);
+                              setShowInvoiceModal(true);
+                            }}
+                          >
+                            Invoice
+                          </OverflowMenuItem>
+                        )}
+                        {(rental.status === 'active' || rental.status === 'overdue') && (
+                          <OverflowMenuItem
+                            icon={<ShoppingBag className="h-4 w-4 text-slate-400" />}
+                            href={`/dashboard/sales?rental_id=${rental.id}&customer_id=${rental.user_id}`}
+                          >
+                            Lost / add-ons
+                          </OverflowMenuItem>
+                        )}
+                        {(rental.status === 'pending' || rental.status === 'active') && (
+                          <>
+                            <OverflowMenuItem icon={<Calendar className="h-4 w-4 text-slate-400" />} onClick={() => handleChangeDates(rental)}>
+                              Change dates
+                            </OverflowMenuItem>
+                            <OverflowMenuItem danger onClick={() => handleCancelRental(rental)}>
+                              Cancel rental
+                            </OverflowMenuItem>
+                          </>
+                        )}
+                      </OverflowMenu>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
 
-        {/* Summary Stats */}
         {!loading && activeRentals.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="text-center">
-                <div className="text-2xl font-bold text-gray-900">
-                  {activeRentals.length}
-                </div>
-                <div className="text-sm text-gray-500">Total Rentals</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {activeRentals.filter(r => r.status === 'active').length}
-                </div>
-                <div className="text-sm text-gray-500">Active</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="text-center">
-                <div className="text-2xl font-bold text-gray-600">
-                  {activeRentals.filter(r => r.status === 'completed').length}
-                </div>
-                <div className="text-sm text-gray-500">Completed</div>
-              </CardContent>
-            </Card>
-          </div>
+          <p className="text-sm text-slate-500">
+            {activeRentals.length} rentals
+            {' · '}
+            {activeRentals.filter(r => r.status === 'active').length} active
+            {' · '}
+            {activeRentals.filter(r => r.status === 'completed').length} completed
+          </p>
         )}
 
         {/* Pagination */}
@@ -498,6 +413,11 @@ export default function RentalsPage() {
             setShowDetailsModal(false);
             setShowInvoiceModal(true);
           }}
+          onEdit={() => {
+            if (!selectedRental) return;
+            setShowDetailsModal(false);
+            handleEditRental(selectedRental);
+          }}
         />
 
         <EditRentalModal
@@ -521,7 +441,7 @@ export default function RentalsPage() {
 
         {/* Change Dates Modal */}
         {showChangeDatesModal && selectedRental && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
               <h3 className="text-lg font-semibold mb-4">Change Rental Dates</h3>
               <p className="text-gray-600 mb-4">
@@ -589,7 +509,7 @@ export default function RentalsPage() {
 
         {/* Complete Rental Modal */}
         {showCompleteModal && selectedRental && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
               <h3 className="text-lg font-semibold mb-4">Complete Rental</h3>
               <p className="text-gray-600 mb-4">Rental ID: {selectedRental.id}</p>
@@ -626,18 +546,16 @@ export default function RentalsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Damage Charge (IDR)</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={1000}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Damage Charge</label>
+                  <CurrencyInput
                     value={damageCharges}
-                    onChange={(e) => setDamageCharges(e.target.value)}
+                    onChange={(n) => setDamageCharges(n ? String(n) : '')}
                     placeholder="0"
                   />
                   <p className="text-xs text-gray-500 mt-1">Leave 0 if no damage charge.</p>
                 </div>
                 <Select
+                  searchable={false}
                   label="Paid with (damage / late fee)"
                   options={[...SALE_PAYMENT_METHOD_OPTIONS]}
                   value={chargePaymentMethod}
@@ -664,7 +582,7 @@ export default function RentalsPage() {
 
         {/* Cancel Rental Modal */}
         {showCancelModal && selectedRental && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
               <h3 className="text-lg font-semibold mb-4">Cancel Rental</h3>
               <p className="text-gray-600 mb-4">

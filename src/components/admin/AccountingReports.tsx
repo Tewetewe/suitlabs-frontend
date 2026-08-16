@@ -6,6 +6,8 @@ import { Download } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
+import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
@@ -365,8 +367,8 @@ export function AccountingReports({
           </div>
           <form onSubmit={handleOpening} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
             <Input label="As of date" type="date" required value={cashForm.as_of_date} onChange={(e) => setCashForm((p) => ({ ...p, as_of_date: e.target.value }))} />
-            <Input label="Cash Drawer" type="number" min={0} required value={cashForm.cash_amount || ''} onChange={(e) => setCashForm((p) => ({ ...p, cash_amount: Number(e.target.value) }))} />
-            <Input label="Bank" type="number" min={0} value={cashForm.bank_amount || ''} onChange={(e) => setCashForm((p) => ({ ...p, bank_amount: Number(e.target.value) }))} />
+            <CurrencyInput label="Cash Drawer" required value={cashForm.cash_amount || ''} onChange={(n) => setCashForm((p) => ({ ...p, cash_amount: n }))} />
+            <CurrencyInput label="Bank" value={cashForm.bank_amount || ''} onChange={(n) => setCashForm((p) => ({ ...p, bank_amount: n }))} />
             <Input label="Notes" value={cashForm.notes} onChange={(e) => setCashForm((p) => ({ ...p, notes: e.target.value }))} />
             <div className="flex items-end">
               <Button type="submit" loading={saving}>Save opening</Button>
@@ -421,7 +423,7 @@ export function AccountingReports({
             <Input label="Due" type="date" value={payableForm.due_date} onChange={(e) => setPayableForm((p) => ({ ...p, due_date: e.target.value }))} />
             <Input label="Description" required value={payableForm.description} onChange={(e) => setPayableForm((p) => ({ ...p, description: e.target.value }))} />
             <Input label="Vendor" value={payableForm.vendor} onChange={(e) => setPayableForm((p) => ({ ...p, vendor: e.target.value }))} />
-            <Input label="Amount" type="number" min={1} required value={payableForm.amount || ''} onChange={(e) => setPayableForm((p) => ({ ...p, amount: Number(e.target.value) }))} />
+            <CurrencyInput label="Amount" required value={payableForm.amount || ''} onChange={(n) => setPayableForm((p) => ({ ...p, amount: n }))} />
             <div className="flex items-end">
               <Button type="submit" loading={saving}>Record payable</Button>
             </div>
@@ -484,19 +486,13 @@ export function AccountingReports({
           <form onSubmit={handleLoan} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
             <Input label="Date" type="date" required value={loanForm.loan_date} onChange={(e) => setLoanForm((p) => ({ ...p, loan_date: e.target.value }))} />
             <Input label="Lender" required value={loanForm.lender} onChange={(e) => setLoanForm((p) => ({ ...p, lender: e.target.value }))} />
-            <Input label="Principal" type="number" min={1} required value={loanForm.principal || ''} onChange={(e) => setLoanForm((p) => ({ ...p, principal: Number(e.target.value) }))} />
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Received via</span>
-              <select
-                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
-                value={loanForm.payment_method}
-                onChange={(e) => setLoanForm((p) => ({ ...p, payment_method: e.target.value }))}
-              >
-                {SALE_PAYMENT_METHOD_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
+            <CurrencyInput label="Principal" required value={loanForm.principal || ''} onChange={(n) => setLoanForm((p) => ({ ...p, principal: n }))} />
+            <Select
+              label="Received via"
+              value={loanForm.payment_method}
+              onChange={(e) => setLoanForm((p) => ({ ...p, payment_method: e.target.value }))}
+              options={[...SALE_PAYMENT_METHOD_OPTIONS]}
+            />
             <div className="flex items-end">
               <Button type="submit" loading={saving}>Record loan</Button>
             </div>
@@ -555,7 +551,7 @@ export function AccountingReports({
           </div>
           <form onSubmit={handleDividend} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
             <Input label="Date" type="date" required value={dividendForm.dividend_date} onChange={(e) => setDividendForm((p) => ({ ...p, dividend_date: e.target.value }))} />
-            <Input label="Amount" type="number" min={1} required value={dividendForm.amount || ''} onChange={(e) => setDividendForm((p) => ({ ...p, amount: Number(e.target.value) }))} />
+            <CurrencyInput label="Amount" required value={dividendForm.amount || ''} onChange={(n) => setDividendForm((p) => ({ ...p, amount: n }))} />
             <Input label="Shareholder" placeholder="Optional" value={dividendForm.shareholder} onChange={(e) => setDividendForm((p) => ({ ...p, shareholder: e.target.value }))} />
             <Input label="Notes" placeholder="Optional" value={dividendForm.notes} onChange={(e) => setDividendForm((p) => ({ ...p, notes: e.target.value }))} />
             <div className="flex items-end">
