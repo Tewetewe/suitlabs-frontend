@@ -30,6 +30,8 @@ import {
   Smartphone,
   Monitor,
   MapPin,
+  Receipt,
+  BookOpen,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CashierChromeProvider, useCashierChrome } from '@/components/cashier/CashierChromeContext';
@@ -78,6 +80,13 @@ const navigationSections: NavigationSection[] = [
       { name: 'Assets', href: '/dashboard/admin/assets', icon: Landmark, roles: ['admin'] },
       { name: 'Financial Report', href: '/dashboard/admin/financial-report', icon: BarChart3, roles: ['admin'] },
       { name: 'Branches', href: '/dashboard/admin/branches', icon: MapPin, roles: ['admin'] },
+    ],
+  },
+  {
+    title: 'Guides',
+    items: [
+      { name: 'Cashier Guide', href: '/dashboard/guides/cashier', icon: Receipt, roles: ['admin', 'staff'] },
+      { name: 'Operations Handbook', href: '/dashboard/guides/handbook', icon: BookOpen, roles: ['admin'] },
     ],
   },
 ] ;
