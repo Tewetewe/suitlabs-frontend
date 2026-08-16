@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -114,6 +114,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const { user, logout, loading, isAuthenticated } = useAuth();
   const { allowedBranches, currentBranch, currentBranchId, viewingAll, setCurrentBranchId } = useBranch();
+  const activeNavRef = useRef<HTMLAnchorElement | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -126,6 +127,33 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    const node = activeNavRef.current;
+    if (!node) return;
+
+    const reveal = () => {
+      const nav = node.closest('nav');
+      if (nav instanceof HTMLElement) {
+        const nodeRect = node.getBoundingClientRect();
+        const navRect = nav.getBoundingClientRect();
+        const offset = nodeRect.top - navRect.top - (navRect.height / 2 - nodeRect.height / 2);
+        nav.scrollTo({ top: nav.scrollTop + offset, behavior: 'smooth' });
+      } else {
+        node.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      }
+      if (sidebarOpen) {
+        node.focus({ preventScroll: true });
+      }
+    };
+
+    const frame = window.requestAnimationFrame(reveal);
+    const timer = window.setTimeout(reveal, sidebarOpen ? 320 : 0);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [pathname, sidebarOpen]);
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
   const role = user?.role as NavigationRole | undefined;
@@ -207,6 +235,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
                     <Link
                       key={item.name}
                       href={item.href}
+                      ref={isActive ? activeNavRef : undefined}
                       onClick={() => setSidebarOpen(false)}
                       className={clsx(
                         'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation',
