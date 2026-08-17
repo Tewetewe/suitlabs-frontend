@@ -32,6 +32,7 @@ import {
 } from './bprint';
 import { findOpenReceiptNode, printImageDataUrl, printReceiptNode } from './print-browser';
 import { thermalPrinter } from './thermal-printer';
+import { apiClient } from './api';
 
 export type PrintRoute = 'bridge' | 'bprint' | 'thermal' | 'browser';
 
@@ -183,12 +184,21 @@ export type LabelItem = {
  * Barcode labels never open the drawer on any route — they are stock labels,
  * not a sale, and the counter drawer should not pop while someone re-labels a
  * rack. Android uses the Print Bridge without a drawer kick; iPhone still uses
- * Bluetooth Print.
+ * Bluetooth Print. Every route prints the item-detail canvas, not a rebuilt
+ * text/barcode layout.
  */
 export async function printProductLabel(
   item: LabelItem,
   labelImageDataUrl?: string,
 ): Promise<PrintOutcome> {
+  if (labelImageDataUrl) {
+    try {
+      await apiClient.cacheItemLabelImage(item.id, labelImageDataUrl);
+    } catch {
+      // Print Bridge / Thermer will fall back to a server-rendered copy of the
+      // same layout if the preview image cannot be cached.
+    }
+  }
   if (isAndroidDevice()) {
     openPrintBridge(getAndroidBridgeProductLabelUrl(item.id));
     return { route: 'bridge', drawer: false };
@@ -197,10 +207,9 @@ export async function printProductLabel(
     openBprint(getBprintProductLabelUrl(item.id), getAndroidBluetoothProductLabelUrl(item.id));
     return { route: 'bprint', drawer: false };
   }
-  if (hasThermalPrinter()) {
-    await thermalPrinter.printProductLabel(item);
-    return { route: 'thermal', drawer: false };
+  if (!labelImageDataUrl) {
+    throw new Error('Label image is not ready yet.');
   }
-  printImageDataUrl(labelImageDataUrl || '', `Label ${item.code}`);
+  printImageDataUrl(labelImageDataUrl, `Label ${item.code}`);
   return { route: 'browser', drawer: false };
 }

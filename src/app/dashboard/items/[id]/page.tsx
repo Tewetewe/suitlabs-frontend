@@ -484,6 +484,7 @@ export default function ItemDetailPage() {
                         size="sm"
                         variant="secondary"
                         data-testid="print-label"
+                        disabled={!labelImageUrl}
                         onClick={async () => {
                           try {
                             await printProductLabel(

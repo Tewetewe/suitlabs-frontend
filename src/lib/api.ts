@@ -443,6 +443,10 @@ class APIClient {
     return this.handleResponse<Item>(response);
   }
 
+  async cacheItemLabelImage(id: string, image: string): Promise<void> {
+    await this.client.post(`/api/v1/items/${id}/label-image`, { image });
+  }
+
   async getItemsByType(type: string): Promise<Item[]> {
     const response = await this.client.get<APIResponse<Item[]>>(`/api/v1/items/type/${type}`);
     return response.data.data!;

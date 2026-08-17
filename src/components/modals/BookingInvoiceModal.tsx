@@ -214,7 +214,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
                       <Barcode
                         value={invoiceBarcodeValue(invoice.invoice_number)}
                         format="CODE128"
-                        width={1.1}
+                        width={1}
                         height={36}
                         fontSize={8}
                         margin={0}

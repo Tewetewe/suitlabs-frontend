@@ -135,6 +135,7 @@ test.describe('Print', () => {
       await page.getByRole('button', { name: 'Generate barcode' }).click();
     }
     await expect(page.getByTestId('print-label')).toBeVisible();
+    await expect(page.getByTestId('print-label')).toBeEnabled();
     await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
 
     await page.getByTestId('print-label').click();
@@ -145,6 +146,7 @@ test.describe('Print', () => {
     try {
       await android.goto(page.url());
       await expect(android.getByTestId('print-label')).toBeVisible();
+      await expect(android.getByTestId('print-label')).toBeEnabled();
       await android.getByTestId('print-label').click();
       await expect.poll(async () => (await readPrintHooks(android)).hrefs.length).toBeGreaterThan(0);
       const launched = (await readPrintHooks(android)).hrefs.join('\n');

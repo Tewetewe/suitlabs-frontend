@@ -220,7 +220,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
                   <Barcode
                     value={invoiceBarcodeValue(invoiceNumber)}
                     format="CODE128"
-                    width={1.1}
+                    width={1}
                     height={36}
                     fontSize={8}
                     margin={0}
