@@ -3,7 +3,7 @@
  * Handles Bluetooth and USB connection to thermal printers
  */
 
-import { ESCPOSGenerator, formatDateForPrint, formatDateTimeForPrint } from './escpos';
+import { ESCPOSGenerator, formatCurrencyForPrint, formatDateForPrint, formatDateTimeForPrint } from './escpos';
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 
@@ -392,12 +392,76 @@ export class ThermalPrinterService {
       .lineFeed()
       .setBold(false)
       .text(invoice.customer_name)
-      .lineFeed(8);
+      .lineFeed();
 
-    // TEMP: stop at customer name so the cutter can be tested. Restore items/totals/footer after.
+    generator.separator();
+
+    generator
+      .setBold(true)
+      .text('ITEMS:')
+      .lineFeed()
+      .setBold(false);
+
+    if (invoice.items && invoice.items.length > 0) {
+      const isPackagePricing =
+        invoice.items.every((item) => (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) &&
+        (invoice.total_amount || 0) > 0;
+
+      invoice.items.forEach((item) => {
+        if ((item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+          generator.text(`  ${item.description}`).lineFeed();
+        } else {
+          generator
+            .text(`  ${item.description}`)
+            .lineFeed()
+            .text(
+              `    ${item.quantity} x ${formatCurrencyForPrint(item.unit_price || 0)} = ${formatCurrencyForPrint(item.total || 0)}`
+            )
+            .lineFeed();
+        }
+      });
+
+      if (isPackagePricing) {
+        generator.text(`Package: ${formatCurrencyForPrint(invoice.total_amount || 0)}`).lineFeed();
+      }
+    } else {
+      generator.text(invoice.product_name || 'Booking Package').lineFeed();
+    }
+
+    generator.separator();
+    generator.text(`Subtotal: ${formatCurrencyForPrint(invoice.total_amount || 0)}`).lineFeed();
+    if ((invoice.discount_amount || 0) > 0) {
+      generator.text(`Discount: (${formatCurrencyForPrint(invoice.discount_amount || 0)})`).lineFeed();
+    }
+    generator
+      .setBold(true)
+      .text(`TOTAL: ${formatCurrencyForPrint(invoice.final_amount || invoice.total_amount || 0)}`)
+      .lineFeed()
+      .setBold(false);
+
+    if (invoice.invoice_type === 'dp') {
+      generator
+        .text(`DP: ${formatCurrencyForPrint(invoice.due_amount || 0)}`)
+        .lineFeed()
+        .text(
+          `Remaining: ${formatCurrencyForPrint(
+            (invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0)
+          )}`
+        )
+        .lineFeed();
+    } else {
+      generator.text(`Due: ${formatCurrencyForPrint(invoice.due_amount || 0)}`).lineFeed();
+    }
+
+    generator.separator();
+    generator
+      .setAlign('center')
+      .text('Thank you for using SuitLabs!')
+      .lineFeed()
+      .text('suitlabs.bali')
+      .lineFeed(3);
+
     generator.cut();
-
-    // Print
     await this.print(generator.getBytes());
   }
 
@@ -471,12 +535,96 @@ export class ThermalPrinterService {
           ? `${rental.customer.first_name} ${rental.customer.last_name}`.trim()
           : '-'
       )
-      .lineFeed(8);
+      .lineFeed();
 
-    // TEMP: stop at customer name so the cutter can be tested. Restore items/totals/footer after.
+    const items = (rental.items || rental.booking?.items || []) as Array<{
+      item?: { name?: string; size?: { label?: string } };
+      quantity: number;
+      unit_price: number;
+      total_price: number;
+      discount_amount?: number;
+    }>;
+    const itemsSubtotal = items.reduce(
+      (sum, item) => sum + (item.total_price || (item.unit_price || 0) * (item.quantity || 1)),
+      0
+    );
+    const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
+    const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
+    const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
+
+    generator.separator();
+    generator
+      .setAlign('left')
+      .text(`Rental: ${formatDateForPrint(rental.rental_date)}`)
+      .lineFeed()
+      .text(`Return: ${formatDateForPrint(rental.return_date)}`)
+      .lineFeed();
+
+    generator.separator();
+    generator.setBold(true).text('ITEMS:').lineFeed().setBold(false);
+
+    if (items.length > 0) {
+      items.forEach((item) => {
+        const itemName = item.item?.name || 'Item';
+        const itemSize = item.item?.size?.label || '';
+        const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
+        const quantity = item.quantity || 1;
+        const unitPrice = item.unit_price || item.total_price || 0;
+        const itemTotal = item.total_price || unitPrice * quantity;
+        generator.text(`  ${description}`).lineFeed();
+        generator
+          .text(`    ${quantity} x ${formatCurrencyForPrint(unitPrice)} = ${formatCurrencyForPrint(itemTotal)}`)
+          .lineFeed();
+      });
+    } else {
+      generator.text('Rental Package').lineFeed();
+    }
+
+    generator.separator();
+    generator.text(`Subtotal: ${formatCurrencyForPrint(itemsSubtotal || rental.total_cost || 0)}`).lineFeed();
+    if (itemsDiscount > 0) {
+      generator.text(`Discount: (${formatCurrencyForPrint(itemsDiscount)})`).lineFeed();
+    }
+    if ((rental.late_fee || 0) > 0) {
+      generator.text(`Late Fee: ${formatCurrencyForPrint(rental.late_fee)}`).lineFeed();
+    }
+    if ((rental.damage_charges || 0) > 0) {
+      generator.text(`Damage: ${formatCurrencyForPrint(rental.damage_charges)}`).lineFeed();
+    }
+    generator.setBold(true).text(`GRAND TOTAL: ${formatCurrencyForPrint(total)}`).lineFeed().setBold(false);
+
+    if ((rental.security_deposit || 0) > 0) {
+      generator.text(`Deposit: ${formatCurrencyForPrint(rental.security_deposit)}`).lineFeed();
+      if ((rental.damage_charges || 0) > 0) {
+        generator.text(`Deduction: (${formatCurrencyForPrint(rental.damage_charges)})`).lineFeed();
+      }
+      generator.text(`Refundable: ${formatCurrencyForPrint(refundableDeposit)}`).lineFeed();
+    }
+
+    if (rental.actual_pickup_date || rental.actual_return_date) {
+      generator.separator();
+      if (rental.actual_pickup_date) {
+        generator.text(`Pickup: ${formatDateForPrint(rental.actual_pickup_date)}`).lineFeed();
+      }
+      if (rental.actual_return_date) {
+        generator.text(`Returned: ${formatDateForPrint(rental.actual_return_date)}`).lineFeed();
+      }
+    }
+
+    if (rental.notes) {
+      generator.separator();
+      generator.setBold(true).text('NOTE:').lineFeed().setBold(false).text(rental.notes).lineFeed();
+    }
+
+    generator.separator();
+    generator
+      .setAlign('center')
+      .text('Thank you for using SuitLabs!')
+      .lineFeed()
+      .text('suitlabs.bali')
+      .lineFeed(3);
+
     generator.cut();
-
-    // Print
     await this.print(generator.getBytes());
   }
 
@@ -538,9 +686,43 @@ export class ThermalPrinterService {
       .lineFeed()
       .setBold(false)
       .text(customerName)
-      .lineFeed(8);
+      .lineFeed();
 
-    // TEMP: stop at customer name so the cutter can be tested. Restore items/totals/footer after.
+    generator.separator();
+    generator.setBold(true).text('ITEMS:').lineFeed().setBold(false);
+
+    const saleItems = sale.items || [];
+    if (saleItems.length > 0) {
+      saleItems.forEach((line) => {
+        const name = line.item?.name || 'Item';
+        const size = line.item?.size?.label ? ` - ${line.item.size.label}` : '';
+        generator.text(`  ${name}${size}`).lineFeed();
+        generator
+          .text(
+            `    ${line.quantity} x ${formatCurrencyForPrint(line.unit_price || 0)} = ${formatCurrencyForPrint(line.line_total || 0)}`
+          )
+          .lineFeed();
+      });
+    } else {
+      generator.text('Sale').lineFeed();
+    }
+
+    generator.separator();
+    generator.text(`Subtotal: ${formatCurrencyForPrint(sale.subtotal || 0)}`).lineFeed();
+    if ((sale.discount_amount || 0) > 0) {
+      generator.text(`Discount: (${formatCurrencyForPrint(sale.discount_amount || 0)})`).lineFeed();
+    }
+    generator.setBold(true).text(`TOTAL: ${formatCurrencyForPrint(sale.total_amount || 0)}`).lineFeed().setBold(false);
+    generator.text(`Paid: ${formatCurrencyForPrint(sale.paid_amount || 0)}`).lineFeed();
+
+    generator.separator();
+    generator
+      .setAlign('center')
+      .text('Thank you for using SuitLabs!')
+      .lineFeed()
+      .text('suitlabs.bali')
+      .lineFeed(3);
+
     generator.cut();
     await this.print(generator.getBytes());
   }

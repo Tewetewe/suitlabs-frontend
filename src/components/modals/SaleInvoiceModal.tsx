@@ -8,6 +8,7 @@ import html2canvas from 'html2canvas';
 import { printSaleInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue, saleInvoiceNumber } from '@/lib/barcode';
+import { formatCurrency } from '@/lib/currency';
 import { ThermalPrinterButton } from '@/components/print/ThermalPrinterButton';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
@@ -176,6 +177,38 @@ export function SaleInvoiceModal({ isOpen, onClose, sale }: SaleInvoiceModalProp
                 <div className="receipt-divider"></div>
                 <div className="receipt-label">CUSTOMER:</div>
                 <div className="receipt-line">{customerName}</div>
+
+                <div className="receipt-divider"></div>
+
+                <div className="receipt-label">ITEMS:</div>
+                {(sale.items || []).length > 0 ? (
+                  (sale.items || []).map((line) => {
+                    const name = line.item?.name || 'Item';
+                    const size = line.item?.size?.label ? ` - ${line.item.size.label}` : '';
+                    return (
+                      <div key={line.id} className="receipt-item">
+                        <div className="receipt-line">  {name}{size}</div>
+                        <div className="receipt-line">    {line.quantity} x {formatCurrency(line.unit_price || 0)} = {formatCurrency(line.line_total || 0)}</div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="receipt-line">Sale</div>
+                )}
+
+                <div className="receipt-divider"></div>
+                <div className="receipt-line">Subtotal: {formatCurrency(sale.subtotal || 0)}</div>
+                {(sale.discount_amount || 0) > 0 && (
+                  <div className="receipt-line receipt-discount">Discount: ({formatCurrency(sale.discount_amount || 0)})</div>
+                )}
+                <div className="receipt-total">TOTAL: {formatCurrency(sale.total_amount || 0)}</div>
+                <div className="receipt-line">Paid: {formatCurrency(sale.paid_amount || 0)}</div>
+
+                <div className="receipt-divider"></div>
+                <div className="receipt-center">
+                  <div className="receipt-line">Thank you for using SuitLabs!</div>
+                  <div className="receipt-line receipt-small">suitlabs.bali</div>
+                </div>
               </div>
             </div>
           </div>

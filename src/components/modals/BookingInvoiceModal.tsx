@@ -8,6 +8,7 @@ import html2canvas from 'html2canvas';
 import { printBookingInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue } from '@/lib/barcode';
+import { formatCurrency } from '@/lib/currency';
 import { ThermalPrinterButton } from '@/components/print/ThermalPrinterButton';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
@@ -32,6 +33,12 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
       code: item.item_code,
       quantity: item.quantity,
     }));
+
+  const isPackagePricing = Boolean(
+    invoice.items?.length &&
+    invoice.items.every((item) => (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) &&
+    (invoice.total_amount || 0) > 0
+  );
 
   // Bprint-style date formats (match backend bprint)
   const bprintDate = (d: string | Date) =>
@@ -221,8 +228,56 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
                   {/* Customer - name only, same as bprint */}
                   <div className="receipt-label">CUSTOMER:</div>
                   <div className="receipt-line">{invoice.customer_name}</div>
-                  <div className="receipt-cut-margin" aria-hidden="true" />
-                  {/* TEMP: invoice prints only through customer name so the cutter can be tested. */}
+
+                  <div className="receipt-divider"></div>
+
+                  <div className="receipt-label">ITEMS:</div>
+                  {invoice.items && invoice.items.length > 0 ? (
+                    <>
+                      {invoice.items.map((item, idx) => {
+                        if ((item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+                          return (
+                            <div key={idx} className="receipt-item">
+                              <div className="receipt-line">  {item.description}</div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={idx} className="receipt-item">
+                            <div className="receipt-line">  {item.description}</div>
+                            <div className="receipt-line">    {item.quantity} x {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}</div>
+                          </div>
+                        );
+                      })}
+                      {isPackagePricing && (invoice.total_amount || 0) > 0 && (
+                        <div className="receipt-line">Package: {formatCurrency(invoice.total_amount || 0)}</div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="receipt-line">{invoice.product_name || 'Booking Package'}</div>
+                  )}
+
+                  <div className="receipt-divider"></div>
+
+                  <div className="receipt-line">Subtotal: {formatCurrency(invoice.total_amount || 0)}</div>
+                  {(invoice.discount_amount || 0) > 0 && (
+                    <div className="receipt-line receipt-discount">Discount: ({formatCurrency(invoice.discount_amount || 0)})</div>
+                  )}
+                  <div className="receipt-total">TOTAL: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
+                  {invoice.invoice_type === 'dp' ? (
+                    <>
+                      <div className="receipt-line">DP: {formatCurrency(invoice.due_amount || 0)}</div>
+                      <div className="receipt-line">Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}</div>
+                    </>
+                  ) : (
+                    <div className="receipt-line">Due: {formatCurrency(invoice.due_amount || 0)}</div>
+                  )}
+
+                  <div className="receipt-divider"></div>
+                  <div className="receipt-center">
+                    <div className="receipt-line">Thank you for using SuitLabs!</div>
+                    <div className="receipt-line receipt-small">suitlabs.bali</div>
+                  </div>
                 </div>
               </div>
             </div>

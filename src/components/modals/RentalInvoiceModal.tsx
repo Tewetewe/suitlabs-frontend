@@ -8,6 +8,7 @@ import html2canvas from 'html2canvas';
 import { printRentalInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue, rentalInvoiceNumber } from '@/lib/barcode';
+import { formatCurrency } from '@/lib/currency';
 import { ThermalPrinterButton } from '@/components/print/ThermalPrinterButton';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
@@ -36,10 +37,23 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
     return x.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
       ' ' + x.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
+  const bprintDate = (d: string | Date) =>
+    new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const customerName = rental.customer
     ? [rental.customer.first_name, rental.customer.last_name].filter(Boolean).join(' ').trim() || '-'
     : '-';
-  const rackItems = (rental.items || rental.booking?.items || []).map((line) => ({
+  const items = (rental.items || rental.booking?.items || []) as Array<{
+    item?: { name?: string; size?: { label?: string } };
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+    discount_amount?: number;
+  }>;
+  const itemsSubtotal = items.reduce((sum, item) => sum + (item.total_price || (item.unit_price || 0) * (item.quantity || 1)), 0);
+  const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
+  const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
+  const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
+  const rackItems = items.map((line) => ({
     name: line.item?.name || 'Item',
     code: line.item?.code,
     size: line.item?.size?.label,
@@ -220,8 +234,78 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
               {/* Customer - name only, same as bprint */}
               <div className="receipt-label">CUSTOMER:</div>
               <div className="receipt-line">{customerName}</div>
-              <div className="receipt-cut-margin" aria-hidden="true" />
-              {/* TEMP: invoice prints only through customer name so the cutter can be tested. */}
+
+              <div className="receipt-divider"></div>
+
+              <div className="receipt-line">Rental: {bprintDate(rental.rental_date)}</div>
+              <div className="receipt-line">Return: {bprintDate(rental.return_date)}</div>
+
+              <div className="receipt-divider"></div>
+
+              <div className="receipt-label">ITEMS:</div>
+              {items.length > 0 ? (
+                items.map((item, idx) => {
+                  const itemName = item.item?.name || 'Item';
+                  const itemSize = item.item?.size?.label || '';
+                  const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
+                  const quantity = item.quantity || 1;
+                  const unitPrice = item.unit_price || item.total_price || 0;
+                  const itemTotal = item.total_price || unitPrice * quantity;
+                  return (
+                    <div key={idx} className="receipt-item">
+                      <div className="receipt-line">  {description}</div>
+                      <div className="receipt-line">    {quantity} x {formatCurrency(unitPrice)} = {formatCurrency(itemTotal)}</div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="receipt-line">Rental Package</div>
+              )}
+
+              <div className="receipt-divider"></div>
+
+              <div className="receipt-line">Subtotal: {formatCurrency(itemsSubtotal || rental.total_cost || 0)}</div>
+              {itemsDiscount > 0 && (
+                <div className="receipt-line receipt-discount">Discount: ({formatCurrency(itemsDiscount)})</div>
+              )}
+              {(rental.late_fee || 0) > 0 && (
+                <div className="receipt-line">Late Fee: {formatCurrency(rental.late_fee || 0)}</div>
+              )}
+              {(rental.damage_charges || 0) > 0 && (
+                <div className="receipt-line">Damage: {formatCurrency(rental.damage_charges || 0)}</div>
+              )}
+              <div className="receipt-total">GRAND TOTAL: {formatCurrency(total)}</div>
+              {(rental.security_deposit || 0) > 0 && (
+                <>
+                  <div className="receipt-line">Deposit: {formatCurrency(rental.security_deposit || 0)}</div>
+                  {(rental.damage_charges || 0) > 0 && (
+                    <div className="receipt-line receipt-discount">Deduction: ({formatCurrency(rental.damage_charges || 0)})</div>
+                  )}
+                  <div className="receipt-line">Refundable: {formatCurrency(refundableDeposit)}</div>
+                </>
+              )}
+
+              {(rental.actual_pickup_date || rental.actual_return_date) && (
+                <>
+                  <div className="receipt-divider"></div>
+                  {rental.actual_pickup_date && <div className="receipt-line">Pickup: {bprintDate(rental.actual_pickup_date)}</div>}
+                  {rental.actual_return_date && <div className="receipt-line">Returned: {bprintDate(rental.actual_return_date)}</div>}
+                </>
+              )}
+
+              {rental.notes && (
+                <>
+                  <div className="receipt-divider"></div>
+                  <div className="receipt-label">NOTE:</div>
+                  <div className="receipt-line">{rental.notes}</div>
+                </>
+              )}
+
+              <div className="receipt-divider"></div>
+              <div className="receipt-center">
+                <div className="receipt-line">Thank you for using SuitLabs!</div>
+                <div className="receipt-line receipt-small">suitlabs.bali</div>
+              </div>
             </div>
           </div>
             </div>

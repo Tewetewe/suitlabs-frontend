@@ -53,6 +53,8 @@ test.describe('Print', () => {
     await expect(receipt).toContainText('SUITLABS BALI');
     await expect(receipt).toContainText(customer.fullName);
     await expect(receipt).toContainText('Type: FULL');
+    await expect(receipt).toContainText('ITEMS:');
+    await expect(receipt).toContainText('TOTAL:');
     await expect(page.getByTestId('print-invoice')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
 
