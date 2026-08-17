@@ -167,6 +167,7 @@ export default function ItemsPage() {
 
   const {
     items,
+    setItems,
     loading,
     loadingMore,
     hasMore,
