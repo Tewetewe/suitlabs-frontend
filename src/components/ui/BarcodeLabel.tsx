@@ -108,12 +108,11 @@ export function BarcodeLabel({
 
         const maxBarcodeW = 360;
         let drawW = barcodeCanvas.width;
-        let drawH = barcodeCanvas.height;
         if (drawW > maxBarcodeW) {
-          const module = Math.max(1, Math.floor(maxBarcodeW / Math.max(1, cleanedValue.length * 11 + 35)));
+          const barWidth = Math.max(1, Math.floor(maxBarcodeW / Math.max(1, cleanedValue.length * 11 + 35)));
           JsBarcode(barcodeCanvas, cleanedValue, {
             format: format,
-            width: module,
+            width: barWidth,
             height: height,
             displayValue: true,
             fontSize: fontSize,
@@ -125,7 +124,6 @@ export function BarcodeLabel({
             textMargin: 4,
           });
           drawW = barcodeCanvas.width;
-          drawH = barcodeCanvas.height;
         }
         const barcodeX = Math.floor((labelWidth - drawW) / 2);
         ctx.imageSmoothingEnabled = false;
