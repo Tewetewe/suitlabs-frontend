@@ -97,12 +97,13 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
     if (video) {
       video.srcObject = null;
     }
-    if (window.Quagga) {
+    const quagga = window.Quagga;
+    if (quagga) {
       try {
-        if (quaggaHandlerRef.current && window.Quagga.offDetected) {
-          window.Quagga.offDetected(quaggaHandlerRef.current);
+        if (quaggaHandlerRef.current && quagga.offDetected) {
+          quagga.offDetected(quaggaHandlerRef.current);
         }
-        window.Quagga.stop();
+        quagga.stop();
       } catch {
         // Camera may already be stopped.
       }
@@ -171,7 +172,8 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
   }, [acceptCode]);
 
   const startQuagga = useCallback(() => {
-    if (!window.Quagga || !scannerRef.current) {
+    const quagga = window.Quagga;
+    if (!quagga || !scannerRef.current) {
       setError('Camera scanner failed to load.');
       return;
     }
@@ -201,7 +203,7 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
       locate: true,
     };
 
-    window.Quagga.init(config, (err: Error | null) => {
+    quagga.init(config, (err: Error | null) => {
       if (err) {
         setError(`Failed to initialize camera: ${err.message}`);
         setIsScanning(false);
@@ -211,8 +213,8 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
         if (result?.codeResult?.code) acceptCode(result.codeResult.code);
       };
       quaggaHandlerRef.current = handler;
-      window.Quagga.onDetected(handler);
-      window.Quagga.start();
+      quagga.onDetected(handler);
+      quagga.start();
     });
   }, [acceptCode]);
 
