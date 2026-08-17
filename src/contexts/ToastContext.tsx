@@ -109,11 +109,11 @@ function ToastItem({ toast }: { toast: Toast }) {
       case 'error':
         return 'bg-red-50 border-red-200 text-red-800';
       case 'warning':
-        return 'bg-yellow-50 border-yellow-200 text-yellow-800';
+        return 'bg-amber-50 border-amber-200 text-amber-800';
       case 'info':
-        return 'bg-blue-50 border-blue-200 text-blue-800';
+        return 'bg-indigo-50 border-indigo-200 text-indigo-800';
       default:
-        return 'bg-gray-50 border-gray-200 text-gray-800';
+        return 'bg-slate-50 border-slate-200 text-slate-800';
     }
   };
 

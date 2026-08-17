@@ -3,7 +3,6 @@
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -17,6 +16,7 @@ import { formatDateTime } from '@/lib/date';
 import { formatPaymentMethod } from '@/lib/payment-methods';
 import { CreateSaleRequest, Rental, Sale, SaleSource } from '@/types';
 import { useToast } from '@/contexts/ToastContext';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { ShoppingBag } from 'lucide-react';
 
@@ -42,6 +42,8 @@ function SalesPageInner() {
   const [search, setSearch] = useState('');
   const [source, setSource] = useState<SaleSource | ''>('');
   const [linkedRental, setLinkedRental] = useState<Rental | null>(null);
+  const [cancellingSale, setCancellingSale] = useState<Sale | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const bookingId = searchParams?.get('booking_id') || undefined;
   const rentalId = searchParams?.get('rental_id') || undefined;
   const customerId = searchParams?.get('customer_id') || undefined;
@@ -98,18 +100,23 @@ function SalesPageInner() {
     }
   };
 
-  const handleCancel = async (sale: Sale) => {
-    if (!confirm(`Cancel ${sale.sale_number}? Stock will be restored.`)) return;
+  const handleCancel = async () => {
+    if (!cancellingSale) return;
     try {
-      await apiClient.cancelSale(sale.id);
-      success('Sale cancelled', sale.sale_number);
+      setCancelling(true);
+      await apiClient.cancelSale(cancellingSale.id);
+      success('Sale cancelled', cancellingSale.sale_number);
+      setCancellingSale(null);
       await loadSales();
     } catch (e) {
       error('Cancel failed', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setCancelling(false);
     }
   };
 
   return (
+    <>
     <PageShell
       title="Sales"
       subtitle="Walk-in retail, booking add-ons, and return fees. Use Cashier on tablet for the fastest checkout."
@@ -200,7 +207,7 @@ function SalesPageInner() {
                       )}
                     </div>
                     {sale.status === 'completed' && (
-                      <Button variant="ghost" size="sm" onClick={() => handleCancel(sale)}>
+                      <Button variant="ghost" size="sm" onClick={() => setCancellingSale(sale)}>
                         Cancel
                       </Button>
                     )}
@@ -212,15 +219,24 @@ function SalesPageInner() {
         )}
       </div>
     </PageShell>
+    <ConfirmModal
+      isOpen={!!cancellingSale}
+      title="Cancel sale"
+      description={cancellingSale ? `Cancel ${cancellingSale.sale_number}? Stock will be restored.` : undefined}
+      confirmLabel="Cancel sale"
+      variant="danger"
+      loading={cancelling}
+      onClose={() => setCancellingSale(null)}
+      onConfirm={handleCancel}
+    />
+    </>
   );
 }
 
 export default function SalesPage() {
   return (
-    <DashboardLayout>
-      <Suspense fallback={<div className="text-sm text-slate-500">Loading sales…</div>}>
-        <SalesPageInner />
-      </Suspense>
-    </DashboardLayout>
+    <Suspense fallback={<div className="text-sm text-slate-500">Loading sales…</div>}>
+      <SalesPageInner />
+    </Suspense>
   );
 }

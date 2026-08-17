@@ -97,7 +97,7 @@ export function Barcode({
   if (!value || value.trim() === '') {
     return (
       <div className={`inline-block ${className}`}>
-        <div className="bg-gray-100 border border-gray-300 rounded p-4 text-center text-gray-500 text-sm">
+        <div className="rounded-xl border border-black/5 bg-slate-50 p-4 text-center text-sm text-slate-500">
           No barcode available
         </div>
       </div>
@@ -109,10 +109,10 @@ export function Barcode({
       {(itemName || itemCode) && (
         <div className="text-center mb-2">
           {itemName && (
-            <div className="text-sm font-medium text-gray-900">{itemName}</div>
+            <div className="text-sm font-medium text-slate-900">{itemName}</div>
           )}
           {itemCode && (
-            <div className="text-xs text-gray-500">#{itemCode}</div>
+            <div className="text-xs text-slate-500">#{itemCode}</div>
           )}
         </div>
       )}

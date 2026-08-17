@@ -4,7 +4,6 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { BookOpen } from 'lucide-react';
 
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/DataDisplay';
@@ -27,16 +26,16 @@ export default function OperationsHandbookPage() {
 
   if (authLoading) {
     return (
-      <DashboardLayout>
+      <>
         <div className="flex items-center justify-center py-24">
           <div className="text-center text-slate-500">Loading...</div>
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Operations Handbook"
         subtitle="Admin only — the whole system: roles, the books, the spreadsheet, devices, and the month close."
@@ -55,6 +54,6 @@ export default function OperationsHandbookPage() {
           <GuideDocument html={OPERATIONS_HANDBOOK_HTML} />
         )}
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }

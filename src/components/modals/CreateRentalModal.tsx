@@ -8,7 +8,7 @@ import SimpleModal from '@/components/modals/SimpleModal';
 import { apiClient } from '@/lib/api';
 import { Booking, CreateRentalRequest } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { Calendar, AlertCircle, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import axios from 'axios';
 
@@ -183,7 +183,7 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
             error={errors.submit && !selectedBookingId ? errors.submit : undefined}
           />
           <p className="mt-1.5 text-xs text-slate-500">
-            Pending and confirmed bookings that do not yet have a rental. Type to search, scroll for more.
+            New bookings already create a pending rental. Use this only for older bookings that do not have one yet.
           </p>
         </div>
 
@@ -201,54 +201,30 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
         )}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              <Calendar className="mr-2 inline h-4 w-4" />
-              Rental Date
-            </label>
-            <Input
-              type="date"
-              value={form.rental_date}
-              onChange={(e) => setForm({ ...form, rental_date: e.target.value })}
-            />
-            {errors.rental_date && (
-              <p className="mt-1 flex items-center text-sm text-red-600">
-                <AlertCircle className="mr-1 h-4 w-4" />
-                {errors.rental_date}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              <Calendar className="mr-2 inline h-4 w-4" />
-              Return Date
-            </label>
-            <Input
-              type="date"
-              value={form.return_date}
-              onChange={(e) => setForm({ ...form, return_date: e.target.value })}
-              min={form.rental_date || undefined}
-            />
-            {errors.return_date && (
-              <p className="mt-1 flex items-center text-sm text-red-600">
-                <AlertCircle className="mr-1 h-4 w-4" />
-                {errors.return_date}
-              </p>
-            )}
-          </div>
+          <Input
+            label="Rental date"
+            type="date"
+            value={form.rental_date}
+            onChange={(e) => setForm({ ...form, rental_date: e.target.value })}
+            error={errors.rental_date}
+          />
+          <Input
+            label="Return date"
+            type="date"
+            value={form.return_date}
+            onChange={(e) => setForm({ ...form, return_date: e.target.value })}
+            min={form.rental_date || undefined}
+            error={errors.return_date}
+          />
         </div>
 
         {errors.submit && selectedBookingId && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3">
-            <p className="flex items-center text-sm text-red-600">
-              <AlertCircle className="mr-2 h-4 w-4" />
-              {errors.submit}
-            </p>
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+            {errors.submit}
           </div>
         )}
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+        <div className="flex justify-end gap-3 border-t border-black/5 pt-4">
           <Button variant="ghost" onClick={handleClose} disabled={loading}>
             Cancel
           </Button>

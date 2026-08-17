@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ExternalLink, RefreshCcw, Sheet } from 'lucide-react';
 
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -73,17 +72,17 @@ export default function BulkInputSyncPage() {
 
   if (authLoading) {
     return (
-      <DashboardLayout>
+      <>
         <div className="flex items-center justify-center py-24">
           <div className="text-center text-slate-500">Loading...</div>
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (!isAuthenticated || !isAdmin) {
     return (
-      <DashboardLayout>
+      <>
         <PageShell title="Bulk Input Sync" subtitle="Admin only">
           <Card>
             <CardContent>
@@ -99,12 +98,12 @@ export default function BulkInputSyncPage() {
             </CardContent>
           </Card>
         </PageShell>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Item Data Sync"
         subtitle={
@@ -252,7 +251,7 @@ export default function BulkInputSyncPage() {
           </Card>
         </div>
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }
 

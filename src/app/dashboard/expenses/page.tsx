@@ -3,11 +3,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Wallet } from 'lucide-react';
 
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageShell } from '@/components/ui/PageShell';
+import { MetricTile, PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, NumberInput } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { Badge, EmptyState, FilterBar, Pagination } from '@/components/ui/DataDisplay';
@@ -18,7 +17,7 @@ import { BranchBadge } from '@/components/branch/BranchBadge';
 import { useBranch } from '@/contexts/BranchContext';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { apiClient } from '@/lib/api';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import type {
   CreateExpenseRequest,
   Expense,
@@ -264,16 +263,16 @@ export default function ExpensesPage() {
 
   if (authLoading) {
     return (
-      <DashboardLayout>
+      <>
         <div className="flex items-center justify-center py-24 text-slate-500">Loading...</div>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (!isAuthenticated) return null;
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Expenses"
         subtitle={
@@ -289,22 +288,16 @@ export default function ExpensesPage() {
         }
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-            <div className="text-xs font-semibold text-slate-500">This month</div>
-            <div className="mt-1 text-lg font-bold text-slate-900">
-              {formatCurrency(summary?.total_amount || 0)}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-            <div className="text-xs font-semibold text-slate-500">Entries</div>
-            <div className="mt-1 text-lg font-bold text-slate-900">{summary?.count || 0}</div>
-          </div>
-          <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-            <div className="text-xs font-semibold text-slate-500">Top category</div>
-            <div className="mt-1 text-lg font-bold text-slate-900">
-              {summary?.by_category?.[0] ? categoryLabel(summary.by_category[0].category) : '—'}
-            </div>
-          </div>
+          <MetricTile
+            label="This month"
+            value={formatCurrencyCompact(summary?.total_amount || 0)}
+            title={formatCurrency(summary?.total_amount || 0)}
+          />
+          <MetricTile label="Entries" value={summary?.count || 0} />
+          <MetricTile
+            label="Top category"
+            value={summary?.by_category?.[0] ? categoryLabel(summary.by_category[0].category) : '—'}
+          />
         </div>
 
         {isAdmin && (
@@ -635,13 +628,12 @@ export default function ExpensesPage() {
             value={recurringForm.amount || ''}
             onChange={(n) => setRecurringForm((prev) => ({ ...prev, amount: n }))}
           />
-          <Input
+          <NumberInput
             label="Day of month (1-28)"
-            type="number"
             min={1}
             max={28}
             value={recurringForm.day_of_month}
-            onChange={(e) => setRecurringForm((prev) => ({ ...prev, day_of_month: Number(e.target.value) }))}
+            onChange={(n) => setRecurringForm((prev) => ({ ...prev, day_of_month: n }))}
           />
           <Input
             label="Start date"
@@ -665,6 +657,6 @@ export default function ExpensesPage() {
           />
         </form>
       </SimpleModal>
-    </DashboardLayout>
+    </>
   );
 }

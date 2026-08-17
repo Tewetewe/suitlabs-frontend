@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -23,7 +23,8 @@ import {
 } from 'lucide-react';
 import GenericDeleteConfirmModal from '@/components/modals/GenericDeleteConfirmModal';
 import SimpleModal from '@/components/modals/SimpleModal';
-import { Badge, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { Badge, EmptyState, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { PageShell } from '@/components/ui/PageShell';
 
 type DiscountTargetType = 'category' | 'item_type' | 'customer_tier' | 'specific_items' | 'specific_customers' | 'all';
 
@@ -203,12 +204,12 @@ export function DiscountManagement() {
         title: 'Discount Statistics',
         body: (
           <div className="space-y-3 text-sm">
-            <div className="flex justify-between"><span className="text-gray-600">Total Applications</span><span className="font-medium">{stats.total_applications}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600">Total Amount Saved</span><span className="font-medium">{safeCurrency(stats.total_amount_saved)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600">Average Discount</span><span className="font-medium">{safeCurrency(stats.average_discount_amount)}</span></div>
-            <div className="border-t pt-3 mt-2">
-              <div className="flex justify-between"><span className="text-gray-600">Usage</span><span className="font-medium">{summary.usage_count}/{summary.usage_limit === -1 ? 'Unlimited' : summary.usage_limit}</span></div>
-              <div className="flex justify-between"><span className="text-gray-600">Total Saved</span><span className="font-medium">{safeCurrency(summary.total_saved)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-600">Total Applications</span><span className="font-medium">{stats.total_applications}</span></div>
+            <div className="flex justify-between"><span className="text-slate-600">Total Amount Saved</span><span className="font-medium">{safeCurrency(stats.total_amount_saved)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-600">Average Discount</span><span className="font-medium">{safeCurrency(stats.average_discount_amount)}</span></div>
+            <div className="border-t border-black/5 pt-3 mt-2">
+              <div className="flex justify-between"><span className="text-slate-600">Usage</span><span className="font-medium">{summary.usage_count}/{summary.usage_limit === -1 ? 'Unlimited' : summary.usage_limit}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Total Saved</span><span className="font-medium">{safeCurrency(summary.total_saved)}</span></div>
             </div>
           </div>
         )
@@ -228,11 +229,11 @@ export function DiscountManagement() {
         body: (
           <div className="space-y-2 text-sm">
             {applications.length === 0 ? (
-              <div className="text-gray-600">No applications found</div>
+              <div className="text-slate-600">No applications found</div>
             ) : (
               applications.map((app) => (
-                <div key={app.id} className="flex justify-between border rounded p-2">
-                  <span className="text-gray-600">{new Date(app.applied_at).toLocaleDateString()}</span>
+                <div key={app.id} className="flex justify-between rounded-xl border border-black/5 p-2">
+                  <span className="text-slate-600">{new Date(app.applied_at).toLocaleDateString()}</span>
                   <span className="font-medium">{formatCurrency(app.applied_amount)}</span>
                 </div>
               ))
@@ -371,24 +372,18 @@ export function DiscountManagement() {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Discount Management</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Create and manage discount codes and promotions
-          </p>
-        </div>
+    <PageShell
+      title="Discounts"
+      subtitle="Create and manage discount codes and promotions"
+      action={
         <Button onClick={() => setShowCreateForm(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Create Discount
         </Button>
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      }
+    >
+      <div className="border-b border-black/5">
+        <nav className="-mb-px flex gap-6 overflow-x-auto">
           {[
             { key: 'all', label: 'All Discounts', icon: Tag },
             { key: 'active', label: 'Active', icon: CheckCircle },
@@ -398,28 +393,35 @@ export function DiscountManagement() {
             <button
               key={key}
               onClick={() => setActiveTab(key as TabKey)}
-              className={`flex items-center py-2 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center whitespace-nowrap border-b-2 py-2 px-1 text-sm font-medium ${
                 activeTab === key
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
               }`}
             >
-              <Icon className="h-4 w-4 mr-2" />
+              <Icon className="mr-2 h-4 w-4" />
               {label}
             </button>
           ))}
         </nav>
       </div>
 
-      {/* Create/Edit Form */}
-      {showCreateForm && (
-        <Card>
-          <CardContent>
-            <h3 className="text-lg font-semibold mb-4">
-              {editingDiscount ? 'Edit Discount' : 'Create New Discount'}
-            </h3>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
+      <SimpleModal
+        isOpen={showCreateForm}
+        title={editingDiscount ? 'Edit Discount' : 'Create Discount'}
+        onClose={resetForm}
+        size="xl"
+        overflowVisible
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={resetForm}>Cancel</Button>
+            <Button type="submit" form="discount-form" loading={loading}>
+              {editingDiscount ? 'Update' : 'Create'} Discount
+            </Button>
+          </>
+        }
+      >
+        <form id="discount-form" onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="Discount Name"
@@ -437,6 +439,7 @@ export function DiscountManagement() {
                 
                 <Select
                   label="Discount Type"
+                  searchable={false}
                   value={formData.discount_type}
                   onChange={(e) => setFormData({ ...formData, discount_type: e.target.value as 'percentage' | 'amount' })}
                   options={[
@@ -446,6 +449,7 @@ export function DiscountManagement() {
                 />
                 <Select
                   label="Applicable To"
+                  searchable={false}
                   value={formData.applicable_to}
                   onChange={(e) => setFormData({ ...formData, applicable_to: e.target.value as 'booking' | 'item' | 'both' })}
                   options={[
@@ -510,6 +514,7 @@ export function DiscountManagement() {
 
                 <Select
                   label="Target Type"
+                  searchable={false}
                   value={formData.target_type}
                   onChange={(e) => {
                     const target_type = e.target.value as DiscountTargetType;
@@ -579,26 +584,21 @@ export function DiscountManagement() {
               {formError && (
                 <p className="text-sm text-red-600">{formError}</p>
               )}
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  rows={3}
-                />
-              </div>
-              
-              <div className="flex items-center space-x-4">
+
+              <Textarea
+                label="Description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+              />
+
+              <div className="flex flex-wrap items-center gap-4 text-sm text-slate-700">
                 <label className="flex items-center">
                   <input
                     type="checkbox"
                     checked={formData.requires_code}
                     onChange={(e) => setFormData({ ...formData, requires_code: e.target.checked })}
-                    className="mr-2 h-4 w-4 accent-blue-600 border-gray-300"
+                    className="mr-2 h-4 w-4 accent-indigo-600"
                     style={{ appearance: 'auto' }}
                   />
                   Requires discount code
@@ -609,25 +609,14 @@ export function DiscountManagement() {
                     type="checkbox"
                     checked={formData.is_active}
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="mr-2 h-4 w-4 accent-blue-600 border-gray-300"
+                    className="mr-2 h-4 w-4 accent-indigo-600"
                     style={{ appearance: 'auto' }}
                   />
                   Active
                 </label>
               </div>
-              
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="ghost" onClick={resetForm}>
-                  Cancel
-                </Button>
-                <Button type="submit" loading={loading}>
-                  {editingDiscount ? 'Update' : 'Create'} Discount
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+        </form>
+      </SimpleModal>
 
       {/* Discounts List */}
       <div className="space-y-2">
@@ -636,27 +625,25 @@ export function DiscountManagement() {
             <Card key={i}>
               <CardContent>
                 <div className="animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                  <div className="mb-2 h-4 rounded-md bg-slate-200"></div>
+                  <div className="mb-2 h-4 w-3/4 rounded-md bg-slate-200"></div>
+                  <div className="h-4 w-1/2 rounded-md bg-slate-200"></div>
                 </div>
               </CardContent>
             </Card>
           ))
         ) : discounts.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Tag className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No discounts found</h3>
-              <p className="text-gray-500 mb-4">
-                Create your first discount to start offering promotions
-              </p>
+          <EmptyState
+            icon={<Tag className="h-6 w-6" />}
+            title="No discounts found"
+            description="Create your first discount to start offering promotions"
+            action={
               <Button onClick={() => setShowCreateForm(true)}>
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-4 w-4" />
                 Create Discount
               </Button>
-            </CardContent>
-          </Card>
+            }
+          />
         ) : Array.isArray(discounts) ? (
           discounts.map((discount) => {
             const status = getDiscountStatus(discount);
@@ -742,6 +729,6 @@ export function DiscountManagement() {
       >
         {appsModal.body}
       </SimpleModal>
-    </div>
+    </PageShell>
   );
 }

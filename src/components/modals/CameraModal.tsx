@@ -2,56 +2,73 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import SimpleModal from "@/components/modals/SimpleModal";
 
 interface CameraModalProps {
   isOpen: boolean;
   onCapture: (imageData: string) => void;
   onClose: () => void;
   title?: string;
+  facingMode?: "user" | "environment";
 }
 
 export default function CameraModal({
   isOpen,
   onCapture,
   onClose,
-  title = "Take a Selfie",
+  title = "Take photo",
+  facingMode = "environment",
 }: CameraModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState("");
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
+  const stopStream = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
+
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      stopStream();
+      setHasPermission(null);
+      setError("");
+      return;
+    }
+
+    let cancelled = false;
 
     const startCamera = async () => {
       try {
         setError("");
+        setHasPermission(null);
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: "user",
+            facingMode: { ideal: facingMode },
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
           audio: false,
         });
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-          setStream(mediaStream);
-          setHasPermission(true);
+        if (cancelled) {
+          mediaStream.getTracks().forEach((track) => track.stop());
+          return;
         }
+        streamRef.current = mediaStream;
+        setHasPermission(true);
       } catch (err) {
+        if (cancelled) return;
         setHasPermission(false);
-        const error = err as { name?: string; message?: string };
+        const cameraError = err as { name?: string };
         let errorMessage = "Failed to access camera";
-        if (error.name === "NotAllowedError") {
-          errorMessage =
-            "Camera permission denied. Please enable camera access.";
-        } else if (error.name === "NotFoundError") {
+        if (cameraError.name === "NotAllowedError") {
+          errorMessage = "Camera permission denied. Please enable camera access.";
+        } else if (cameraError.name === "NotFoundError") {
           errorMessage = "No camera device found";
-        } else if (error.name === "NotReadableError") {
+        } else if (cameraError.name === "NotReadableError") {
           errorMessage = "Camera is already in use";
         }
         setError(errorMessage);
@@ -61,110 +78,84 @@ export default function CameraModal({
     startCamera();
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      cancelled = true;
+      stopStream();
     };
-  }, [isOpen, stream]);
+  }, [isOpen, facingMode]);
 
-  const handleCapture = async () => {
+  useEffect(() => {
+    if (hasPermission !== true || !videoRef.current || !streamRef.current) return;
+    videoRef.current.srcObject = streamRef.current;
+  }, [hasPermission]);
+
+  const handleCapture = () => {
     if (!videoRef.current || !canvasRef.current) return;
 
     try {
       const canvas = canvasRef.current;
       const video = videoRef.current;
-
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
       const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(video, 0, 0);
-        const imageData = canvas.toDataURL("image/jpeg", 0.8);
-
-        // Stop stream
-        if (stream) {
-          stream.getTracks().forEach((track) => track.stop());
-        }
-
-        onCapture(imageData);
-        onClose();
+      if (!ctx) {
+        setError("Failed to capture photo");
+        return;
       }
+      ctx.drawImage(video, 0, 0);
+      const imageData = canvas.toDataURL("image/jpeg", 0.85);
+      stopStream();
+      onCapture(imageData);
+      onClose();
     } catch {
       setError("Failed to capture photo");
     }
   };
 
-  if (!isOpen) return null;
+  const handleClose = () => {
+    stopStream();
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 bg-white flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">{title}</h2>
-        </div>
+    <SimpleModal
+      isOpen={isOpen}
+      title={title}
+      onClose={handleClose}
+      size="md"
+      nested
+      footer={
+        hasPermission === true ? (
+          <>
+            <Button variant="ghost" onClick={handleClose}>Cancel</Button>
+            <Button onClick={handleCapture}>Capture</Button>
+          </>
+        ) : hasPermission === false ? (
+          <Button variant="ghost" onClick={handleClose}>Close</Button>
+        ) : undefined
+      }
+    >
+      {error && (
+        <div className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      )}
 
-        <div className="p-4">
-          {error && (
-            <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">
-              {error}
-            </div>
-          )}
+      {hasPermission === true && (
+        <>
+          <div className="overflow-hidden rounded-xl bg-black">
+            <video ref={videoRef} className="h-auto w-full" autoPlay playsInline muted />
+          </div>
+          <canvas ref={canvasRef} className="hidden" />
+        </>
+      )}
 
-          {hasPermission === true && (
-            <>
-              <div className="mb-4 bg-black rounded overflow-hidden">
-                <video
-                  ref={videoRef}
-                  className="w-full h-auto"
-                  autoPlay
-                  playsInline
-                />
-              </div>
-              <canvas ref={canvasRef} className="hidden" />
-              <div className="flex gap-3">
-                <Button
-                  onClick={handleCapture}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  Capture
-                </Button>
-                <Button
-                  onClick={() => {
-                    if (stream) {
-                      stream.getTracks().forEach((track) => track.stop());
-                    }
-                    onClose();
-                  }}
-                  className="flex-1 bg-gray-400 hover:bg-gray-500 text-white"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </>
-          )}
+      {hasPermission === false && (
+        <p className="py-4 text-center text-sm text-slate-600">
+          Camera permission is required to take a photo. You can attach a file instead.
+        </p>
+      )}
 
-          {hasPermission === false && (
-            <div className="text-center py-6">
-              <p className="text-gray-700 mb-4">
-                Camera permission is required to take a selfie.
-              </p>
-              <Button
-                onClick={onClose}
-                className="bg-gray-400 hover:bg-gray-500 text-white"
-              >
-                Close
-              </Button>
-            </div>
-          )}
-
-          {hasPermission === null && (
-            <div className="text-center py-6">
-              <p className="text-gray-700">Requesting camera access...</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+      {hasPermission === null && (
+        <p className="py-4 text-center text-sm text-slate-600">Requesting camera access...</p>
+      )}
+    </SimpleModal>
   );
 }

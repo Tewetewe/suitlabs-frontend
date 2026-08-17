@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -96,6 +96,48 @@ const navigationSections: NavigationSection[] = [
 
 const navigation = navigationSections.flatMap((s) => s.items);
 
+function isNavActive(href: string, pathname: string | null) {
+  return href === pathname || (href !== '/dashboard' && Boolean(pathname?.startsWith(href)));
+}
+
+function NavPendingShade({ isActive }: { isActive: boolean }) {
+  const { pending } = useLinkStatus();
+  if (!pending || isActive) return null;
+  return <span className="pointer-events-none absolute inset-0 rounded-[inherit] bg-indigo-50/80" aria-hidden />;
+}
+
+function SidebarLink({
+  href,
+  isActive,
+  className,
+  onNavigate,
+  innerRef,
+  children,
+}: {
+  href: string;
+  isActive: boolean;
+  className: string;
+  onNavigate?: () => void;
+  innerRef?: React.Ref<HTMLAnchorElement>;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  return (
+    <Link
+      href={href}
+      ref={innerRef}
+      prefetch
+      onClick={onNavigate}
+      onMouseEnter={() => router.prefetch(href)}
+      onFocus={() => router.prefetch(href)}
+      className={clsx('relative', className)}
+    >
+      <NavPendingShade isActive={isActive} />
+      {children}
+    </Link>
+  );
+}
+
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
@@ -164,9 +206,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
   const mobileNavigation = allowedNavigation.filter(item =>
     ['/dashboard/cashier', '/dashboard/bookings', '/dashboard/rentals', '/dashboard/items', '/dashboard/sales'].includes(item.href)
   );
-  const activePage = navigation.find(item =>
-    item.href === pathname || (item.href !== '/dashboard' && pathname?.startsWith(item.href))
-  );
+  const activePage = navigation.find((item) => isNavActive(item.href, pathname));
 
   return (
     <div className={clsx(isCashier ? 'h-dvh overflow-hidden bg-transparent' : 'min-h-screen bg-transparent')}>
@@ -230,13 +270,14 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
                 )}
 
                 {items.map((item) => {
-                  const isActive = item.href === pathname || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+                  const isActive = isNavActive(item.href, pathname);
                   return (
-                    <Link
+                    <SidebarLink
                       key={item.name}
                       href={item.href}
-                      ref={isActive ? activeNavRef : undefined}
-                      onClick={() => setSidebarOpen(false)}
+                      isActive={isActive}
+                      innerRef={isActive ? activeNavRef : undefined}
+                      onNavigate={() => setSidebarOpen(false)}
                       className={clsx(
                         'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation',
                         isActive
@@ -251,7 +292,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
                         )}
                       />
                       {item.name}
-                    </Link>
+                    </SidebarLink>
                   );
                 })}
               </div>
@@ -411,16 +452,17 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
 
       {/* ── Mobile bottom nav. Phone cashier keeps it so staff can leave POS. ─ */}
       <nav className={clsx(
-        'fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white px-2 pb-safe pt-1 md:hidden',
+        'app-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white px-2 pb-safe pt-1 md:hidden transition-transform duration-200',
         isCashier && !cashierPhone && 'hidden'
       )}>
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
           {mobileNavigation.map((item) => {
-            const isActive = item.href === pathname || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+            const isActive = isNavActive(item.href, pathname);
             return (
-              <Link
+              <SidebarLink
                 key={`mobile-${item.name}`}
                 href={item.href}
+                isActive={isActive}
                 className={clsx(
                   'flex min-h-[56px] flex-col items-center justify-center rounded-lg px-1 py-1.5 text-[11px] font-medium transition-colors',
                   isActive ? 'text-indigo-700 bg-indigo-50' : 'text-slate-600 hover:bg-indigo-50/70'
@@ -428,7 +470,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
               >
                 <item.icon className={clsx('mb-0.5 h-4 w-4', isActive ? 'text-indigo-600' : 'text-slate-500')} />
                 <span className="truncate max-w-full">{item.name}</span>
-              </Link>
+              </SidebarLink>
             );
           })}
         </div>

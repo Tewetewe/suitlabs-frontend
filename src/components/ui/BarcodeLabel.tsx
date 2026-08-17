@@ -127,7 +127,7 @@ export function BarcodeLabel({
   if (!isClient) {
     return (
       <div className={`inline-block ${className}`}>
-        <div className="bg-gray-100 border border-gray-300 rounded p-4 text-center text-gray-500 text-sm">
+        <div className="rounded-xl border border-black/5 bg-slate-50 p-4 text-center text-sm text-slate-500">
           Loading barcode label...
         </div>
       </div>
@@ -137,7 +137,7 @@ export function BarcodeLabel({
   if (!value || value.trim() === '') {
     return (
       <div className={`inline-block ${className}`}>
-        <div className="bg-gray-100 border border-gray-300 rounded p-4 text-center text-gray-500 text-sm">
+        <div className="rounded-xl border border-black/5 bg-slate-50 p-4 text-center text-sm text-slate-500">
           No barcode available
         </div>
       </div>
@@ -148,7 +148,7 @@ export function BarcodeLabel({
     <div className={`inline-block ${className}`}>
       <canvas 
         ref={canvasRef} 
-        className="border border-gray-200 rounded-lg shadow-sm"
+        className="rounded-xl border border-black/5 shadow-sm"
         style={{ maxWidth: '100%', height: 'auto' }}
       />
     </div>

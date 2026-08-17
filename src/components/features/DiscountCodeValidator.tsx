@@ -107,7 +107,7 @@ export function DiscountCodeValidator({
 
         {appliedDiscount ? (
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3">
               <div className="flex items-center">
                 <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
                 <div>
@@ -131,7 +131,7 @@ export function DiscountCodeValidator({
               </Button>
             </div>
             
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-slate-600">
               <p>Savings: {formatCurrency(calculateDiscountAmount(appliedDiscount))}</p>
               {appliedDiscount.description && (
                 <p className="mt-1">{appliedDiscount.description}</p>
@@ -158,7 +158,7 @@ export function DiscountCodeValidator({
             </div>
 
             {error && (
-              <div className="flex items-center p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center rounded-xl border border-red-200 bg-red-50 p-3">
                 <XCircle className="h-5 w-5 text-red-600 mr-2" />
                 <p className="text-red-800 text-sm">{error}</p>
               </div>
@@ -166,10 +166,10 @@ export function DiscountCodeValidator({
 
             {validatedDiscount && (
               <div className="space-y-4">
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-blue-800">{validatedDiscount.name}</h4>
-                  <div className="flex items-center text-blue-600">
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="font-medium text-indigo-800">{validatedDiscount.name}</h4>
+                  <div className="flex items-center text-indigo-600">
                       <span className="font-semibold">
                         {validatedDiscount.discount_type === 'percentage' 
                           ? `${validatedDiscount.discount_value}%`
@@ -180,10 +180,10 @@ export function DiscountCodeValidator({
                   </div>
                   
                   {validatedDiscount.description && (
-                    <p className="text-sm text-blue-700 mb-2">{validatedDiscount.description}</p>
+                    <p className="mb-2 text-sm text-indigo-700">{validatedDiscount.description}</p>
                   )}
                   
-                  <div className="text-sm text-blue-600">
+                  <div className="text-sm text-indigo-600">
                     <p>You&#39;ll save: {formatCurrency(calculateDiscountAmount(validatedDiscount))}</p>
                     {validatedDiscount.min_amount && (
                       <p>Minimum order: {formatCurrency(validatedDiscount.min_amount)}</p>

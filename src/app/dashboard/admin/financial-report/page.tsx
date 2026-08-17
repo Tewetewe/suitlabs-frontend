@@ -4,8 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BarChart3, Download, ExternalLink, Lock, RefreshCcw } from 'lucide-react';
 
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageShell } from '@/components/ui/PageShell';
+import { MetricTile, PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/DataDisplay';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,7 +12,7 @@ import { useBranch } from '@/contexts/BranchContext';
 import apiClient from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import { AccountingReports } from '@/components/admin/AccountingReports';
 import type { Booking, ClosedMonth, GoogleSheetsStatus, GoogleSyncRun, ProfitAndLossReport } from '@/types';
 import { BOOKING_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
@@ -310,17 +309,17 @@ export default function FinancialReportPage() {
 
   if (authLoading) {
     return (
-      <DashboardLayout>
+      <>
         <div className="flex items-center justify-center py-24">
           <div className="text-center text-slate-500">Loading...</div>
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (!isAuthenticated || !isAdmin) {
     return (
-      <DashboardLayout>
+      <>
         <PageShell title="Financial Report" subtitle="Admin only">
           <Card>
             <CardContent>
@@ -332,12 +331,12 @@ export default function FinancialReportPage() {
             </CardContent>
           </Card>
         </PageShell>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell title="Financial Report" subtitle={
         viewingAll
           ? `Company group — separate shop books, shown together. ${periodLabel}.`
@@ -542,28 +541,32 @@ export default function FinancialReportPage() {
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Booking revenue</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(pnl?.totals?.booking_revenue || 0)}</div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Sale revenue</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(pnl?.totals?.sale_revenue || 0)}</div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Cost of Goods Sold</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(pnl?.totals?.cost_of_goods_sold || 0)}</div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Expenses</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(pnl?.totals?.expenses || 0)}</div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Net profit</div>
-                  <div className={`mt-1 text-lg font-bold ${(pnl?.totals?.net_profit || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {formatCurrency(pnl?.totals?.net_profit || 0)}
-                  </div>
-                </div>
+                <MetricTile
+                  label="Booking revenue"
+                  value={formatCurrencyCompact(pnl?.totals?.booking_revenue || 0)}
+                  title={formatCurrency(pnl?.totals?.booking_revenue || 0)}
+                />
+                <MetricTile
+                  label="Sale revenue"
+                  value={formatCurrencyCompact(pnl?.totals?.sale_revenue || 0)}
+                  title={formatCurrency(pnl?.totals?.sale_revenue || 0)}
+                />
+                <MetricTile
+                  label="Cost of Goods Sold"
+                  value={formatCurrencyCompact(pnl?.totals?.cost_of_goods_sold || 0)}
+                  title={formatCurrency(pnl?.totals?.cost_of_goods_sold || 0)}
+                />
+                <MetricTile
+                  label="Expenses"
+                  value={formatCurrencyCompact(pnl?.totals?.expenses || 0)}
+                  title={formatCurrency(pnl?.totals?.expenses || 0)}
+                />
+                <MetricTile
+                  label="Net profit"
+                  value={formatCurrencyCompact(pnl?.totals?.net_profit || 0)}
+                  title={formatCurrency(pnl?.totals?.net_profit || 0)}
+                  valueClassName={(pnl?.totals?.net_profit || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}
+                />
               </div>
 
               {viewingAll && (pnl?.by_branch?.length || 0) > 0 && (
@@ -684,22 +687,22 @@ export default function FinancialReportPage() {
             <div className="flex flex-col gap-4">
               {/* Summary cards */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Total bookings</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">{bookingTotals.count}</div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Final revenue</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(bookingTotals.final)}</div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Paid</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(bookingTotals.paid)}</div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Remaining</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(bookingTotals.remaining)}</div>
-                </div>
+                <MetricTile label="Total bookings" value={bookingTotals.count} />
+                <MetricTile
+                  label="Final revenue"
+                  value={formatCurrencyCompact(bookingTotals.final)}
+                  title={formatCurrency(bookingTotals.final)}
+                />
+                <MetricTile
+                  label="Paid"
+                  value={formatCurrencyCompact(bookingTotals.paid)}
+                  title={formatCurrency(bookingTotals.paid)}
+                />
+                <MetricTile
+                  label="Remaining"
+                  value={formatCurrencyCompact(bookingTotals.remaining)}
+                  title={formatCurrency(bookingTotals.remaining)}
+                />
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -828,7 +831,7 @@ export default function FinancialReportPage() {
           </CardContent>
         </Card>
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }
 

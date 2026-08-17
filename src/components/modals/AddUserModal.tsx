@@ -2,11 +2,11 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { FieldGroup, Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/lib/api';
 import { User, Address, Branch } from '@/types';
-import { X, User as UserIcon, MapPin, Lock, Shield } from 'lucide-react';
+import SimpleModal from '@/components/modals/SimpleModal';
 
 interface AddUserModalProps {
   isOpen: boolean;
@@ -197,293 +197,161 @@ export function AddUserModal({ isOpen, onClose, onUserAdded, branches = [] }: Ad
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-white flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <UserIcon className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Add New User</h2>
-              <p className="text-sm text-gray-500">Create a new user account</p>
-            </div>
+    <SimpleModal
+      isOpen={isOpen}
+      title="Add user"
+      onClose={handleClose}
+      size="lg"
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={handleClose} disabled={loading}>Cancel</Button>
+          <Button type="submit" form="add-user-form" loading={loading}>Create user</Button>
+        </>
+      }
+    >
+      <form id="add-user-form" onSubmit={handleSubmit} className="space-y-5">
+        {errors.general && (
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{errors.general}</div>
+        )}
+
+        <FieldGroup title="Personal">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input
+              label="First name"
+              value={formData.first_name}
+              onChange={(e) => handleInputChange('first_name', e.target.value)}
+              placeholder="First name"
+              error={errors.first_name}
+            />
+            <Input
+              label="Last name"
+              value={formData.last_name}
+              onChange={(e) => handleInputChange('last_name', e.target.value)}
+              placeholder="Last name"
+              error={errors.last_name}
+            />
+            <Input
+              label="Email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              placeholder="email@example.com"
+              error={errors.email}
+            />
+            <Input
+              label="Phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => handleInputChange('phone', e.target.value)}
+              placeholder="08xx-xxxx-xxxx"
+              error={errors.phone}
+            />
           </div>
-          <button
-            onClick={handleClose}
-            disabled={loading}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-          >
-            <X className="h-5 w-5 text-gray-500" />
-          </button>
-        </div>
+        </FieldGroup>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* General Error */}
-          {errors.general && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-600">{errors.general}</p>
-            </div>
-          )}
-
-          {/* Personal Information */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900 flex items-center">
-              <UserIcon className="h-5 w-5 mr-2 text-gray-600" />
-              Personal Information
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name *
-                </label>
-                <Input
-                  type="text"
-                  value={formData.first_name}
-                  onChange={(e) => handleInputChange('first_name', e.target.value)}
-                  placeholder="Enter first name"
-                  error={errors.first_name}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name *
-                </label>
-                <Input
-                  type="text"
-                  value={formData.last_name}
-                  onChange={(e) => handleInputChange('last_name', e.target.value)}
-                  placeholder="Enter last name"
-                  error={errors.last_name}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address *
-                </label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  placeholder="Enter email address"
-                  error={errors.email}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number *
-                </label>
-                <Input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  placeholder="Enter phone number"
-                  error={errors.phone}
-                />
-              </div>
-            </div>
+        <FieldGroup title="Account">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input
+              label="Password"
+              type="password"
+              value={formData.password}
+              onChange={(e) => handleInputChange('password', e.target.value)}
+              placeholder="Min 8 characters"
+              error={errors.password}
+            />
+            <Select
+              searchable={false}
+              label="Role"
+              value={formData.role}
+              onChange={(e) => {
+                const role = e.target.value;
+                handleInputChange('role', role);
+                if (role === 'staff' && formData.branch_ids.length > 1) {
+                  setFormData((prev) => ({ ...prev, role: 'staff', branch_ids: prev.branch_ids.slice(0, 1) }));
+                }
+              }}
+              options={[
+                { value: 'customer', label: 'Customer' },
+                { value: 'staff', label: 'Staff' },
+                { value: 'admin', label: 'Administrator' },
+              ]}
+            />
           </div>
+        </FieldGroup>
 
-          {/* Account Information */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900 flex items-center">
-              <Lock className="h-5 w-5 mr-2 text-gray-600" />
-              Account Information
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Password *
-                </label>
-                <Input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  placeholder="Enter password (min 8 characters)"
-                  error={errors.password}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Role *
-                </label>
-                <Select
-                  value={formData.role}
-                  onChange={(e) => {
-                    const role = e.target.value;
-                    handleInputChange('role', role);
-                    if (role === 'staff' && formData.branch_ids.length > 1) {
-                      setFormData((prev) => ({ ...prev, role: 'staff', branch_ids: prev.branch_ids.slice(0, 1) }));
-                    }
-                  }}
-                  options={[
-                    { value: 'customer', label: 'Customer' },
-                    { value: 'staff', label: 'Staff' },
-                    { value: 'admin', label: 'Administrator' },
-                  ]}
-                />
-              </div>
+        {(formData.role === 'admin' || formData.role === 'staff') && branches.length > 0 && (
+          <FieldGroup title={formData.role === 'staff' ? 'Shop' : 'Shops'}>
+            {formData.role === 'staff' && errors.branch_ids && (
+              <p className="text-sm text-red-600">{errors.branch_ids}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {branches.map((branch) => {
+                const checked = formData.branch_ids.includes(branch.id);
+                return (
+                  <label key={branch.id} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm text-slate-700 glass-panel">
+                    <input
+                      type={formData.role === 'staff' ? 'radio' : 'checkbox'}
+                      name={formData.role === 'staff' ? 'staff-shop' : undefined}
+                      checked={checked}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          branch_ids: formData.role === 'staff'
+                            ? [branch.id]
+                            : e.target.checked
+                              ? [...prev.branch_ids, branch.id]
+                              : prev.branch_ids.filter((id) => id !== branch.id),
+                        }));
+                      }}
+                    />
+                    {branch.name}
+                  </label>
+                );
+              })}
             </div>
+          </FieldGroup>
+        )}
+
+        <FieldGroup title="Address">
+          <Input
+            label="Street"
+            value={formData.address.street || ''}
+            onChange={(e) => handleAddressChange('street', e.target.value)}
+            placeholder="Street address"
+            error={errors['address.street']}
+          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input
+              label="City"
+              value={formData.address.city || ''}
+              onChange={(e) => handleAddressChange('city', e.target.value)}
+              placeholder="City"
+              error={errors['address.city']}
+            />
+            <Input
+              label="State"
+              value={formData.address.state || ''}
+              onChange={(e) => handleAddressChange('state', e.target.value)}
+              placeholder="State"
+              error={errors['address.state']}
+            />
+            <Input
+              label="Postal code"
+              value={formData.address.postal_code || ''}
+              onChange={(e) => handleAddressChange('postal_code', e.target.value)}
+              placeholder="Postal code"
+              error={errors['address.postal_code']}
+            />
+            <Input
+              label="Country"
+              value={formData.address.country || ''}
+              onChange={(e) => handleAddressChange('country', e.target.value)}
+              placeholder="Country"
+              error={errors['address.country']}
+            />
           </div>
-
-          {(formData.role === 'admin' || formData.role === 'staff') && branches.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-lg font-medium text-gray-900">
-                {formData.role === 'staff' ? 'Shop' : 'Shops'}
-              </h3>
-              {formData.role === 'staff' && errors.branch_ids && (
-                <p className="text-sm text-red-600">{errors.branch_ids}</p>
-              )}
-              <div className="flex flex-wrap gap-3">
-                {branches.map((branch) => {
-                  const checked = formData.branch_ids.includes(branch.id);
-                  return (
-                    <label key={branch.id} className="inline-flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type={formData.role === 'staff' ? 'radio' : 'checkbox'}
-                        name={formData.role === 'staff' ? 'staff-shop' : undefined}
-                        checked={checked}
-                        onChange={(e) => {
-                          setFormData((prev) => ({
-                            ...prev,
-                            branch_ids: formData.role === 'staff'
-                              ? [branch.id]
-                              : e.target.checked
-                                ? [...prev.branch_ids, branch.id]
-                                : prev.branch_ids.filter((id) => id !== branch.id),
-                          }));
-                        }}
-                      />
-                      {branch.name}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Address Information */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900 flex items-center">
-              <MapPin className="h-5 w-5 mr-2 text-gray-600" />
-              Address Information
-            </h3>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Street Address *
-              </label>
-              <Input
-                type="text"
-                value={formData.address.street || ''}
-                onChange={(e) => handleAddressChange('street', e.target.value)}
-                placeholder="Enter street address"
-                error={errors['address.street']}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  City *
-                </label>
-                <Input
-                  type="text"
-                  value={formData.address.city || ''}
-                  onChange={(e) => handleAddressChange('city', e.target.value)}
-                  placeholder="Enter city"
-                  error={errors['address.city']}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  State *
-                </label>
-                <Input
-                  type="text"
-                  value={formData.address.state || ''}
-                  onChange={(e) => handleAddressChange('state', e.target.value)}
-                  placeholder="Enter state"
-                  error={errors['address.state']}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Postal Code *
-                </label>
-                <Input
-                  type="text"
-                  value={formData.address.postal_code || ''}
-                  onChange={(e) => handleAddressChange('postal_code', e.target.value)}
-                  placeholder="Enter postal code"
-                  error={errors['address.postal_code']}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Country *
-                </label>
-                <Input
-                  type="text"
-                  value={formData.address.country || ''}
-                  onChange={(e) => handleAddressChange('country', e.target.value)}
-                  placeholder="Enter country"
-                  error={errors['address.country']}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Role Information */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-start space-x-3">
-              <Shield className="h-5 w-5 text-blue-600 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-medium text-blue-900">Role Permissions</h4>
-                <div className="mt-2 text-sm text-blue-700 space-y-1">
-                  <p><strong>Customer:</strong> Can view and book items</p>
-                  <p><strong>Staff:</strong> Can manage items, bookings, and customers</p>
-                  <p><strong>Administrator:</strong> Full system access including user management</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleClose}
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="min-w-[120px]"
-            >
-              {loading ? 'Creating...' : 'Create User'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </FieldGroup>
+      </form>
+    </SimpleModal>
   );
 }

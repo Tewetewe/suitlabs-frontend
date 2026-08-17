@@ -4,7 +4,6 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Receipt } from 'lucide-react';
 
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/DataDisplay';
@@ -27,16 +26,16 @@ export default function CashierGuidePage() {
 
   if (authLoading) {
     return (
-      <DashboardLayout>
+      <>
         <div className="flex items-center justify-center py-24">
           <div className="text-center text-slate-500">Loading...</div>
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Cashier Floor Guide"
         subtitle="How to run the counter: the POS, pickup, returns, and your shift routine."
@@ -55,6 +54,6 @@ export default function CashierGuidePage() {
           <GuideDocument html={CASHIER_GUIDE_HTML} />
         )}
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }

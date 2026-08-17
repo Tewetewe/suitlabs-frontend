@@ -8,7 +8,12 @@ export function useHydration() {
   useEffect(() => {
     setIsHydrated(true);
     
-    const extensionAttrs = ['data-dashlane-rid', 'data-dashlane-label'];
+    const extensionAttrs = [
+      'data-dashlane-rid',
+      'data-dashlane-label',
+      'data-dashlane-classification',
+      'data-dashlane-observed',
+    ];
 
     const cleanupExtensionAttributes = () => {
       extensionAttrs.forEach((attr) => {

@@ -33,7 +33,8 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <h4 style="margin-top:0">You can</h4>
       <ul class="plain" style="margin-bottom:0">
         <li><b>Cashier</b> — the POS. Your main screen.</li>
-        <li><b>Bookings</b> — see, edit, invoice, take remaining payment.</li>
+        <li><b>Dashboard</b> — today's counts: items, bookings, active rentals, low stock, maintenance.</li>
+        <li><b>Bookings</b> — see, edit, invoice, collect the balance.</li>
         <li><b>Rentals</b> — pick up, change dates, complete, cancel.</li>
         <li><b>Sales</b> — walk-in retail, add-ons, replacement fees.</li>
         <li><b>Expenses</b> — record money you pay out of the drawer.</li>
@@ -45,7 +46,8 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <h4 style="margin-top:0">You cannot</h4>
       <ul class="plain" style="margin-bottom:0">
         <li><b>See the buying price</b> of any item. The server removes it from your screen before it is sent. If a customer asks what the shop paid, you genuinely do not know.</li>
-        <li><b>Open Financial Report, Assets, Users, Branches, or Bulk Input Sync.</b></li>
+        <li><b>Open Analytics, Financial Report, Assets, Users, Branches, or Bulk Input Sync.</b></li>
+        <li><b>See the money side of the Dashboard.</b> Revenue, net profit, cash on hand and assets only appear for an admin login.</li>
         <li><b>Lock or unlock a month.</b></li>
         <li><b>Switch to "All branches."</b> You only see the shops you are assigned to.</li>
       </ul>
@@ -61,11 +63,11 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 <section id="flow">
   <span class="eyebrow">02 — The whole job in one picture</span>
   <h2>The counter flow</h2>
-  <p class="measure">A rental is not one record. It is a <b>Booking</b> (the agreement and the money) that later becomes a <b>Rental</b> (the physical hand-over). You create the first at the POS. You create the second when the customer actually walks in to collect.</p>
+  <p class="measure">A rental is not one record. It is a <b>Booking</b> (the agreement and the money) plus a <b>Rental</b> (the physical hand-over). Charging at the POS creates <b>both at once</b> — the rental is created for you, sitting on <code>pending</code>. Your job on collection day is to tap <b>Pickup</b> on it.</p>
 
   <figure>
     <div class="fig-scroll">
-      <svg viewBox="0 0 940 400" role="img" aria-label="Counter flow: the cashier POS creates a booking, the Rentals page turns a booking into a rental at pickup, and completing the rental settles late fees, damage and lost items.">
+      <svg viewBox="0 0 940 400" role="img" aria-label="Counter flow: the cashier POS creates a booking and a pending rental together, the Rentals page hands the suit over at pickup, and completing the rental settles late fees, damage and lost items.">
         <defs>
           <marker id="cf-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -95,8 +97,8 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
         <text x="440" y="86" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">charge</text>
 
         <rect x="476" y="66" width="182" height="56" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
-        <text x="567" y="90" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">BOOKING created</text>
-        <text x="567" y="107" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">DP paid, or paid in full</text>
+        <text x="567" y="88" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">BOOKING created</text>
+        <text x="567" y="105" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">+ RENTAL · pending</text>
 
         <line x1="658" y1="94" x2="718" y2="94" stroke="currentColor" marker-end="url(#cf-a)"/>
 
@@ -106,25 +108,24 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
         <!-- drop to row 2 -->
         <path d="M 567 122 L 567 150 L 319 150 L 319 190" fill="none" stroke="currentColor" marker-end="url(#cf-a)"/>
-        <text x="443" y="143" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">booking waits until collection day</text>
+        <text x="443" y="143" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">the pending rental waits until collection day</text>
 
         <!-- row 2 -->
         <rect x="228" y="194" width="182" height="56" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
-        <text x="319" y="218" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Rentals › New Rental</text>
-        <text x="319" y="235" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">pick the booking</text>
+        <text x="319" y="218" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Rentals · pending</text>
+        <text x="319" y="235" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">it is already listed</text>
 
         <line x1="410" y1="222" x2="470" y2="222" stroke="currentColor" marker-end="url(#cf-a)"/>
 
         <rect x="476" y="194" width="182" height="56" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
-        <text x="567" y="218" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">RENTAL · pending</text>
-        <text x="567" y="235" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">not handed over yet</text>
+        <text x="567" y="218" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Tap Pickup</text>
+        <text x="567" y="235" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">ID photo · required</text>
 
         <line x1="658" y1="222" x2="718" y2="222" stroke="currentColor" marker-end="url(#cf-a)"/>
-        <text x="688" y="214" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">Pickup</text>
 
         <rect x="724" y="194" width="204" height="56" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
         <text x="826" y="215" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">RENTAL · active</text>
-        <text x="826" y="233" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">ID photo uploaded · required</text>
+        <text x="826" y="233" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">suit is with the customer</text>
 
         <!-- drop to row 3 -->
         <path d="M 826 250 L 826 278 L 319 278 L 319 318" fill="none" stroke="currentColor" marker-end="url(#cf-a)"/>
@@ -149,12 +150,12 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
         <text x="826" y="361" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">damage + late fee settled</text>
       </svg>
     </div>
-    <figcaption><b>One customer, three visits, two records.</b> The POS only ever creates a Booking. The Rental appears when you convert that booking on the day of collection — and it is the Rental, not the Booking, that carries the ID photo, the late fee, and the damage charge.</figcaption>
+    <figcaption><b>One customer, three visits, two records.</b> Charging at the POS writes both the Booking and its Rental. The Booking holds the agreement and the money; the Rental holds the ID photo, the late fee and the damage charge — and stays on <code>pending</code> until you hand the suit over.</figcaption>
   </figure>
 
   <div class="flag care">
     <span class="flag-t">The single most common mistake</span>
-    <p>Charging on the POS does <b>not</b> create a rental. If you charge someone and then look in Rentals and see nothing, that is correct. Go to <b>Rentals › New Rental</b> and pick their booking on the day they collect.</p>
+    <p>Charging is not handing over. The rental appears on the Rentals page the moment you charge, but it reads <code>pending</code> — the suit is still on the rack and no ID photo has been taken. Nothing is out with a customer until someone taps <b>Pickup</b>. Use <b>New Rental</b> only for an old booking made before this was automatic and that still has no rental of its own.</p>
   </div>
 </section>
 
@@ -165,7 +166,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
   <figure>
     <div class="fig-scroll">
-      <svg viewBox="0 0 940 470" role="img" aria-label="Labelled layout of the Cashier POS screen: mode tabs, search and scan, date range, type filters and catalogue on the left; the ticket panel with customer, guarantee, payment and charge button on the right.">
+      <svg viewBox="0 0 940 470" role="img" aria-label="Labelled layout of the Cashier POS screen: mode tabs, search and scan, date range, type filter and catalogue on the left; the ticket panel with customer, guarantee, occasion, payment and charge button on the right.">
         <defs>
           <marker id="pos-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -194,17 +195,10 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
         <rect x="376" y="116" width="170" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
         <text x="388" y="136" font-size="12" fill="currentColor" opacity=".8">Return date</text>
 
-        <!-- chips -->
-        <rect x="196" y="156" width="42" height="22" rx="11" fill="currentColor" opacity=".85"/>
-        <text x="217" y="171" text-anchor="middle" font-size="10" font-weight="700" fill="var(--surface)">All</text>
-        <rect x="246" y="156" width="48" height="22" rx="11" fill="none" stroke="currentColor" opacity=".4"/>
-        <text x="270" y="171" text-anchor="middle" font-size="10" fill="currentColor" opacity=".7">Suit</text>
-        <rect x="302" y="156" width="58" height="22" rx="11" fill="none" stroke="currentColor" opacity=".4"/>
-        <text x="331" y="171" text-anchor="middle" font-size="10" fill="currentColor" opacity=".7">Jacket</text>
-        <rect x="368" y="156" width="52" height="22" rx="11" fill="none" stroke="currentColor" opacity=".4"/>
-        <text x="394" y="171" text-anchor="middle" font-size="10" fill="currentColor" opacity=".7">Shoes</text>
-        <rect x="428" y="156" width="42" height="22" rx="11" fill="none" stroke="currentColor" opacity=".4"/>
-        <text x="449" y="171" text-anchor="middle" font-size="10" fill="currentColor" opacity=".7">Acc</text>
+        <!-- type filter -->
+        <rect x="196" y="154" width="350" height="26" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <text x="208" y="171" font-size="11" fill="currentColor" opacity=".7">All types</text>
+        <text x="534" y="171" text-anchor="end" font-size="11" fill="currentColor" opacity=".7">▾</text>
 
         <!-- catalogue tiles -->
         <rect x="196" y="192" width="110" height="118" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
@@ -217,38 +211,41 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
         <!-- ticket panel -->
         <text x="578" y="52" font-size="12" font-weight="700" fill="currentColor">Ticket</text>
-        <rect x="578" y="64" width="168" height="52" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <text x="590" y="84" font-size="11" fill="currentColor" opacity=".75">Navy 3-piece ×1</text>
-        <text x="590" y="102" font-size="11" fill="currentColor" opacity=".75">Black oxford ×1</text>
+        <rect x="578" y="62" width="168" height="46" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <text x="590" y="80" font-size="11" fill="currentColor" opacity=".75">Navy 3-piece ×1</text>
+        <text x="590" y="98" font-size="11" fill="currentColor" opacity=".75">Black oxford ×1</text>
 
-        <rect x="578" y="126" width="168" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <text x="590" y="146" font-size="11" fill="currentColor" opacity=".75">Customer · required</text>
+        <rect x="578" y="118" width="168" height="26" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <text x="590" y="136" font-size="11" fill="currentColor" opacity=".75">Customer · required</text>
 
-        <rect x="578" y="166" width="168" height="26" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <text x="590" y="184" font-size="11" fill="currentColor" opacity=".75">Guarantee · KTP</text>
+        <rect x="578" y="150" width="168" height="24" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <text x="590" y="167" font-size="11" fill="currentColor" opacity=".75">Guarantee · KTP</text>
 
-        <rect x="578" y="202" width="80" height="28" rx="4" fill="currentColor" opacity=".85"/>
-        <text x="618" y="221" text-anchor="middle" font-size="11" font-weight="700" fill="var(--surface)">DP</text>
-        <rect x="666" y="202" width="80" height="28" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <text x="706" y="221" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">FULL</text>
+        <rect x="578" y="180" width="168" height="24" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <text x="590" y="197" font-size="11" fill="currentColor" opacity=".75">Occasion · required</text>
 
-        <rect x="578" y="240" width="30" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <rect x="613" y="240" width="30" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <rect x="648" y="240" width="30" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <rect x="683" y="240" width="30" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <rect x="718" y="240" width="28" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <text x="662" y="288" text-anchor="middle" font-size="10" fill="currentColor" opacity=".6">cash · qris · transfer · debit · card</text>
+        <rect x="578" y="210" width="80" height="26" rx="4" fill="currentColor" opacity=".85"/>
+        <text x="618" y="228" text-anchor="middle" font-size="11" font-weight="700" fill="var(--surface)">DP</text>
+        <rect x="666" y="210" width="80" height="26" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <text x="706" y="228" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">FULL</text>
 
-        <rect x="578" y="300" width="168" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <text x="590" y="320" font-size="11" fill="currentColor" opacity=".75">Down payment amount</text>
+        <rect x="578" y="242" width="30" height="28" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <rect x="613" y="242" width="30" height="28" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <rect x="648" y="242" width="30" height="28" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <rect x="683" y="242" width="30" height="28" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <rect x="718" y="242" width="28" height="28" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <text x="662" y="286" text-anchor="middle" font-size="10" fill="currentColor" opacity=".6">cash · qris · transfer · debit · card</text>
 
-        <line x1="578" y1="352" x2="746" y2="352" stroke="currentColor" opacity=".3"/>
-        <text x="578" y="374" font-size="11" fill="currentColor" opacity=".7">Subtotal</text>
-        <text x="746" y="374" text-anchor="end" font-size="11" fill="currentColor" opacity=".7">Rp 1.200.000</text>
-        <text x="578" y="392" font-size="11" fill="currentColor" opacity=".7">Remaining</text>
-        <text x="746" y="392" text-anchor="end" font-size="11" fill="currentColor" opacity=".7">Rp 700.000</text>
-        <rect x="578" y="404" width="168" height="34" rx="4" fill="currentColor" opacity=".85"/>
-        <text x="662" y="426" text-anchor="middle" font-size="12" font-weight="700" fill="var(--surface)">Charge booking</text>
+        <rect x="578" y="294" width="168" height="26" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+        <text x="590" y="312" font-size="11" fill="currentColor" opacity=".75">Down payment amount</text>
+
+        <line x1="578" y1="340" x2="746" y2="340" stroke="currentColor" opacity=".3"/>
+        <text x="578" y="360" font-size="11" fill="currentColor" opacity=".7">Subtotal</text>
+        <text x="746" y="360" text-anchor="end" font-size="11" fill="currentColor" opacity=".7">Rp 1.200.000</text>
+        <text x="578" y="378" font-size="11" fill="currentColor" opacity=".7">Remaining</text>
+        <text x="746" y="378" text-anchor="end" font-size="11" fill="currentColor" opacity=".7">Rp 700.000</text>
+        <rect x="578" y="392" width="168" height="34" rx="4" fill="currentColor" opacity=".85"/>
+        <text x="662" y="414" text-anchor="middle" font-size="12" font-weight="700" fill="var(--surface)">Charge booking</text>
 
         <!-- callouts left -->
         <line x1="120" y1="51" x2="192" y2="51" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
@@ -263,41 +260,49 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
         <text x="114" y="128" text-anchor="end" font-size="11" font-weight="600" fill="currentColor">Set BOTH dates first</text>
         <text x="114" y="143" text-anchor="end" font-size="10" fill="currentColor" opacity=".6">then the grid hides booked items</text>
 
+        <line x1="120" y1="167" x2="192" y2="167" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
+        <text x="114" y="164" text-anchor="end" font-size="11" font-weight="600" fill="currentColor">Type filter</text>
+        <text x="114" y="179" text-anchor="end" font-size="10" fill="currentColor" opacity=".6">one dropdown, all item types</text>
+
         <line x1="120" y1="251" x2="192" y2="251" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
         <text x="114" y="248" text-anchor="end" font-size="11" font-weight="600" fill="currentColor">Catalogue</text>
         <text x="114" y="263" text-anchor="end" font-size="10" fill="currentColor" opacity=".6">scrolls, loads more as you go</text>
 
         <!-- callouts right -->
-        <line x1="820" y1="145" x2="752" y2="145" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
-        <text x="826" y="142" font-size="11" font-weight="600" fill="currentColor">No customer, no rental</text>
-        <text x="826" y="157" font-size="10" fill="currentColor" opacity=".6">"New" makes one in 3 fields</text>
+        <line x1="820" y1="131" x2="752" y2="131" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
+        <text x="826" y="128" font-size="11" font-weight="600" fill="currentColor">No customer, no rental</text>
+        <text x="826" y="143" font-size="10" fill="currentColor" opacity=".6">"New" needs name and phone</text>
 
-        <line x1="820" y1="216" x2="752" y2="216" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
-        <text x="826" y="213" font-size="11" font-weight="600" fill="currentColor">DP or Full</text>
-        <text x="826" y="228" font-size="10" fill="currentColor" opacity=".6">Full auto-fills the whole total</text>
+        <line x1="820" y1="192" x2="752" y2="192" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
+        <text x="826" y="189" font-size="11" font-weight="600" fill="currentColor">Occasion is required</text>
+        <text x="826" y="204" font-size="10" fill="currentColor" opacity=".6">it will not charge without one</text>
 
-        <line x1="820" y1="421" x2="752" y2="421" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
-        <text x="826" y="418" font-size="11" font-weight="600" fill="currentColor">One tap = booking</text>
-        <text x="826" y="433" font-size="10" fill="currentColor" opacity=".6">there is no undo — cancel instead</text>
+        <line x1="820" y1="223" x2="752" y2="223" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
+        <text x="826" y="238" font-size="11" font-weight="600" fill="currentColor">DP or Full</text>
+        <text x="826" y="253" font-size="10" fill="currentColor" opacity=".6">Full auto-fills the whole total</text>
+
+        <line x1="820" y1="409" x2="752" y2="409" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
+        <text x="826" y="406" font-size="11" font-weight="600" fill="currentColor">One tap = booking + rental</text>
+        <text x="826" y="421" font-size="10" fill="currentColor" opacity=".6">there is no undo — cancel instead</text>
       </svg>
     </div>
-    <figcaption><b>The POS in Rental mode.</b> In Sale mode the date row and the DP/Full row disappear — a sale is always paid in full, and a customer is optional.</figcaption>
+    <figcaption><b>The POS in Rental mode.</b> In Sale mode the date row, the guarantee, the occasion and the DP/Full row all disappear — a sale is always paid in full, and a customer is optional.</figcaption>
   </figure>
 
   <h3>Taking a rental booking</h3>
   <ol class="steps">
-    <li><b>Set the rental date and the return date first.</b><span>Do this before you touch the catalogue. With both dates set, the grid only shows items that are actually free for those dates. Skip it and you can promise a suit that is already out.</span></li>
+    <li><b>Set the rental date and the return date first.</b><span>The rental date starts on today; the return date starts empty. Only when <b>both</b> are set does the grid filter by availability — until then it shows everything, including suits already promised to someone else.</span></li>
     <li><b>Fill the ticket.</b><span>Tap tiles, or hit the scan button and scan the tag. Adjust quantity with − and + in the ticket. Same-day rentals are fine — return date can equal rental date.</span></li>
-    <li><b>Attach the customer.</b><span>Search by name or phone. If they are new, tap <b>New</b> and enter first name, last name, phone. Phone is what you will search on next time, so get it right.</span></li>
+    <li><b>Attach the customer.</b><span>Search by name or phone. If they are new, tap <b>New</b>: first name, last name and phone, plus Instagram and TikTok if they offer them. Phone is what you will search on next time, so get it right.</span></li>
     <li><b>Pick the guarantee.</b><span>KTP, Passport, or Student ID — whatever they are leaving with you.</span></li>
-    <li><b>Pick the occasion.</b><span>Wedding, wedding guest, corporate, or school. Analytics uses this for the occasion mix — it is not guessed from the customer.</span></li>
-    <li><b>Choose a package, or leave it on item total.</b><span>A package price covers every item on the ticket by default. Tap a line’s badge to mark it as an add-on if it should be charged on top. The discount box stays off while a package is selected.</span></li>
-    <li><b>DP or Full, then the method.</b><span>DP: type the amount, or use the 50% shortcut. Full: the total fills in automatically. Then tap how they are actually paying.</span></li>
-    <li><b>Charge booking.</b><span>The green confirmation shows the booking number. Print the DP invoice from the Bookings page and hand it over.</span></li>
+    <li><b>Pick the occasion.</b><span>Wedding, wedding guest, corporate, university, SMA/SMK, SMP, SD or TK. It starts on Wedding, so change it deliberately — Analytics reads the occasion mix straight off this, and the POS will not charge without one.</span></li>
+    <li><b>Choose a package, or leave it on item total.</b><span>A package price covers every item on the ticket by default. Tap a line’s badge to flip it to <b>Add-on</b> and charge it on top of the package. The discount box disappears while a package is selected.</span></li>
+    <li><b>DP or Full, then the method.</b><span>DP: type the amount, or use the <b>0</b>, <b>50%</b> and <b>100%</b> shortcuts. Full: the total fills in automatically. Then tap how they are actually paying — cash, QRIS, transfer, debit or card.</span></li>
+    <li><b>Charge booking.</b><span>The green panel confirms <i>Booking charged</i> and tells you pickup is on Rentals, with the last eight characters of the booking id. Print the DP invoice from the Bookings page and hand it over.</span></li>
   </ol>
 
   <h3>Taking a walk-in sale</h3>
-  <p class="measure">Switch to <b>Sale</b> mode. Only items marked sellable appear. There are no dates and no DP — a sale is paid in full, right now. Customer is optional for a walk-in. Selling an ex-rental suit or jacket is recorded as a clearance; socks, tumblers and the like are recorded as retail. The system does that classification for you.</p>
+  <p class="measure">Switch to <b>Sale</b> mode. Only items marked sellable appear. There are no dates and no DP — a sale is paid in full, right now. Customer is optional for a walk-in. Selling an ex-rental suit or jacket is recorded as a clearance; socks, tumblers and the like are recorded as retail. The system does that classification for you. Switching between Rental and Sale clears the ticket.</p>
 </section>
 
 <section id="pay">
@@ -356,7 +361,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <div class="cols two">
     <div class="card">
       <h4 style="margin-top:0">Taking the rest of the money later</h4>
-      <p>Open <b>Bookings</b>, find them by name, and use the pay-remaining action. Then print the full invoice. Do not create a second booking.</p>
+      <p>Open <b>Bookings</b>, find them by name, and use <b>Collect balance</b> in the row menu. Then print the <b>Full invoice</b> from the same menu. Do not create a second booking.</p>
     </div>
     <div class="card">
       <h4 style="margin-top:0">A booking that is fully paid is locked</h4>
@@ -369,14 +374,28 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <span class="eyebrow">05 — Hand-over</span>
   <h2>Pickup</h2>
   <ol class="steps">
-    <li><b>Rentals › New Rental.</b><span>Search the customer's booking. Only bookings that are pending or confirmed and don't already have a rental will appear. If theirs isn't there, it already has a rental — look for it in the list instead.</span></li>
-    <li><b>Create it.</b><span>The items and dates come across from the booking. The rental starts as <code>pending</code>.</span></li>
-    <li><b>Tap Pickup, and photograph the ID.</b><span>A clear photo of the guarantee document is <b>required</b> — the button stays disabled until you attach one. JPEG, PNG or WebP, under 5 MB.</span></li>
-    <li><b>Check the items physically as you hand them over.</b><span>The rental becomes <code>active</code>. Print the rental invoice if the customer wants one.</span></li>
+    <li><b>Rentals.</b><span>Find the customer's <code>pending</code> rental — it was created the moment you charged the booking. If theirs genuinely isn't there, <b>New Rental</b> builds one from an older booking that never got one.</span></li>
+    <li><b>Tap Pickup, and photograph the ID.</b><span>A clear photo of the guarantee document is <b>required</b> — <i>Confirm pickup</i> stays disabled until you attach one. JPEG, PNG or WebP, under 5 MB.</span></li>
+    <li><b>Check the items physically as you hand them over.</b><span>The rental becomes <code>active</code>. Print the rental invoice from the row menu if the customer wants one.</span></li>
   </ol>
   <div class="flag care">
     <span class="flag-t">Dates changed at the counter?</span>
-    <p>Use <b>Change dates</b> on the rental while it is pending or active. Do not just let it run over — a wrong return date silently creates a late fee that the customer will argue about.</p>
+    <p>Use <b>Change dates</b> on the rental while it is pending or active. Do not just let it run over — a wrong return date silently creates a late fee that the customer will argue about. Once a rental is <code>overdue</code> the dates are frozen; only Complete is left.</p>
+  </div>
+  <div class="flag">
+    <span class="flag-t">If they never collect</span>
+    <p><b>Cancel rental</b> is in the row menu while it is pending or active, and it asks for a written reason. That reason is the whole point — it is what an admin reads next month. Cancel the rental, don't delete anything.</p>
+  </div>
+
+  <div class="flag ok">
+    <span class="flag-t">Fix it on the booking, not on both</span>
+    <p>While the rental is still <code>pending</code>, editing the <b>booking</b> rewrites it — dates, items, total and notes all follow across on their own. So change the dates on the booking and the pending rental moves with them; you do not have to edit the same thing twice.</p>
+    <p>That stops the moment you tap Pickup. Once the rental is <code>active</code> it has its own life, and from then on the <b>Change dates</b> action on the rental is the one that counts.</p>
+  </div>
+
+  <div class="flag care">
+    <span class="flag-t">Cancelling a booking, once the suit is out</span>
+    <p>Cancel a booking while its rental is still <code>pending</code> and the rental is cancelled with it, in one step. But if the suit has already been handed over, the system <b>refuses</b> — <i>"Cancel or complete the Rental before cancelling the Booking"</i>. That is not a bug to work around: settle the physical suit first, then deal with the paperwork.</p>
   </div>
 </section>
 
@@ -393,22 +412,22 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <tbody>
         <tr>
           <td><b>Item is missing</b></td>
-          <td>On the complete screen, tap <b>Lost items / add-ons</b>. Tick the missing item, type the replacement fee, take payment.</td>
-          <td>This records the money as a replacement sale and lets the shop take the lost suit off the books properly. Typing it into damage charge instead loses that.</td>
+          <td>On the complete screen, tap <b>Lost items / add-ons</b>. It opens the Sales screen with their rental attached. Tick the missing item under <b>Lost items</b>, check the replacement fee, take payment.</td>
+          <td>This records the money as a replacement sale <i>and</i> takes the suit off stock automatically — its status goes to <code>lost</code> and its value leaves inventory. Typing the amount into damage charge instead loses all of that.</td>
         </tr>
         <tr>
           <td><b>Item is damaged</b></td>
-          <td>Write what is wrong in <b>Defect / Damage Notes</b>, put the amount in <b>Damage Charge</b>, and pick how they paid it.</td>
+          <td>Write what is wrong in <b>Damage notes</b>, put the amount in <b>Damage charge</b>, and pick how they paid it under <b>Paid with</b>.</td>
           <td>Damage charge is <b>income</b> for the shop, not a cost. The note is your evidence if they come back to complain.</td>
         </tr>
         <tr>
           <td><b>They are late</b></td>
-          <td>Nothing — the system calculates it. If they actually returned on an earlier day, set <b>Actual Return Date</b> to that day.</td>
+          <td>Nothing — the system calculates it. If they actually returned on an earlier day, set <b>Actual return date</b> to that day. Leave it empty and it uses right now.</td>
           <td>The late fee is 20% of the daily rate for every day past the return date. Backdating is the only way to make it correct.</td>
         </tr>
         <tr>
           <td><b>They want to buy something too</b></td>
-          <td>Same <b>Lost items / add-ons</b> screen — search the sellable stock and add it.</td>
+          <td>Same <b>Lost items / add-ons</b> screen — search the sellable stock and add it to the cart.</td>
           <td>It attaches the sale to their rental, so the history stays in one place.</td>
         </tr>
         <tr>
@@ -422,7 +441,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
   <div class="flag ok">
     <span class="flag-t">Then, and only then</span>
-    <p>Press <b>Complete Rental</b>. Status goes to <code>completed</code>, the items go back to available (or to maintenance if you ticked it), and the day's revenue is settled.</p>
+    <p>Press <b>Complete</b>. Status goes to <code>completed</code>, the items go back to available (or to maintenance if you ticked it), the day's revenue is settled — and the rental invoice opens by itself with the late fee and damage charge on it, ready to print.</p>
   </div>
 
   <h4>If they never come back</h4>
@@ -451,10 +470,12 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <h3 style="margin-top:0">Printing</h3>
       <p>One <b>Print</b> button, and it behaves differently depending on what you are holding:</p>
       <ul class="plain" style="margin-bottom:0">
-        <li><b>Android tablet</b> — opens the SuitLabs Print Bridge, which pops the cash drawer and then prints. This is the counter setup.</li>
+        <li><b>Android tablet</b> — hands the receipt to the SuitLabs Print Bridge, which pops the cash drawer and then prints, without leaving SuitLabs. This is the counter setup.</li>
         <li><b>iPhone or iPad</b> — opens the Bluetooth Print app. Prints fine, but <b>does not open the drawer</b>.</li>
-        <li><b>Laptop</b> — the normal browser print dialog.</li>
+        <li><b>Laptop</b> — opens your normal print dialog with the 58 mm receipt ready to go. Any printer the laptop can already use will take it. No drawer.</li>
+        <li><b>Laptop with the thermal printer paired</b> — press <b>Connect printer</b> once on the invoice, pick the printer, and from then on Print goes straight to paper <b>and opens the drawer</b>, exactly like the tablet.</li>
       </ul>
+      <p style="margin-bottom:0">You never have to choose: the button looks at the device and picks the best route it can.</p>
     </div>
   </div>
 
@@ -470,7 +491,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
   <div class="flag care">
     <span class="flag-t">Drawer will not open on its own</span>
-    <p>Only the Android bridge sends the pulse that opens the drawer, and only when printing a receipt — printing a product label never opens it. On an iPhone you always open the drawer by hand. If the drawer stops responding on Android, check the cable is still in the <b>printer's</b> DK port; it does not connect to the tablet.</p>
+    <p>The drawer pulse comes from the Android bridge, or from a laptop with the printer paired through <b>Connect printer</b> — and only for a receipt or invoice. <b>Product labels never open the drawer</b> — they print from the item page through the Bluetooth Print app on both Android and iPhone. On an iPhone, and on a laptop printing through the normal dialog, you open the drawer by hand. If the drawer stops responding, check the cable is still in the <b>printer's</b> DK port; it does not connect to the tablet.</p>
   </div>
 </section>
 
@@ -567,7 +588,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <thead><tr><th style="width:20%">Status</th><th style="width:40%">Means</th><th>You do</th></tr></thead>
       <tbody>
         <tr><td><code>pending</code></td><td>Booked, nothing paid yet.</td><td>Take a DP, or chase it.</td></tr>
-        <tr><td><code>confirmed</code></td><td>Money has been taken. Suit is reserved.</td><td>Wait for collection day, then create the rental.</td></tr>
+        <tr><td><code>confirmed</code></td><td>Money has been taken. Suit is reserved.</td><td>Nothing — its rental already exists, waiting on <code>pending</code>.</td></tr>
         <tr><td><code>active</code></td><td>The rental attached to it is out.</td><td>Nothing.</td></tr>
         <tr><td><code>completed</code></td><td>Finished and returned.</td><td>Nothing.</td></tr>
         <tr><td><code>cancelled</code></td><td>Called off. Doesn't count as revenue.</td><td>Nothing.</td></tr>
@@ -592,7 +613,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <table>
       <thead><tr><th style="width:20%">Status</th><th style="width:40%">Means</th><th>You do</th></tr></thead>
       <tbody>
-        <tr><td><code>pending</code></td><td>Created, not handed over.</td><td>Pickup — with the ID photo.</td></tr>
+        <tr><td><code>pending</code></td><td>Created with the booking, not handed over.</td><td>Pickup — with the ID photo.</td></tr>
         <tr><td><code>active</code></td><td>Suit is with the customer.</td><td>Wait for the return date.</td></tr>
         <tr><td><code>overdue</code></td><td>Past the return date. Set automatically at 00:05.</td><td>Phone them. Late fee is already accruing.</td></tr>
         <tr><td><code>completed</code></td><td>Back, checked, settled.</td><td>Nothing.</td></tr>

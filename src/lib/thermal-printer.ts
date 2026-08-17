@@ -19,6 +19,15 @@ const THERMAL_PRINTER_SERVICE_UUIDS = [
   '000018f0-0000-1000-8000-00805f9b34fb', // 18F0 (Star Micronics BLE)
 ];
 
+/** ESC p 0 50 100 — drawer pin 2, 100 ms on, 200 ms off. Matches the Android bridge. */
+const DRAWER_KICK = new Uint8Array([0x1b, 0x70, 0x00, 50, 100]);
+const DRAWER_KICK_DEBOUNCE_MS = 1000;
+const DRAWER_SETTLE_MS = 250;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export interface ThermalPrinterDevice {
   device: BluetoothDevice;
   server?: BluetoothRemoteGATTServer;
@@ -29,6 +38,7 @@ export class ThermalPrinterService {
   private device: BluetoothDevice | null = null;
   private server: BluetoothRemoteGATTServer | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  private lastDrawerKickAt = 0;
 
   /**
    * Check if Web Bluetooth API is available
@@ -191,6 +201,24 @@ export class ThermalPrinterService {
    */
   getDeviceName(): string {
     return this.device?.name || 'Unknown Device';
+  }
+
+  /**
+   * Pop the cash drawer wired to the printer's DK port.
+   *
+   * Byte-for-byte the pulse the Android Print Bridge sends (ReceiptPrinter.java:
+   * DRAWER_KICK) — pin 2, 100 ms on, 200 ms off — so a drawer that works at the
+   * counter tablet works the same from a laptop. The 1 s debounce is the same
+   * guard: two kicks in quick succession can stall the solenoid.
+   */
+  async openCashDrawer(): Promise<void> {
+    const elapsed = Date.now() - this.lastDrawerKickAt;
+    if (elapsed < DRAWER_KICK_DEBOUNCE_MS) {
+      await delay(DRAWER_KICK_DEBOUNCE_MS - elapsed);
+    }
+    await this.print(DRAWER_KICK);
+    this.lastDrawerKickAt = Date.now();
+    await delay(DRAWER_SETTLE_MS);
   }
 
   /**

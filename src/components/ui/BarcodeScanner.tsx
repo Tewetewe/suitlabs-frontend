@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Camera, CameraOff, X, QrCode } from 'lucide-react';
+import { Camera, CameraOff } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import SimpleModal from '@/components/modals/SimpleModal';
 
 interface QuaggaConfig {
   inputStream: {
@@ -45,7 +47,7 @@ declare global {
   }
 }
 
-export default function BarcodeScanner({ isOpen, onClose, onScan, className = '' }: BarcodeScannerProps) {
+export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScannerProps) {
   const [isQuaggaLoaded, setIsQuaggaLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -285,136 +287,108 @@ export default function BarcodeScanner({ isOpen, onClose, onScan, className = ''
     };
   }, []);
 
-  if (!isOpen) return null;
-
   return (
-    <div className={`fixed inset-0 z-50 bg-white flex items-center justify-center ${className}`}>
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center">
-            <QrCode className="h-5 w-5 mr-2" />
-            Scan Barcode
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+    <SimpleModal
+      isOpen={isOpen}
+      title="Scan barcode"
+      onClose={onClose}
+      size="md"
+      footer={
+        !isLoading ? (
+          <Button
+            onClick={error ? retryLoading : startScanning}
+            disabled={!isQuaggaLoaded || isScanning}
+            fullWidth
           >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+            <Camera className="h-4 w-4" />
+            {isLoading ? 'Loading library...' : !isQuaggaLoaded ? 'Loading...' : isScanning ? 'Scanning...' : error ? 'Retry' : 'Start scanning'}
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="relative">
+        <div
+          ref={scannerRef}
+          className="h-80 w-full overflow-hidden rounded-xl bg-slate-100"
+          style={{ minHeight: '320px' }}
+        />
 
-        <div className="relative">
-          <div
-            ref={scannerRef}
-            className="w-full h-80 bg-white rounded-lg overflow-hidden"
-            style={{ minHeight: '320px' }}
-          />
-
-          {/* Loading overlay */}
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100/90 rounded-lg">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading scanner...</p>
-                <p className="text-sm text-gray-500 mt-2">Please wait while we initialize the camera</p>
-              </div>
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/90">
+            <div className="text-center">
+              <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-500" />
+              <p className="text-sm text-slate-600">Loading scanner...</p>
             </div>
-          )}
-
-          {/* Error overlay */}
-          {error && (
-            <div className="absolute inset-0 bg-red-50/95 border border-red-200 rounded-lg p-8 text-center flex flex-col items-center justify-center">
-              <CameraOff className="h-12 w-12 mb-4 text-red-400" />
-              <p className="text-red-600 mb-4">{error}</p>
-              <button
-                onClick={retryLoading}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
-              >
-                <Camera className="h-4 w-4 inline mr-2" />
-                Retry
-              </button>
-            </div>
-          )}
-
-          {/* Ready to scan overlay */}
-          {!error && isQuaggaLoaded && !isScanning && !isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80 rounded-lg text-center">
-              <div>
-                <Camera className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-600 mb-4">Ready to scan</p>
-                <p className="text-sm text-gray-500">Click &quot;Start Scanning&quot; below to begin</p>
-              </div>
-            </div>
-          )}
-
-          {/* Scanning overlay */}
-          {isScanning && (
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute inset-0 bg-white/30" />
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-32 border-2 border-blue-500 rounded-lg">
-                <div className="absolute inset-0 border-2 border-blue-300 rounded-lg animate-pulse" />
-              </div>
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-16 text-center">
-                <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-                  Scanning for barcodes...
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Action button */}
-        <div className="mt-4">
-          {!isLoading && (
-            <button
-              onClick={error ? retryLoading : startScanning}
-              disabled={!isQuaggaLoaded || isScanning}
-              className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Camera className="h-4 w-4 inline mr-2" />
-              {isLoading ? 'Loading Library...' : !isQuaggaLoaded ? 'Loading...' : isScanning ? 'Scanning...' : error ? 'Retry' : 'Start Scanning'}
-            </button>
-          )}
-        </div>
-
-        {/* Instructions */}
-        <div className="mt-4 text-xs text-gray-500 text-center">
-          <p>For best results on iPad:</p>
-          <p>• Hold device steady</p>
-          <p>• Ensure good lighting</p>
-          <p>• Position barcode within the frame</p>
-          <p>• Supports: Code 128, EAN, UPC, Code 39, Codabar</p>
-        </div>
-
-        {/* Test button for debugging */}
-        {isScanning && (
-          <div className="mt-2 text-center">
-            <button
-              onClick={() => {
-                addDebugInfo('Test barcode detection triggered');
-                onScan('TEST123456');
-              }}
-              className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600"
-            >
-              Test Detection
-            </button>
           </div>
         )}
 
-        {/* Debug Panel */}
-        {debugInfo.length > 0 && (
-          <details className="mt-4 text-left">
-            <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-800 font-semibold">
-              🔧 Debug Information ({debugInfo.length} entries)
-            </summary>
-            <div className="mt-2 p-3 bg-gray-100 rounded text-xs font-mono max-h-32 overflow-y-auto border">
-              {debugInfo.map((info, index) => (
-                <div key={index} className="mb-1 text-gray-700">{info}</div>
-              ))}
+        {error && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-red-50 p-6 text-center">
+            <CameraOff className="mb-3 h-10 w-10 text-red-400" />
+            <p className="mb-4 text-sm text-red-700">{error}</p>
+            <Button onClick={retryLoading}>
+              <Camera className="h-4 w-4" />
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {!error && isQuaggaLoaded && !isScanning && !isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-slate-50/90 text-center">
+            <div>
+              <Camera className="mx-auto mb-3 h-10 w-10 text-slate-400" />
+              <p className="text-sm text-slate-600">Ready to scan</p>
+              <p className="mt-1 text-xs text-slate-500">Tap Start scanning below</p>
             </div>
-          </details>
+          </div>
+        )}
+
+        {isScanning && (
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute inset-0 bg-white/30" />
+            <div className="absolute left-1/2 top-1/2 h-32 w-48 -translate-x-1/2 -translate-y-1/2 rounded-xl border-2 border-indigo-500">
+              <div className="absolute inset-0 animate-pulse rounded-xl border-2 border-indigo-300" />
+            </div>
+            <div className="absolute left-1/2 top-1/2 -mt-16 -translate-x-1/2 -translate-y-1/2 text-center">
+              <div className="rounded-full bg-indigo-600 px-3 py-1 text-sm font-medium text-white">
+                Scanning...
+              </div>
+            </div>
+          </div>
         )}
       </div>
-    </div>
+
+      <p className="mt-4 text-center text-xs text-slate-500">
+        Hold the device steady, use good light, and keep the code in the frame.
+      </p>
+
+      {isScanning && (
+        <div className="mt-3 text-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              addDebugInfo('Test barcode detection triggered');
+              onScan('TEST123456');
+            }}
+          >
+            Test detection
+          </Button>
+        </div>
+      )}
+
+      {debugInfo.length > 0 && (
+        <details className="mt-4 text-left">
+          <summary className="cursor-pointer text-xs font-semibold text-slate-600">
+            Debug ({debugInfo.length})
+          </summary>
+          <div className="mt-2 max-h-32 overflow-y-auto rounded-xl bg-slate-50 p-3 font-mono text-xs">
+            {debugInfo.map((info, index) => (
+              <div key={index} className="mb-1 text-slate-700">{info}</div>
+            ))}
+          </div>
+        </details>
+      )}
+    </SimpleModal>
   );
 }

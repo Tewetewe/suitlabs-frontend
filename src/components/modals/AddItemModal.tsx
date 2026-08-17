@@ -3,14 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { FilePick, Input, NumberInput } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { CreateItemRequest, Category, ItemFacets } from '@/types';
 import { apiClient } from '@/lib/api';
-import { X } from 'lucide-react';
+import SimpleModal from '@/components/modals/SimpleModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { facetOptions } from '@/lib/select-options';
+import { Switch } from '@/components/ui/Switch';
 
 const PURCHASE_PAYMENT_OPTIONS = [
   { value: 'cash', label: 'Cash' },
@@ -245,6 +246,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
       ...prev,
       [field]: value,
       ...(field === 'type' && value === 'retail' ? { is_sellable: true } : {}),
+      ...(field === 'selling_price' && Number(value) > 0 && !prev.is_sellable ? { is_sellable: true } : {}),
     }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
@@ -254,16 +256,19 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-white flex items-center justify-center p-2 sm:p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b">
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Add New Item</h2>
-          <Button variant="ghost" size="sm" onClick={onClose} className="p-2">
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <SimpleModal
+      isOpen={isOpen}
+      title="Add item"
+      onClose={onClose}
+      size="xl"
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form="add-item-form" loading={loading}>Add item</Button>
+        </>
+      }
+    >
+        <form id="add-item-form" onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             <Input
               label="Code *"
@@ -282,6 +287,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             />
 
             <Select
+              searchable={false}
               label="Type *"
               options={typeOptions}
               value={formData.type}
@@ -299,20 +305,18 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             )}
 
             <Select
+              searchable={false}
               label="Condition"
               options={conditionOptions}
               value={formData.condition}
               onChange={(e) => handleInputChange('condition', e.target.value)}
             />
 
-
-
-            <Input
+            <NumberInput
               label="Quantity *"
-              type="number"
-              min="0"
+              min={0}
               value={formData.quantity}
-              onChange={(e) => handleInputChange('quantity', e.target.value)}
+              onChange={(n) => handleInputChange('quantity', n ? String(n) : '')}
               error={errors.quantity}
               placeholder="0"
             />
@@ -349,6 +353,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             {isAdmin && parseFloat(formData.purchase_price) > 0 && (
               <>
                 <Select
+                  searchable={false}
                   label="Paid with"
                   options={PURCHASE_PAYMENT_OPTIONS}
                   value={formData.payment_method}
@@ -367,21 +372,19 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
               </>
             )}
 
-            <CurrencyInput
-              label="Selling Price"
-              value={formData.selling_price}
-              onChange={(n) => handleInputChange('selling_price', n ? String(n) : '')}
-            />
-
-            <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={formData.is_sellable}
-                onChange={(e) => setFormData((prev) => ({ ...prev, is_sellable: e.target.checked }))}
+            <div className="lg:col-span-2 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_16rem] sm:items-end">
+              <CurrencyInput
+                label="Selling Price"
+                value={formData.selling_price}
+                onChange={(n) => handleInputChange('selling_price', n ? String(n) : '')}
               />
-              Sellable (socks, tumbler, clearance stock)
-            </label>
+              <Switch
+                checked={formData.is_sellable}
+                onChange={(checked) => setFormData((prev) => ({ ...prev, is_sellable: checked }))}
+                label="Sellable"
+                description="Show in Sales and Cashier"
+              />
+            </div>
 
             <Select
               label="Size"
@@ -442,66 +445,30 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
           />
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">Thumbnail Image</label>
+            <FilePick
+              id="thumbnail-upload-add"
+              label="Thumbnail"
+              accept="image/*"
+              disabled={uploading}
+              buttonLabel={uploading ? 'Processing…' : 'Choose photo'}
+              onChange={(file) => handleImageSelect(file)}
+              error={errors.image}
+            />
             {previewUrl && (
-              <div className="mb-3">
-                <Image 
-                  src={previewUrl} 
-                  alt="Thumbnail Preview" 
-                  width={96} 
-                  height={96} 
-                  className="h-24 w-24 object-cover rounded border" 
-                />
-              </div>
-            )}
-            <div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => handleImageSelect(e.target.files?.[0] || null)}
-                disabled={uploading}
-                id="thumbnail-upload-add"
-                className="hidden"
+              <Image
+                src={previewUrl}
+                alt="Thumbnail preview"
+                width={96}
+                height={96}
+                className="h-24 w-24 rounded-xl object-cover ring-1 ring-black/10"
               />
-              <label
-                htmlFor="thumbnail-upload-add"
-                className={`
-                  inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer transition-colors duration-200
-                  ${uploading ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                {uploading ? 'Processing...' : 'Choose Thumbnail'}
-              </label>
-            </div>
-            {errors.image && <div className="text-red-600 text-sm">{errors.image}</div>}
+            )}
           </div>
 
           {errors.submit && (
-            <div className="text-red-600 text-sm">{errors.submit}</div>
+            <div className="text-sm text-red-600">{errors.submit}</div>
           )}
-
-          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 sm:pt-6 border-t">
-            <Button 
-              type="button" 
-              variant="ghost" 
-              onClick={onClose}
-              className="h-12 sm:h-10 text-base sm:text-sm order-2 sm:order-1"
-            >
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              loading={loading}
-              className="h-12 sm:h-10 text-base sm:text-sm order-1 sm:order-2"
-            >
-              Add Item
-            </Button>
-          </div>
         </form>
-      </div>
-    </div>
+    </SimpleModal>
   );
 }

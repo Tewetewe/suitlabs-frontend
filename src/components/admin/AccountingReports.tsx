@@ -4,12 +4,15 @@ import React, { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/Card';
+import { MetricTile } from '@/components/ui/PageShell';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { useToast } from '@/contexts/ToastContext';
 import { apiClient } from '@/lib/api';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import type { AccountingReport, Dividend, Loan, OpeningBalance, Payable } from '@/types';
 
@@ -62,6 +65,15 @@ export function AccountingReports({
     principal: 0,
     payment_method: 'transfer',
   });
+  const { success, error: toastError } = useToast();
+  const [amountPrompt, setAmountPrompt] = useState<{
+    kind: 'payable' | 'loan';
+    id: string;
+    outstanding: number;
+    title: string;
+  } | null>(null);
+  const [promptAmount, setPromptAmount] = useState(0);
+  const [promptSaving, setPromptSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +109,34 @@ export function AccountingReports({
     setPayableForm((prev) => ({ ...prev, payable_date: startDate }));
     setLoanForm((prev) => ({ ...prev, loan_date: startDate }));
   }, [startDate, endDate]);
+
+  const submitAmountPrompt = async () => {
+    if (!amountPrompt || promptAmount <= 0) return;
+    try {
+      setPromptSaving(true);
+      if (amountPrompt.kind === 'payable') {
+        await apiClient.payPayable(amountPrompt.id, {
+          amount: Number(promptAmount),
+          payment_method: 'transfer',
+          paid_on: todayISO(),
+        });
+        success('Payable paid', formatCurrency(promptAmount));
+      } else {
+        await apiClient.repayLoan(amountPrompt.id, {
+          amount: Number(promptAmount),
+          payment_method: 'transfer',
+          paid_on: todayISO(),
+        });
+        success('Loan repaid', formatCurrency(promptAmount));
+      }
+      setAmountPrompt(null);
+      await load();
+    } catch {
+      toastError('Could not record payment', 'Please try again.');
+    } finally {
+      setPromptSaving(false);
+    }
+  };
 
   const handleOpening = async (event: FormEvent) => {
     event.preventDefault();
@@ -219,33 +259,31 @@ export function AccountingReports({
           )}
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-              <div className="text-xs font-semibold text-slate-500">Cash on Hand</div>
-              <div className="mt-1 text-lg font-bold text-slate-900">
-                {loading ? '—' : formatCurrency(report?.cash_on_hand || 0)}
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                Drawer {formatCurrency(report?.cash_drawer || 0)} · Bank {formatCurrency(report?.bank || 0)}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-              <div className="text-xs font-semibold text-slate-500">Accounts Receivable</div>
-              <div className="mt-1 text-lg font-bold text-slate-900">
-                {loading ? '—' : formatCurrency(bs?.accounts_receivable || 0)}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-              <div className="text-xs font-semibold text-slate-500">Payables + Loans</div>
-              <div className="mt-1 text-lg font-bold text-slate-900">
-                {loading ? '—' : formatCurrency((bs?.payables || 0) + (bs?.loans || 0))}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-              <div className="text-xs font-semibold text-slate-500">Dividends this year</div>
-              <div className="mt-1 text-lg font-bold text-slate-900">
-                {loading ? '—' : formatCurrency(report?.year_dividends || 0)}
-              </div>
-            </div>
+            <MetricTile
+              label="Cash on Hand"
+              loading={loading}
+              value={formatCurrencyCompact(report?.cash_on_hand || 0)}
+              title={formatCurrency(report?.cash_on_hand || 0)}
+              sub={`Drawer ${formatCurrencyCompact(report?.cash_drawer || 0)} · Bank ${formatCurrencyCompact(report?.bank || 0)}`}
+            />
+            <MetricTile
+              label="Accounts Receivable"
+              loading={loading}
+              value={formatCurrencyCompact(bs?.accounts_receivable || 0)}
+              title={formatCurrency(bs?.accounts_receivable || 0)}
+            />
+            <MetricTile
+              label="Payables + Loans"
+              loading={loading}
+              value={formatCurrencyCompact((bs?.payables || 0) + (bs?.loans || 0))}
+              title={formatCurrency((bs?.payables || 0) + (bs?.loans || 0))}
+            />
+            <MetricTile
+              label="Dividends this year"
+              loading={loading}
+              value={formatCurrencyCompact(report?.year_dividends || 0)}
+              title={formatCurrency(report?.year_dividends || 0)}
+            />
           </div>
         </CardContent>
       </Card>
@@ -350,10 +388,12 @@ export function AccountingReports({
               ['Debit', cf?.by_method?.debit],
               ['Credit card', cf?.by_method?.cc],
             ] as const).map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-black/5 bg-white/50 p-3">
-                <div className="text-xs font-semibold text-slate-500">{label}</div>
-                <div className="mt-1 text-sm font-bold text-slate-900">{formatCurrency(value || 0)}</div>
-              </div>
+              <MetricTile
+                key={label}
+                label={label}
+                value={formatCurrencyCompact(value || 0)}
+                title={formatCurrency(value || 0)}
+              />
             ))}
           </div>
         </CardContent>
@@ -453,11 +493,14 @@ export function AccountingReports({
                         <td className="px-4 py-3 text-right">{formatCurrency(outstanding)}</td>
                         <td className="px-4 py-3 text-right">
                           {row.status === 'open' && outstanding > 0 && (
-                            <Button variant="ghost" size="sm" onClick={async () => {
-                              const paid = window.prompt(`Pay how much of ${formatCurrency(outstanding)}?`, String(outstanding));
-                              if (!paid) return;
-                              await apiClient.payPayable(row.id, { amount: Number(paid), payment_method: 'transfer', paid_on: todayISO() });
-                              await load();
+                            <Button variant="ghost" size="sm" onClick={() => {
+                              setAmountPrompt({
+                                kind: 'payable',
+                                id: row.id,
+                                outstanding,
+                                title: `Pay ${row.description}`,
+                              });
+                              setPromptAmount(outstanding);
                             }}>Pay</Button>
                           )}
                           {row.paid_amount === 0 && (
@@ -520,11 +563,14 @@ export function AccountingReports({
                       <td className="px-4 py-3 text-right">{formatCurrency(row.outstanding)}</td>
                       <td className="px-4 py-3 text-right">
                         {row.outstanding > 0 && (
-                          <Button variant="ghost" size="sm" onClick={async () => {
-                            const paid = window.prompt(`Repay how much of ${formatCurrency(row.outstanding)}?`, String(row.outstanding));
-                            if (!paid) return;
-                            await apiClient.repayLoan(row.id, { amount: Number(paid), payment_method: 'transfer', paid_on: todayISO() });
-                            await load();
+                          <Button variant="ghost" size="sm" onClick={() => {
+                            setAmountPrompt({
+                              kind: 'loan',
+                              id: row.id,
+                              outstanding: row.outstanding,
+                              title: `Repay ${row.lender}`,
+                            });
+                            setPromptAmount(row.outstanding);
                           }}>Repay</Button>
                         )}
                         {row.outstanding === row.principal && (
@@ -593,6 +639,25 @@ export function AccountingReports({
           )}
         </CardContent>
       </Card>
+      <ConfirmModal
+        isOpen={!!amountPrompt}
+        title={amountPrompt?.title || 'Record payment'}
+        confirmLabel={amountPrompt?.kind === 'loan' ? 'Repay' : 'Pay'}
+        loading={promptSaving}
+        onClose={() => setAmountPrompt(null)}
+        onConfirm={submitAmountPrompt}
+        description={
+          amountPrompt
+            ? `Outstanding ${formatCurrency(amountPrompt.outstanding)}. Enter how much to ${amountPrompt.kind === 'loan' ? 'repay' : 'pay'} now.`
+            : undefined
+        }
+      >
+        <CurrencyInput
+          label="Amount"
+          value={promptAmount || ''}
+          onChange={(n) => setPromptAmount(n)}
+        />
+      </ConfirmModal>
     </>
   );
 }

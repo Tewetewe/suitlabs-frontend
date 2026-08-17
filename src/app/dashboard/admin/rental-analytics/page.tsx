@@ -14,7 +14,6 @@ import {
   Wallet,
 } from 'lucide-react';
 
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageSection, PageShell, StatGrid } from '@/components/ui/PageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge, EmptyState } from '@/components/ui/DataDisplay';
@@ -22,7 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBranch } from '@/contexts/BranchContext';
 import apiClient from '@/lib/api';
 import { Select } from '@/components/ui/Select';
-import { formatCurrency, formatNumber } from '@/lib/currency';
+import { formatCurrency, formatCurrencyCompact, formatNumber } from '@/lib/currency';
 import { facetLabel } from '@/lib/select-options';
 import type { OwnerAnalytics, RentalInsight, RentalItemAnalytics } from '@/types';
 
@@ -68,17 +67,17 @@ function monthLabel(iso: string) {
 function insightTone(kind: string) {
   switch (kind) {
     case 'stock_up':
-      return { wrap: 'border-indigo-200 bg-indigo-50', badge: 'primary' as const };
+      return { accent: 'border-l-indigo-400', badge: 'primary' as const };
     case 'clearance':
-      return { wrap: 'border-amber-200 bg-amber-50', badge: 'warning' as const };
+      return { accent: 'border-l-amber-400', badge: 'warning' as const };
     case 'mix':
-      return { wrap: 'border-sky-200 bg-sky-50', badge: 'info' as const };
+      return { accent: 'border-l-sky-400', badge: 'info' as const };
     case 'trend':
-      return { wrap: 'border-emerald-200 bg-emerald-50', badge: 'success' as const };
+      return { accent: 'border-l-emerald-400', badge: 'success' as const };
     case 'collect':
-      return { wrap: 'border-rose-200 bg-rose-50', badge: 'danger' as const };
+      return { accent: 'border-l-rose-400', badge: 'danger' as const };
     default:
-      return { wrap: 'border-slate-200 bg-slate-50', badge: 'default' as const };
+      return { accent: 'border-l-slate-300', badge: 'default' as const };
   }
 }
 
@@ -152,10 +151,10 @@ export default function RentalAnalyticsPage() {
   const monthly = useMemo(() => mergeMonthly(report), [report]);
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Analytics"
-        subtitle={`Owner read for ${scopeLabel}. Bookings, sales, collections, and stock — without opening the Google Sheet.`}
+        subtitle={`${scopeLabel} — bookings, sales, collections, and stock.`}
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -194,16 +193,18 @@ export default function RentalAnalyticsPage() {
             },
             {
               label: 'Booking value',
-              value: loading ? '' : formatCurrency(bookings?.final_amount || 0),
+              value: loading ? '' : formatCurrencyCompact(bookings?.final_amount || 0),
+              title: formatCurrency(bookings?.final_amount || 0),
               icon: <Wallet />,
               iconBg: 'bg-indigo-50',
               iconColor: 'text-indigo-600',
-              sub: `Collected ${formatCurrency(bookings?.paid_amount || 0)}`,
+              sub: `Collected ${formatCurrencyCompact(bookings?.paid_amount || 0)}`,
               loading,
             },
             {
               label: 'Still owing',
-              value: loading ? '' : formatCurrency(bookings?.remaining_amount || 0),
+              value: loading ? '' : formatCurrencyCompact(bookings?.remaining_amount || 0),
+              title: formatCurrency(bookings?.remaining_amount || 0),
               icon: <TrendingUp />,
               iconBg: 'bg-rose-50',
               iconColor: 'text-rose-600',
@@ -212,7 +213,8 @@ export default function RentalAnalyticsPage() {
             },
             {
               label: 'Sales',
-              value: loading ? '' : formatCurrency(sales?.revenue || 0),
+              value: loading ? '' : formatCurrencyCompact(sales?.revenue || 0),
+              title: formatCurrency(sales?.revenue || 0),
               icon: <ShoppingBag />,
               iconBg: 'bg-violet-50',
               iconColor: 'text-violet-600',
@@ -241,12 +243,12 @@ export default function RentalAnalyticsPage() {
         />
 
         {usedBookings && !loading && (
-          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-            No pickups in this period, so stock mix is from <b>bookings</b>. Convert to rentals at pickup to see what actually left the shop.
+          <p className="text-sm text-slate-500">
+            No pickups in this period — mix is from <span className="font-medium text-slate-700">bookings</span>. Convert at pickup to see what left the shop.
           </p>
         )}
 
-        <PageSection title="What to do next" description="Read these before buying, transferring, or locking the month. This replaces scanning the monthly sheet.">
+        <PageSection title="What to do next" description="Buy, transfer, or collect from this period.">
           {loading ? (
             <div className="grid gap-3 md:grid-cols-2">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -262,7 +264,7 @@ export default function RentalAnalyticsPage() {
           <Card className="lg:col-span-3" padding="md">
             <CardHeader>
               <CardTitle>Monthly volume</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Bookings, items that went out, and completed sales — the three counts the sheet used to be for.</p>
+              <p className="mt-1 text-sm text-slate-500">Bookings, items out, and completed sales.</p>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -275,7 +277,7 @@ export default function RentalAnalyticsPage() {
           <Card className="lg:col-span-2" padding="md">
             <CardHeader>
               <CardTitle>Occasion mix</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Staff pick this at the counter when they take the booking. Tickets with no pick show as Unspecified.</p>
+              <p className="mt-1 text-sm text-slate-500">Occasion chosen at the counter. Unspecified means none was picked.</p>
             </CardHeader>
             <CardContent>
               <ShareBars rows={bookings?.by_institution || []} empty="No bookings yet." money />
@@ -287,7 +289,7 @@ export default function RentalAnalyticsPage() {
           <Card padding="md">
             <CardHeader>
               <CardTitle>Packages</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Which bundle is earning. Item total means no package was used.</p>
+              <p className="mt-1 text-sm text-slate-500">Which bundle is earning. Item total means no package.</p>
             </CardHeader>
             <CardContent>
               <ShareBars rows={bookings?.by_package || []} pretty={false} empty="No package mix yet." money />
@@ -296,7 +298,7 @@ export default function RentalAnalyticsPage() {
           <Card padding="md">
             <CardHeader>
               <CardTitle>How money arrived</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Cash vs QRIS vs transfer. Reconcile the drawer against cash share.</p>
+              <p className="mt-1 text-sm text-slate-500">Cash, QRIS, and transfer. Reconcile the drawer against cash share.</p>
             </CardHeader>
             <CardContent>
               <ShareBars rows={bookings?.by_payment || []} pretty={false} empty="No collections yet." money />
@@ -308,7 +310,7 @@ export default function RentalAnalyticsPage() {
           <Card padding="md">
             <CardHeader>
               <CardTitle>Sales mix</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Retail, clearance, and replacement. Clearance is how idle suits become cash.</p>
+              <p className="mt-1 text-sm text-slate-500">Retail, clearance, and replacement.</p>
             </CardHeader>
             <CardContent>
               <ShareBars rows={sales?.by_line_type || []} empty="No sales yet." money />
@@ -338,7 +340,7 @@ export default function RentalAnalyticsPage() {
           <Card padding="md">
             <CardHeader>
               <CardTitle>Colours that move</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Unusual colours that never appear here should wait.</p>
+              <p className="mt-1 text-sm text-slate-500">Colours that never appear here can wait.</p>
             </CardHeader>
             <CardContent>
               <ShareBars rows={stock?.by_color || []} empty="No colour data yet." />
@@ -420,7 +422,7 @@ export default function RentalAnalyticsPage() {
           </Card>
         </div>
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }
 
@@ -469,12 +471,12 @@ function InsightList({ insights }: { insights: RentalInsight[] }) {
       {insights.map((insight) => {
         const tone = insightTone(insight.kind);
         return (
-          <div key={insight.title} className={`rounded-2xl border px-4 py-4 ${tone.wrap}`}>
+          <div key={insight.title} className={`glass-panel min-w-0 overflow-hidden rounded-2xl border-l-[3px] px-4 py-3 ${tone.accent}`}>
             <Badge variant={tone.badge} size="sm">
               {insightKindLabel(insight.kind)}
             </Badge>
-            <h3 className="mt-2 text-sm font-semibold text-slate-900">{insight.title}</h3>
-            <p className="mt-1 text-sm leading-relaxed text-slate-700">{insight.detail}</p>
+            <h3 className="mt-2 truncate text-sm font-semibold text-slate-900">{insight.title}</h3>
+            <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-slate-600">{insight.detail}</p>
           </div>
         );
       })}
@@ -497,30 +499,59 @@ function GroupedTrendChart({
     );
   }
   const max = Math.max(1, ...rows.map((row) => Math.max(row.bookings || 0, row.items_out || 0, row.sales || 0)));
-  const width = Math.max(360, rows.length * 88);
-  const height = 220;
+  const width = Math.max(360, rows.length * 96);
+  const height = 236;
   const padL = 28;
   const padB = 36;
-  const padT = 12;
+  const padT = 24;
   const innerW = width - padL - 12;
   const innerH = height - padT - padB;
   const groupW = innerW / rows.length;
+
+  const valueLabel = (cx: number, barH: number, value: number, fill: string) => (
+    <text
+      x={cx}
+      y={padT + innerH - barH - 5}
+      textAnchor="middle"
+      fontSize="10"
+      fontWeight="600"
+      fill={fill}
+    >
+      {formatNumber(value)}
+    </text>
+  );
+
   return (
     <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-full h-56" role="img" aria-label="Monthly bookings, items out, and sales">
+      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-full h-60" role="img" aria-label="Monthly bookings, items out, and sales">
         {rows.map((row, i) => {
           const x = padL + i * groupW;
-          const bookedH = ((row.bookings || 0) / max) * innerH;
-          const outH = ((row.items_out || 0) / max) * innerH;
-          const saleH = ((row.sales || 0) / max) * innerH;
-          const barW = Math.min(14, groupW * 0.22);
-          const gap = 3;
+          const booked = row.bookings || 0;
+          const out = row.items_out || 0;
+          const sale = row.sales || 0;
+          const bookedH = (booked / max) * innerH;
+          const outH = (out / max) * innerH;
+          const saleH = (sale / max) * innerH;
+          const barW = Math.min(16, groupW * 0.22);
+          const gap = 4;
           const start = x + (groupW - barW * 3 - gap * 2) / 2;
+          const bookedX = start + barW / 2;
+          const outX = start + barW + gap + barW / 2;
+          const saleX = start + (barW + gap) * 2 + barW / 2;
           return (
             <g key={row.period}>
-              <rect x={start} y={padT + innerH - bookedH} width={barW} height={bookedH} rx="4" fill="#34d399" />
-              <rect x={start + barW + gap} y={padT + innerH - outH} width={barW} height={outH} rx="4" fill="#6366f1" />
-              <rect x={start + (barW + gap) * 2} y={padT + innerH - saleH} width={barW} height={saleH} rx="4" fill="#f59e0b" />
+              <rect x={start} y={padT + innerH - bookedH} width={barW} height={Math.max(bookedH, 0)} rx="4" fill="#34d399">
+                <title>{`Bookings ${formatNumber(booked)}`}</title>
+              </rect>
+              {valueLabel(bookedX, bookedH, booked, '#059669')}
+              <rect x={start + barW + gap} y={padT + innerH - outH} width={barW} height={Math.max(outH, 0)} rx="4" fill="#6366f1">
+                <title>{`Went out ${formatNumber(out)}`}</title>
+              </rect>
+              {valueLabel(outX, outH, out, '#4f46e5')}
+              <rect x={start + (barW + gap) * 2} y={padT + innerH - saleH} width={barW} height={Math.max(saleH, 0)} rx="4" fill="#f59e0b">
+                <title>{`Sales ${formatNumber(sale)}`}</title>
+              </rect>
+              {valueLabel(saleX, saleH, sale, '#d97706')}
               <text x={x + groupW / 2} y={height - 14} textAnchor="middle" className="fill-slate-500" fontSize="11">
                 {monthLabel(row.period)}
               </text>
@@ -557,9 +588,9 @@ function ShareBars({
       {rows.slice(0, 8).map((row) => (
         <div key={row.key}>
           <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-            <span className="font-medium text-slate-800">{pretty ? facetLabel(row.label) : row.label}</span>
-            <span className="tabular-nums text-slate-500">
-              {money ? formatCurrency(row.revenue || 0) : formatNumber(row.items_out)} · {Math.round((row.share || 0) * 100)}%
+            <span className="min-w-0 truncate font-medium text-slate-800">{pretty ? facetLabel(row.label) : row.label}</span>
+            <span className="shrink-0 tabular-nums text-slate-500" title={money ? formatCurrency(row.revenue || 0) : undefined}>
+              {money ? formatCurrencyCompact(row.revenue || 0) : formatNumber(row.items_out)} · {Math.round((row.share || 0) * 100)}%
             </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-100">

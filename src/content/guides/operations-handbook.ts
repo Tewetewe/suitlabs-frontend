@@ -38,7 +38,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <figure>
     <div class="fig-scroll">
-      <svg viewBox="0 0 940 400" role="img" aria-label="System map: the web app on tablets and phones and the Android print bridge both talk to the Go API, which owns the PostgreSQL database, mirrors data to Google Sheets, and runs three scheduled jobs each night.">
+      <svg viewBox="0 0 940 400" role="img" aria-label="System map: the web app on tablets and phones and the Android print bridge both talk to the Go API, which owns the PostgreSQL database, mirrors data to Google Sheets, stores photos in Cloudflare R2, and runs three scheduled jobs each night.">
         <defs>
           <marker id="sm-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -84,12 +84,12 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <text x="686" y="126" font-size="11" fill="currentColor" opacity=".7">manual import only</text>
 
         <rect x="662" y="52" width="258" height="56" rx="3" fill="none" stroke="currentColor" opacity=".6"/>
-        <text x="791" y="76" text-anchor="middle" font-size="13" fill="currentColor">Google Sheets</text>
+        <text x="791" y="76" text-anchor="middle" font-size="13" fill="currentColor">Google Sheets · one per shop</text>
         <text x="791" y="93" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">item tabs + one tab per month</text>
 
         <line x1="576" y1="168" x2="662" y2="168" stroke="currentColor" marker-end="url(#sm-a)"/>
         <rect x="662" y="144" width="258" height="48" rx="3" fill="none" stroke="currentColor" opacity=".6"/>
-        <text x="791" y="164" text-anchor="middle" font-size="13" fill="currentColor">Google Cloud Storage</text>
+        <text x="791" y="164" text-anchor="middle" font-size="13" fill="currentColor">Cloudflare R2</text>
         <text x="791" y="181" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">item photos, ID photos, proofs</text>
 
         <rect x="662" y="228" width="258" height="90" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -115,7 +115,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <dl class="gloss">
     <div><dt>Branch</dt><dd>A physical shop. Its own stock, cash drawer, staff, and its own Profit &amp; Loss. Not "outlet", not "location".</dd></div>
     <div><dt>Booking</dt><dd>The agreement and the money. Created at the POS, can be paid by down payment or in full.</dd></div>
-    <div><dt>Rental</dt><dd>The physical hand-over. Created from a booking on collection day. This is what carries the ID photo, the late fee and the damage charge.</dd></div>
+    <div><dt>Rental</dt><dd>The physical hand-over. Created automatically the moment its booking is charged, and it waits on <code>pending</code> until someone taps Pickup. This is what carries the ID photo, the late fee and the damage charge.</dd></div>
     <div><dt>Sale</dt><dd>Goods that leave for good — walk-in retail, an add-on to a booking, a lost-item replacement fee, or an ex-rental suit sold off.</dd></div>
     <div><dt>Expense</dt><dd>Money out to run the shop. <b>Recorded</b> counts toward P&amp;L; <b>voided</b> does not. Never deleted.</dd></div>
     <div><dt>Journal Entry</dt><dd>A dated posting for one shop event, with debits equal to credits. Every report is read from these.</dd></div>
@@ -125,7 +125,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     <div><dt>Opening Balance</dt><dd>The starting point of the books: cash on a chosen date, plus a snapshot of inventory, fixed assets and receivables.</dd></div>
     <div><dt>Buying Price</dt><dd>What the shop paid. Admin-only — the server strips it out of anything a staff account requests.</dd></div>
     <div><dt>Fixed Asset</dt><dd>Equipment used to run the shop — racks, chairs, a steamer. In use, or disposed. Never rented or sold as stock.</dd></div>
-    <div><dt>Write-off</dt><dd>Taking item or asset value off the books without a sale. A lost rental suit gets written off; the replacement fee you charged is a separate sale.</dd></div>
+    <div><dt>Write-off</dt><dd>Taking item or asset value off the books without a sale — dropping an item's quantity in Items, or disposing a fixed asset. A suit lost on rental is <i>not</i> a manual write-off: charging the replacement fee takes it off stock for you.</dd></div>
     <div><dt>Closed Month</dt><dd>A month an admin has locked. Nothing dated inside it can be added, changed or reversed until it is explicitly unlocked.</dd></div>
     <div><dt>Transfer</dt><dd>Moving an available item's home branch. Not a sale, not a write-off — the shop still owns it.</dd></div>
   </dl>
@@ -165,7 +165,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
         <rect x="278" y="212" width="300" height="106" rx="3" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="5 3"/>
         <text x="428" y="236" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Admin only</text>
-        <text x="292" y="258" font-size="11.5" fill="currentColor" opacity=".8">Users · Branches · Fixed Assets</text>
+        <text x="292" y="258" font-size="11.5" fill="currentColor" opacity=".8">Users · Branches · Assets · Analytics</text>
         <text x="292" y="276" font-size="11.5" fill="currentColor" opacity=".8">Financial Report · Bulk Input Sync</text>
         <text x="292" y="294" font-size="11.5" fill="currentColor" opacity=".8">Buying price · Lock month · All branches</text>
 
@@ -204,10 +204,13 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <tr><td>Create and disable user accounts</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Also assigns which branches a person can reach.</td></tr>
         <tr><td>Financial Report — P&amp;L, Balance Sheet, Cash Flow</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Per shop, or the whole group.</td></tr>
         <tr><td>Opening Balance, Payables, Loans, Dividends</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Inside the Financial Report page.</td></tr>
-        <tr><td>Fixed assets, purchases, write-offs</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>The Assets page.</td></tr>
-        <tr><td>Lock / unlock a month</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>The single most consequential button in the system.</td></tr>
+        <tr><td>Fixed assets and their purchases</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>The Assets page.</td></tr>
+        <tr><td>Analytics — demand, mix, idle stock</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Admin → Analytics.</td></tr>
+        <tr><td>Recurring expense templates</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>On the Expenses page, admin only.</td></tr>
+        <tr><td>Lock / unlock a month</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>The single most consequential button in the system. It locks that month for <b>both</b> shops.</td></tr>
         <tr><td>Google Sheets import, branch setup</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Bulk Input Sync and Branches.</td></tr>
         <tr><td>View "All branches" together</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Staff sees only assigned shops.</td></tr>
+        <tr><td>See the money tiles on the Dashboard</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Revenue, profit, cash on hand and assets are hidden from staff.</td></tr>
       </tbody>
     </table>
   </div>
@@ -227,15 +230,15 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     <table>
       <thead><tr><th style="width:22%">Screen</th><th style="width:38%">What it is for</th><th>The thing people get wrong</th></tr></thead>
       <tbody>
-        <tr><td><b>Cashier</b></td><td>The POS. Rental mode and Sale mode, barcode scan, ticket, payment, charge.</td><td>Rental mode creates a <b>Booking</b>, not a rental. Set both dates before picking items or the catalogue won't filter by availability.</td></tr>
-        <tr><td><b>Dashboard</b></td><td>Today at a glance: item count, bookings, active rentals, today's revenue, low stock, maintenance, plus this month's accrual summary.</td><td>Today's revenue is accrual, not the cash in the drawer.</td></tr>
-        <tr><td><b>Bookings</b></td><td>The full booking list. Edit, take the remaining payment, print DP or full invoices, add a sale on top.</td><td>A booking with payment status <code>completed</code> is deliberately locked from editing.</td></tr>
-        <tr><td><b>Rentals</b></td><td>Convert a booking into a rental, pick up, change dates, complete, cancel.</td><td>Everything chargeable — lost items, damage, add-ons — must be recorded <b>before</b> Complete.</td></tr>
-        <tr><td><b>Sales</b></td><td>Walk-in retail, booking add-ons, and rental-return charges. Cancel a sale here.</td><td>Only items marked sellable appear. An ex-rental suit sells as clearance, not retail.</td></tr>
-        <tr><td><b>Expenses</b></td><td>Money out, by category, with the payment method. Monthly summary. Recurring templates.</td><td>Void, never delete. Record on the day the money actually moved.</td></tr>
-        <tr><td><b>Items</b></td><td>Inventory. Search, filter, barcode lookup, availability check for a date range, transfer to the other shop, print labels.</td><td>Availability depends on status <i>and</i> dates. Maintenance items are invisible to the catalogue — that is the point.</td></tr>
+        <tr><td><b>Cashier</b></td><td>The POS. Rental mode and Sale mode, barcode scan, ticket, occasion, payment, charge.</td><td>One charge writes a <b>Booking</b> <i>and</i> its <b>Rental</b>, already on <code>pending</code>. Pickup still happens on Rentals. Set both dates before picking items or the catalogue won't filter by availability.</td></tr>
+        <tr><td><b>Dashboard</b></td><td>Today at a glance: item count, bookings, active rentals, today's revenue, low stock, maintenance. For an admin, also this month's accrual summary and the shop's asset value.</td><td>Today's revenue is accrual, not the cash in the drawer. Staff see only the six counts.</td></tr>
+        <tr><td><b>Bookings</b></td><td>The full booking list. Edit, <b>Collect balance</b>, print DP or full invoices, add a sale on top.</td><td>A booking with payment status <code>completed</code> is deliberately locked from editing. While its rental is still <code>pending</code>, editing the booking rewrites the rental to match; after pickup the two are independent.</td></tr>
+        <tr><td><b>Rentals</b></td><td>Pickup the pending rental the POS created, change dates, complete, cancel with a reason.</td><td>Everything chargeable — lost items, damage, add-ons — must be recorded <b>before</b> Complete. <b>New Rental</b> is only for legacy bookings that have no rental.</td></tr>
+        <tr><td><b>Sales</b></td><td>Walk-in retail, booking add-ons, and rental-return charges — including the lost-item replacement screen. Cancel a sale here.</td><td>Only items marked sellable appear. An ex-rental suit sells as clearance, not retail. A replacement line also marks the lost item <code>lost</code>.</td></tr>
+        <tr><td><b>Expenses</b></td><td>Money out, by category, with the payment method. Monthly summary. Recurring templates (admin only).</td><td>Void, never delete. Record on the day the money actually moved.</td></tr>
+        <tr><td><b>Items</b></td><td>Inventory. Search, filter, barcode lookup, availability check for a date range, transfer to the other shop, generate and print labels.</td><td>Availability depends on status <i>and</i> dates. Maintenance items are invisible to the catalogue — that is the point. For an admin, the buying price field here <b>posts a purchase or a write-off</b> to the books.</td></tr>
         <tr><td><b>Customers</b></td><td>One company-wide customer list. Origin branch shows which shop first registered them.</td><td>Customers are shared across shops on purpose. Don't create a duplicate because "they're ours now."</td></tr>
-        <tr><td><b>Package Pricing</b></td><td>Fixed-price bundles that replace the item total on a booking.</td><td>A package zeroes item prices <i>and</i> disables the discount field. It is not a discount tool.</td></tr>
+        <tr><td><b>Package Pricing</b></td><td>Fixed-price bundles that replace the item total on a booking. Only active packages show at the POS.</td><td>A package replaces the item total <i>and</i> hides the discount field. Lines flipped to <b>Add-on</b> are charged on top of the package price. It is not a discount tool.</td></tr>
         <tr><td><b>Discounts</b></td><td>Discount codes and rules, at booking level or item level.</td><td>Booking-level and item-level can both apply. Check the total before charging.</td></tr>
         <tr><td><b>Categories</b></td><td>How items are grouped in the catalogue and in reports.</td><td>Renaming a category reshapes past reports. Decide the taxonomy once.</td></tr>
       </tbody>
@@ -249,9 +252,9 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <tbody>
         <tr><td><b>Users</b></td><td>Create accounts, set role, assign branches, deactivate leavers.</td><td>Deactivate, don't delete. And no shared logins.</td></tr>
         <tr><td><b>Branches</b></td><td>Each shop's name, code, receipt subtitle, address, phone, geofence, and Google Sheet.</td><td>Receipt text here is what prints on customers' invoices. The spreadsheet ID is this shop only — Jimbaran and Nusa Dua do not share a sheet.</td></tr>
-        <tr><td><b>Assets</b></td><td>Fixed assets — racks, steamers, chairs — with buying price, purchase date, vendor, and how they were paid for. In use, or disposed.</td><td>Recording a purchase here moves real money. Paying by cash or bank reduces cash; on credit it creates a payable.</td></tr>
-        <tr><td><b>Financial Report</b></td><td>P&amp;L, Balance Sheet, Cash Flow, per month or full year, per shop or the group. Opening Balance, Payables, Loans, Dividends. Excel export. Lock month.</td><td>All of it is accrual. Reconcile before you lock, not after.</td></tr>
-        <tr><td><b>Analytics</b></td><td>Owner decision board: booking value and outstanding, occasion and package mix, how money arrived, sales vs clearance, hottest and idle stock, with advice cards. Replaces reading the monthly Google Sheet.</td><td>This is operational demand and mix, not P&amp;L. Use Financial Report for the books. The sheet is a mirror, not the place to decide.</td></tr>
+        <tr><td><b>Assets</b></td><td>Inventory value plus fixed assets — racks, steamers, chairs — with buying price, purchase date, vendor, and how they were paid for. In use, or disposed.</td><td>Recording a purchase here moves real money. Paying by cash or bank reduces cash; on credit it creates a payable. Disposing an asset writes its remaining value off.</td></tr>
+        <tr><td><b>Financial Report</b></td><td>P&amp;L, Balance Sheet, Cash Flow, per month or full year, per shop or the group. Opening Balance, Payables, Loans, Dividends. Excel export. Google Sheets export runs with retry. Lock month.</td><td>All of it is accrual. Reconcile before you lock, not after.</td></tr>
+        <tr><td><b>Analytics</b></td><td>Owner decision board: booking value and outstanding, sales revenue, monthly volume, occasion and package mix, how money arrived, sales vs clearance, sizes and colours that move, hottest and idle stock, per shop — with advice cards.</td><td>This is operational demand and mix, not P&amp;L. Use Financial Report for the books. The sheet is a mirror, not the place to decide.</td></tr>
         <tr><td><b>Bulk Input Sync</b></td><td>Pull item changes in from the Google Sheet when someone has edited it in bulk.</td><td>The database is the source of truth. Blank cells in the sheet preserve the database value — they don't clear it.</td></tr>
       </tbody>
     </table>
@@ -295,7 +298,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <text x="742" y="105" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".6">no revenue counted</text>
 
         <path d="M 304 88 L 304 118 L 90 118 L 90 156" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#lc-a)"/>
-        <text x="200" y="111" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">collection day → Rentals › New Rental</text>
+        <text x="200" y="111" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">created with the booking, at the moment of charge</text>
 
         <text x="20" y="146" font-family="ui-monospace, monospace" font-size="11" letter-spacing="1.5" fill="currentColor" opacity=".5">RENTAL — THE PHYSICAL SUIT</text>
 
@@ -328,21 +331,22 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <text x="796" y="170" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">Settled at completion</text>
         <text x="686" y="192" font-size="11" fill="currentColor" opacity=".8">· late fee — 20% of daily rate / day</text>
         <text x="686" y="210" font-size="11" fill="currentColor" opacity=".8">· damage charge — typed, revenue</text>
-        <text x="686" y="228" font-size="11" fill="currentColor" opacity=".8">· lost item — sold as replacement</text>
-        <text x="686" y="246" font-size="11" fill="currentColor" opacity=".8">· items back to available…</text>
-        <text x="686" y="264" font-size="11" fill="currentColor" opacity=".8">  …or to maintenance if ticked</text>
+        <text x="686" y="228" font-size="11" fill="currentColor" opacity=".8">· lost item — replacement sale, then</text>
+        <text x="686" y="244" font-size="11" fill="currentColor" opacity=".8">  marked lost and off stock, automatically</text>
+        <text x="686" y="262" font-size="11" fill="currentColor" opacity=".8">· items back to available, or maintenance</text>
 
-        <line x1="20" y1="322" x2="920" y2="322" stroke="currentColor" opacity=".15"/>
-        <text x="20" y="342" font-size="11.5" fill="currentColor" opacity=".7">A rental can be cancelled while pending or active. Once completed it is final — a correction after that is an admin job, and impossible if the month is locked.</text>
+        <line x1="20" y1="318" x2="920" y2="318" stroke="currentColor" opacity=".15"/>
+        <text x="20" y="336" font-size="11.5" fill="currentColor" opacity=".7">While the rental is pending the booking drives it: edit the booking and the dates, items and total follow; cancel the booking and the rental is cancelled with it.</text>
+        <text x="20" y="354" font-size="11.5" fill="currentColor" opacity=".7">After pickup that link stops. Cancelling a booking whose suit is out is refused outright, and once a rental is completed a correction is an admin job — impossible if the month is locked.</text>
       </svg>
     </div>
-    <figcaption><b>Two records, two lifecycles, one customer.</b> The booking answers "what did they agree and pay"; the rental answers "where is the suit". Late fees and damage attach to the rental, which is why nothing chargeable can wait until after completion.</figcaption>
+    <figcaption><b>Two records, two lifecycles, one customer.</b> The booking answers "what did they agree and pay"; the rental answers "where is the suit". Both are created by the same tap on <i>Charge booking</i>. Late fees and damage attach to the rental, which is why nothing chargeable can wait until after completion.</figcaption>
   </figure>
 
   <div class="cols three">
     <div class="card">
       <h3>Lost item</h3>
-      <p>Charged as a <b>replacement sale</b> at return, then the item itself is written off the books. Two different records for one event — deliberately, so the money and the missing asset both show up.</p>
+      <p>Charged as a <b>replacement sale</b> at return. That one record does all of it: takes the money, marks the item <code>lost</code>, drops it out of stock, and relieves its value from inventory. Do <b>not</b> add a manual write-off on top — that double-counts.</p>
     </div>
     <div class="card">
       <h3>Damage</h3>
@@ -441,8 +445,8 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <thead><tr><th style="width:22%">Record</th><th style="width:40%">When you use it</th><th>What it does to the books</th></tr></thead>
       <tbody>
         <tr><td><b>Opening Balance</b></td><td>Once, when the books start — cash on a chosen date, plus inventory, fixed assets and receivables as they stood.</td><td>Sets the starting equity so every later number means something.</td></tr>
-        <tr><td><b>Purchase</b></td><td>Buying stock or equipment.</td><td>Increases inventory or fixed assets; reduces cash, or creates a payable if bought on credit.</td></tr>
-        <tr><td><b>Write-off</b></td><td>A suit is lost or a rack is scrapped.</td><td>Removes the remaining value from assets and records it as an expense.</td></tr>
+        <tr><td><b>Purchase</b></td><td>Buying stock — a buying price on <b>Items</b>. Buying equipment — a fixed asset on <b>Assets</b>. Both ask "paid with", or "on credit".</td><td>Increases inventory or fixed assets; reduces cash, or creates a payable if bought on credit. There is no separate purchase screen.</td></tr>
+        <tr><td><b>Write-off</b></td><td>Dropping an item's quantity or value in <b>Items</b>; disposing a fixed asset in <b>Assets</b>. Not for a suit lost on rental — the replacement sale already handles that one.</td><td>Removes the remaining value from assets and records it as an expense.</td></tr>
         <tr><td><b>Payable</b></td><td>A vendor bill you haven't paid yet.</td><td>Recording it books the expense now; paying it later only moves cash.</td></tr>
         <tr><td><b>Loan</b></td><td>Money borrowed.</td><td>Increases cash on hand — it is <b>not</b> revenue. Repayment reduces cash.</td></tr>
         <tr><td><b>Dividend</b></td><td>Profit paid out to a shareholder.</td><td>Reduces cash and equity. It is <b>not</b> an expense, and it must not be entered as one.</td></tr>
@@ -474,7 +478,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <div class="flag stop">
     <span class="flag-t">The branch selector is a write switch, not just a filter</span>
-    <p>Whatever shop is showing in the top bar is the shop the next booking, sale or expense is written to. This is the most common way for a month's numbers to go wrong, and untangling it afterwards is an admin job. Make "check the shop name" the first thing every person does when they sit down.</p>
+    <p>Whatever shop is showing in the top bar is the shop the next booking, sale or expense is written to. On "All branches" the write still goes somewhere — the shop that account last had selected — so an admin reading the group should switch back to one shop before recording anything. This is the most common way for a month's numbers to go wrong, and untangling it afterwards is an admin job. Make "check the shop name" the first thing every person does when they sit down.</p>
   </div>
 </section>
 
@@ -508,9 +512,9 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <path d="M 210 128 L 714 128" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#sh-a)"/>
         <text x="462" y="66" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">item created, renamed, or quantity changed</text>
         <text x="462" y="84" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">→ its row is upserted into the Suit or Acc tab, matched on CODE</text>
-        <text x="462" y="118" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">booking created, edited, or deleted</text>
+        <text x="462" y="118" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">booking or walk-in rental created, edited, or deleted</text>
         <text x="462" y="152" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">→ upserted into that month's tab, matched on the hidden Booking ID column</text>
-        <text x="462" y="170" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">→ change the booking date and the row moves to the other month's tab</text>
+        <text x="462" y="170" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">→ change the date and the row moves to the other month's tab</text>
 
         <text x="230" y="244" font-family="ui-monospace, monospace" font-size="11" letter-spacing="1.5" fill="currentColor" opacity=".5">MANUAL ONLY · ADMIN PRESSES A BUTTON</text>
         <path d="M 714 200 L 210 200" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#sh-a)"/>
@@ -531,18 +535,18 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <tbody>
         <tr>
           <td><b>Suit</b><br><span style="color:var(--ink-3);font-size:.85rem">items of type suit</span></td>
-          <td class="num"><code>A:R</code></td>
-          <td><code>TYPE</code> <code>COLOUR</code> <code>DETAIL</code> <code>MATERIAL</code> <code>CODE</code> <code>SIZE</code> <code>TROUSERS CODE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>CATEGORY</code> <code>SUBCATEGORY</code> <code>BUYING PRICE</code> <code>SELLING PRICE</code> <code>4H PRICE</code> <code>1D PRICE</code> <code>3D PRICE</code><br><span style="color:var(--ink-3);font-size:.85rem">TYPE carries gender — Mens, Women, Kids, Unisex. DETAIL is the item name. SIZE is written as "Jas &amp; Celana Size M". 3D PRICE is the standard rental rate. SUBCATEGORY is stored under CATEGORY.</span></td>
+          <td class="num"><code>A:T</code></td>
+          <td><code>GENDER</code> <code>COLOUR</code> <code>DETAIL</code> <code>MATERIAL</code> <code>CODE</code> <code>SIZE</code> <code>TROUSERS CODE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>CATEGORY</code> <code>SUBCATEGORY</code> <code>BUYING PRICE</code> <code>SELLING PRICE</code> <code>4H PRICE</code> <code>1D PRICE</code> <code>3D PRICE</code> <code>BRAND</code> <code>TYPE</code><br><span style="color:var(--ink-3);font-size:.85rem">GENDER is Mens, Women, Kids, Unisex (the old TYPE column). TYPE is the product kind — suit, shirt, tie, shoes — and maps to items.type. DETAIL is the item name. SIZE is written as "Jas &amp; Celana Size M". 3D PRICE is the standard rental rate. SUBCATEGORY is stored under CATEGORY. BRAND is column S; blank on import defaults to SuitLabs.</span></td>
         </tr>
         <tr>
           <td><b>Acc</b><br><span style="color:var(--ink-3);font-size:.85rem">everything else</span></td>
-          <td class="num"><code>A:P</code></td>
-          <td><code>COLOUR</code> <code>BRAND</code> <code>DETAIL</code> <code>CODE</code> <code>SIZE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>CATEGORY</code> <code>SUBCATEGORY</code> <code>BUYING PRICE</code> <code>SELLING PRICE</code> <code>4H PRICE</code> <code>1D PRICE</code> <code>3D PRICE</code><br><span style="color:var(--ink-3);font-size:.85rem">SIZE is written as "Size M". The commercial columns match the Suit tab.</span></td>
+          <td class="num"><code>A:Q</code></td>
+          <td><code>COLOUR</code> <code>BRAND</code> <code>DETAIL</code> <code>CODE</code> <code>SIZE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>CATEGORY</code> <code>SUBCATEGORY</code> <code>BUYING PRICE</code> <code>SELLING PRICE</code> <code>4H PRICE</code> <code>1D PRICE</code> <code>3D PRICE</code> <code>TYPE</code><br><span style="color:var(--ink-3);font-size:.85rem">SIZE is written as "Size M". TYPE is shirt, tie, shoes, vest, belt, accessory, retail. If TYPE is blank, it is inferred from DETAIL (Tuxedo Shirt → shirt).</span></td>
         </tr>
         <tr>
           <td><b>Month</b><br><span style="color:var(--ink-3);font-size:.85rem">one per month, created automatically, named like <code>JAN 2026</code></span></td>
-          <td class="num"><code>A:P</code></td>
-          <td>Email Address · Full Name · Phone Number · Booking Date · Product Name · Suit Size · Suit Detail · Booking Guarantee · Appointment Date · Add Ons · Tie · Shoes · Payment · Status · Remaining Payment · <b>Booking ID</b><br><span style="color:var(--ink-3);font-size:.85rem">Booking ID is the last column and is hidden on purpose — it is how a row is matched on update.</span></td>
+          <td class="num"><code>A:Q</code></td>
+          <td>Email Address · Full Name · Phone Number · Booking Date · Product Name · Suit Size · Suit Detail · Booking Guarantee · Appointment Date · Add Ons · Tie · Shoes · <b>Payment</b> · <b>Paid Amount</b> · Status · Remaining Payment · <b>Booking ID</b><br><span style="color:var(--ink-3);font-size:.85rem">Payment is the method (DP Cash, Full Transfer, …); Paid Amount is the money taken, split into its own column so the two are never read as one. Booking ID is the last column and is hidden on purpose — it is how a row is matched on update. A walk-in rental with no booking is exported here too, under its rental id.</span></td>
         </tr>
       </tbody>
     </table>
@@ -552,13 +556,19 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <ol class="steps">
     <li><b>Edit the sheet, keeping every code intact.</b><span>The code is the item's identity. Changing a code in the sheet does not rename an item — the import will create a second one.</span></li>
     <li><b>Admin › Bulk Input Sync › sync.</b><span>Items only. One shop in the header syncs that shop. All branches lists each spreadsheet — sync one row, or all shops together. There is no import path for bookings, by design.</span></li>
-    <li><b>Read the result, not just the headline.</b><span>You get created, updated and skipped counts, plus a row number and reason for every rejection. A row with no code is skipped. A brand-new row also needs name, type, gender, brand and colour before it can be created.</span></li>
+    <li><b>Read the result, not just the headline.</b><span>You get created, updated and skipped counts, plus a row number and reason for every rejection. A row with no code is skipped. A brand-new row also needs name, type, gender, brand and colour before it can be created — on the Suit tab type is assumed, and on the Acc tab a blank TYPE is guessed from the name, so the usual missing one is <b>colour</b>.</span></li>
     <li><b>Check the same numbers on the Financial Report page.</b><span>Every sync run — item imports and monthly exports alike — is logged with its status and row count, and a failed export can be retried there.</span></li>
   </ol>
 
   <div class="flag care">
     <span class="flag-t">The tab names and column widths live in configuration, not in the app</span>
-    <p>Which tabs are read, and how many columns of them, comes from the backend's environment — currently <code>'Suit Dev'!A:R</code> and <code>'Acc Dev'!A:P</code>. Two consequences. Adding a column past that range puts it <b>outside</b> the synced range, where it will be ignored in both directions. And renaming a tab in the spreadsheet breaks the sync silently until someone updates the configuration to match — so rename in the config first, or not at all.</p>
+    <p>Which tabs are read, and how many columns of them, comes from the backend's environment — currently <code>'Suit Dev'!A:T</code> and <code>'Acc Dev'!A:Q</code>. Two consequences. Adding a column past that range puts it <b>outside</b> the synced range, where it will be ignored in both directions. And renaming a tab in the spreadsheet breaks the sync silently until someone updates the configuration to match — so rename in the config first, or not at all.</p>
+    <p>Those two ranges each grew by a column when TYPE and GENDER were separated. If a shop's spreadsheet still ends a column short, widen the range in the configuration <b>and</b> nothing else — the next export writes the new headers itself.</p>
+  </div>
+
+  <div class="flag ok">
+    <span class="flag-t">The old Mens/Women column migrates itself</span>
+    <p>A spreadsheet written before the split has one <code>TYPE</code> column holding Mens, Women, Kids or Unisex. On the next export the app recognises that, moves those values into the new <code>GENDER</code> column, and frees <code>TYPE</code> to mean the actual product kind. <b>Do not hand-fix an old sheet first</b> — retyping the header yourself is what turns a clean migration into a column of genders labelled as product types.</p>
   </div>
 
   <div class="flag stop">
@@ -570,11 +580,11 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 <section id="devices">
   <span class="eyebrow">09 — Hardware</span>
   <h2>Devices, printing, and the cash drawer</h2>
-  <p class="measure">There is one <b>Print</b> button on every invoice, and it does three different things depending on what the person is holding. Knowing which path a device takes is the difference between a two-minute fix and an afternoon.</p>
+  <p class="measure">There is one <b>Print</b> button on every invoice, and it picks its own route from the device it was pressed on — no setting, no choice to get wrong. Knowing which path a device takes is the difference between a two-minute fix and an afternoon.</p>
 
   <figure>
     <div class="fig-scroll">
-      <svg viewBox="0 0 940 330" role="img" aria-label="The print button routes to the Bluetooth Print app on iOS, the SuitLabs Print Bridge on Android which also opens the cash drawer, and the browser print dialog on desktop. All three fetch the receipt from the API using the configured API URL.">
+      <svg viewBox="0 0 940 330" role="img" aria-label="The print button routes to the Bluetooth Print app on iOS and to the SuitLabs Print Bridge on Android, which also opens the cash drawer. On a desktop nothing prints; the Download button saves the receipt as an image instead. Both phone paths fetch the receipt from the API using the configured API URL.">
         <defs>
           <marker id="dv-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -601,19 +611,20 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <text x="382" y="171" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".7">our own app · saved paired printer</text>
 
         <rect x="274" y="236" width="216" height="52" rx="3" fill="none" stroke="currentColor" opacity=".7"/>
-        <text x="382" y="258" text-anchor="middle" font-size="12.5" fill="currentColor">Browser print dialog</text>
-        <text x="382" y="276" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".65">58 mm receipt layout</text>
+        <text x="382" y="256" text-anchor="middle" font-size="12.5" fill="currentColor">Browser print dialog</text>
+        <text x="382" y="274" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".65">58 mm receipt · or pair for drawer</text>
 
         <path d="M 490 60 L 540 60 L 540 108 L 600 108" fill="none" stroke="currentColor" opacity=".6" marker-end="url(#dv-a)"/>
         <path d="M 490 158 L 600 158" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#dv-a)"/>
-        <path d="M 490 262 L 540 262 L 540 208 L 600 208" fill="none" stroke="currentColor" opacity=".6" marker-end="url(#dv-a)"/>
+        <path d="M 490 262 L 540 262 L 540 208 L 600 208" fill="none" stroke="currentColor" opacity=".6" stroke-dasharray="4 3" marker-end="url(#dv-a)"/>
+        <text x="520" y="300" text-anchor="middle" font-size="10" fill="currentColor" opacity=".6">only once paired</text>
 
         <rect x="606" y="86" width="150" height="140" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
         <text x="681" y="112" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">Receipt JSON</text>
         <text x="681" y="132" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">fetched from the API</text>
         <line x1="622" y1="146" x2="740" y2="146" stroke="currentColor" opacity=".3"/>
-        <text x="681" y="168" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">CODE128 barcode</text>
-        <text x="681" y="186" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">+ QR with invoice data</text>
+        <text x="681" y="168" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">plain text lines only</text>
+        <text x="681" y="186" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">no barcode, no QR</text>
         <text x="681" y="210" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".6">branch receipt text</text>
 
         <path d="M 382 186 L 382 214 L 848 214 L 848 190" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#dv-a)"/>
@@ -621,18 +632,23 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <text x="847" y="146" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">Cash drawer</text>
         <text x="847" y="164" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".7">pulse down the printer's</text>
         <text x="847" y="179" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".7">DK port, then print</text>
-        <text x="614" y="240" font-size="10.5" fill="currentColor" opacity=".65">only the Android bridge opens the drawer — iOS and desktop print only</text>
+        <text x="606" y="240" font-size="10.5" fill="currentColor" opacity=".65">drawer opens on Android, and on a paired laptop — never on iOS</text>
 
-        <line x1="20" y1="300" x2="920" y2="300" stroke="currentColor" opacity=".15"/>
-        <text x="20" y="322" font-size="11.5" fill="currentColor" opacity=".75">All three paths ask the API for the receipt, using the API address baked into the web app at build time. If a phone cannot reach that address, nothing prints.</text>
+        <line x1="20" y1="308" x2="920" y2="308" stroke="currentColor" opacity=".15"/>
+        <text x="20" y="326" font-size="11.5" fill="currentColor" opacity=".75">The phone paths ask the API for the receipt, using the API address baked into the web app at build time. If a phone cannot reach that address, nothing prints. The laptop path prints the receipt already on screen, so it works even when the API is unreachable.</text>
       </svg>
     </div>
-    <figcaption><b>Same button, three routes.</b> Product labels are the exception: on the item page they go to the Bluetooth Print app on both platforms, so printing a label never opens the drawer.</figcaption>
+    <figcaption><b>Same button, four routes, chosen for you.</b> The order is best-available: bridge on Android, Bluetooth Print on iOS, a paired thermal printer on a laptop, and the browser dialog as the floor that always works. Product labels are the exception — on the item page they go to the Bluetooth Print app on both phone platforms, so printing a label never opens the drawer.</figcaption>
   </figure>
 
   <div class="flag stop">
-    <span class="flag-t">The one setting that breaks printing on every device at once</span>
-    <p>The web app is built with an API address in it, and that address is handed to the printing app on the phone. In the shop it must be the machine's address on the shop network; in production it must be the real HTTPS address. Change it, rebuild the web app, and reinstall or reload on every device — a stale build keeps the old address.</p>
+    <span class="flag-t">The one setting that breaks printing on every phone at once</span>
+    <p>The web app is built with an API address in it, and that address is handed to the printing app on the phone. In the shop it must be the machine's address on the shop network; in production it must be the real HTTPS address. Change it, rebuild the web app, and reinstall or reload on every device — a stale build keeps the old address. A laptop is the exception: it prints what is already on screen, so it keeps working when the phones cannot reach the API.</p>
+  </div>
+
+  <div class="flag care">
+    <span class="flag-t">Why "Connect printer" sometimes isn't there</span>
+    <p>Pairing a printer straight from the browser needs Web Bluetooth, and browsers only expose that on a <b>secure origin</b> — an HTTPS address, or <code>localhost</code>. A laptop pointed at the shop's plain <code>http://192.168.x.x</code> will not show the button at all, by design and not by fault. That laptop still prints through the browser dialog; it just cannot open the drawer. If you want the drawer on a laptop, put the shop on HTTPS.</p>
   </div>
 
   <h3>Setting up a device</h3>
@@ -652,8 +668,13 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         </tr>
         <tr>
           <td><b>Laptop / desktop</b></td>
-          <td>Nothing. The Print button opens the normal browser print dialog with a 58&nbsp;mm receipt layout.</td>
-          <td>Whatever printer the computer has. No drawer.</td>
+          <td>Nothing. <b>Print</b> opens the browser's own dialog with the 58&nbsp;mm receipt.</td>
+          <td>Whatever printer the computer has, including a USB thermal printer through its driver. No drawer.</td>
+        </tr>
+        <tr>
+          <td><b>Laptop + paired printer</b><br><span style="color:var(--ink-3);font-size:.85rem">Chrome or Edge, on the HTTPS address</span></td>
+          <td>Open an invoice, press <b>Connect printer</b>, pick the Bluetooth printer. Lasts for that browser tab — the web platform will not let a page silently reconnect to it later.</td>
+          <td>Straight to 58&nbsp;mm paper, <b>and the drawer opens</b>, with the same pulse the Android bridge sends.</td>
         </tr>
       </tbody>
     </table>
@@ -668,15 +689,15 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <h3>What is on a printed receipt</h3>
   <ul class="plain">
-    <li>The <b>branch receipt subtitle, address, phone and website</b> — all edited on the Branches page, so check a real print after any branch edit.</li>
-    <li>A <b>CODE128 barcode</b> of the invoice number, with the number printed underneath. Non-alphanumeric characters are stripped, so <code>INV-2024-12-20-ABC123</code> encodes as <code>INV20241220ABC123</code>.</li>
-    <li>A <b>QR code</b> holding the invoice number, the booking or rental id, the type or status, and the amount — scannable for a quick lookup.</li>
-    <li>Paper is 58&nbsp;mm. Item barcode labels print from the item detail page and are what the POS scanner reads.</li>
+    <li>A fixed <b>SUITLABS BALI</b> heading, then the <b>branch receipt subtitle, address and phone</b> — those three are edited on the Branches page, so check a real print after any branch edit.</li>
+    <li>Invoice number, date, the last eight of the booking id, DP or FULL, payment status, the customer's name, the item lines, and the totals. It closes with a thank-you and <code>suitlabs.bali</code>.</li>
+    <li><b>No barcode and no QR code.</b> The only barcode the shop prints is the <b>CODE128 item label</b> from the item detail page — that is what the POS scanner reads. Non-alphanumeric characters are stripped from it.</li>
+    <li>Paper is 58&nbsp;mm.</li>
   </ul>
 
   <div class="flag care">
     <span class="flag-t">When someone says "the printer is connected but nothing prints"</span>
-    <p>Work down this order: is the device on the shop network and can it reach the API; is the printer powered, in range, with paper; is it already claimed by <i>another</i> device; and on Android, has the bridge got a saved printer and the Nearby Devices permission. Re-pairing in Bluetooth settings fixes most of it. Older notes in the repository describe a browser-based "Print to Thermal" button — that path is no longer wired to any button, so ignore them.</p>
+    <p>Work down this order: is the device on the shop network and can it reach the API; is the printer powered, in range, with paper; is it already claimed by <i>another</i> device; and on Android, has the bridge got a saved printer and the Nearby Devices permission. Re-pairing in Bluetooth settings fixes most of it. One printer serves one device at a time — a laptop that has grabbed it with <b>Connect printer</b> is holding it from the tablet until that tab is closed or disconnected.</p>
   </div>
 </section>
 
@@ -741,7 +762,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <ol class="steps">
     <li><b>Chase the floor first.</b><span>No rental from last month may still be <code>active</code> or <code>pending</code>. Everything is completed or cancelled. This is the item most likely to be outstanding, and it is the one you cannot fix from your own desk.</span></li>
     <li><b>Confirm the expenses are complete.</b><span>Everything paid last month is recorded, dated correctly, with the right payment method. Check the recurring templates actually fired.</span></li>
-    <li><b>Post purchases and write-offs.</b><span>Anything bought for the shop; anything lost, scrapped or retired. A lost rental suit needs its write-off even though the customer already paid a replacement fee.</span></li>
+    <li><b>Post purchases and write-offs.</b><span>Anything bought for the shop, on Items or on Assets; anything scrapped or retired. Suits lost on rental are already off the books — the replacement sale did it — so check rather than re-post, or you will count the loss twice.</span></li>
     <li><b>Settle the liability side.</b><span>Payables paid, loan repayments, any dividend taken. A dividend is not an expense — record it as a dividend.</span></li>
     <li><b>Check the Google Sheets export.</b><span>The Financial Report page lists each monthly run. If one is <code>failed</code>, retry it there.</span></li>
     <li><b>Reconcile cash on hand.</b><span>Count the drawer; pull the bank and EDC statements. Compare against Cash Drawer and Bank in the Balance Sheet. Investigate any gap <b>before</b> the next step, not after.</span></li>
@@ -840,7 +861,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   </div>
   <div class="flag stop">
     <span class="flag-t">Records written to the wrong branch</span>
-    <p>The branch selector decides where writes land. In "All branches" view, writes still go to one chosen shop — never assume. This is the single most expensive habit to let slide.</p>
+    <p>The branch selector decides where writes land. "All branches" is a reading view only: a booking, sale or expense created while it is on quietly lands in <b>the last single shop that account had selected</b>, and nothing on screen says which. Pick a real shop before you record anything. This is the single most expensive habit to let slide.</p>
   </div>
   <div class="flag stop">
     <span class="flag-t">Treating the Google Sheet as the system</span>
@@ -859,8 +880,8 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     <p>Cancelled bookings, cancelled rentals and voided expenses stay visible and stop counting. Deletion removes the trail. The same applies to users: deactivate, never delete.</p>
   </div>
   <div class="flag care">
-    <span class="flag-t">A lost suit charged but never written off</span>
-    <p>The replacement fee is a sale; the missing suit is a write-off. Doing only the first leaves the shop carrying inventory it does not have, and inflates the balance sheet quietly, forever.</p>
+    <span class="flag-t">A lost suit written off twice</span>
+    <p>Charging the replacement fee on the return screen is the whole entry: it takes the money, marks the item <code>lost</code>, and relieves its value from inventory in the same posting. Adding a manual write-off afterwards understates profit and inventory for a month nobody will think to re-check. The failure to watch for is the opposite one — a suit that never came back and was never charged at all, so it still sits in stock as available.</p>
   </div>
   <div class="flag">
     <span class="flag-t">Package pricing used as a discount</span>

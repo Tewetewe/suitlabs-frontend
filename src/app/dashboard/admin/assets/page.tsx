@@ -4,8 +4,7 @@ import React, { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Landmark, Plus } from 'lucide-react';
 
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageShell } from '@/components/ui/PageShell';
+import { MetricTile, PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -13,10 +12,11 @@ import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { Badge, EmptyState, Pagination } from '@/components/ui/DataDisplay';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { apiClient } from '@/lib/api';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import type {
   AssetReport,
   CreateFixedAssetRequest,
@@ -75,6 +75,8 @@ export default function AssetsPage() {
   const [editing, setEditing] = useState<FixedAsset | null>(null);
   const [form, setForm] = useState<CreateFixedAssetRequest>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [deletingAsset, setDeletingAsset] = useState<FixedAsset | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [fixedPage, setFixedPage] = useState(1);
   const [inventoryPage, setInventoryPage] = useState(1);
 
@@ -167,14 +169,18 @@ export default function AssetsPage() {
     }
   };
 
-  const handleDelete = async (asset: FixedAsset) => {
-    if (!window.confirm(`Delete ${asset.name}? This removes it from the register.`)) return;
+  const handleDelete = async () => {
+    if (!deletingAsset) return;
     try {
-      await apiClient.deleteFixedAsset(asset.id);
+      setDeleting(true);
+      await apiClient.deleteFixedAsset(deletingAsset.id);
       success('Fixed asset deleted');
+      setDeletingAsset(null);
       await load();
     } catch {
       error('Could not delete fixed asset', 'Please try again.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -188,7 +194,7 @@ export default function AssetsPage() {
   const pagedInventory = inventoryItems.slice((inventoryPage - 1) * LIST_PAGE_SIZE, inventoryPage * LIST_PAGE_SIZE);
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Assets"
         subtitle="Inventory products plus shop equipment such as chairs. Buying price is admin-only."
@@ -206,30 +212,26 @@ export default function AssetsPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                <div className="text-xs font-semibold text-slate-500">Total assets</div>
-                <div className="mt-1 text-lg font-bold text-slate-900">
-                  {loading ? '—' : formatCurrency(report?.total_value || 0)}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                <div className="text-xs font-semibold text-slate-500">Inventory</div>
-                <div className="mt-1 text-lg font-bold text-slate-900">
-                  {loading ? '—' : formatCurrency(inventory?.total_value || 0)}
-                </div>
-                <div className="text-xs text-slate-500">
-                  {(inventory?.item_count || 0).toLocaleString()} products · {(inventory?.total_quantity || 0).toLocaleString()} units
-                </div>
-              </div>
-              <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                <div className="text-xs font-semibold text-slate-500">Fixed assets</div>
-                <div className="mt-1 text-lg font-bold text-slate-900">
-                  {loading ? '—' : formatCurrency(fixed?.total_value || 0)}
-                </div>
-                <div className="text-xs text-slate-500">
-                  {(fixed?.item_count || 0).toLocaleString()} in use · {(fixed?.total_quantity || 0).toLocaleString()} units
-                </div>
-              </div>
+              <MetricTile
+                label="Total assets"
+                loading={loading}
+                value={formatCurrencyCompact(report?.total_value || 0)}
+                title={formatCurrency(report?.total_value || 0)}
+              />
+              <MetricTile
+                label="Inventory"
+                loading={loading}
+                value={formatCurrencyCompact(inventory?.total_value || 0)}
+                title={formatCurrency(inventory?.total_value || 0)}
+                sub={`${(inventory?.item_count || 0).toLocaleString()} products · ${(inventory?.total_quantity || 0).toLocaleString()} units`}
+              />
+              <MetricTile
+                label="Fixed assets"
+                loading={loading}
+                value={formatCurrencyCompact(fixed?.total_value || 0)}
+                title={formatCurrency(fixed?.total_value || 0)}
+                sub={`${(fixed?.item_count || 0).toLocaleString()} in use · ${(fixed?.total_quantity || 0).toLocaleString()} units`}
+              />
             </div>
 
             {loadError && (
@@ -251,9 +253,11 @@ export default function AssetsPage() {
                 {(fixed?.by_category || []).length > 0 && (
                   <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {(fixed?.by_category || []).map((row) => (
-                      <div key={row.category} className="flex items-center justify-between rounded-xl bg-white/50 px-3 py-2 text-sm">
-                        <span className="text-slate-600">{categoryLabel(row.category)} · {row.quantity} units</span>
-                        <span className="font-medium text-slate-900">{formatCurrency(row.value)}</span>
+                      <div key={row.category} className="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                        <span className="min-w-0 truncate text-slate-600">{categoryLabel(row.category)} · {row.quantity} units</span>
+                        <span className="shrink-0 font-medium tabular-nums text-slate-900" title={formatCurrency(row.value)}>
+                          {formatCurrencyCompact(row.value)}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -299,7 +303,7 @@ export default function AssetsPage() {
                                 <Button variant="ghost" size="sm" onClick={() => handleDispose(asset)}>
                                   {asset.status === 'in_use' ? 'Dispose' : 'Restore'}
                                 </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDelete(asset)}>Delete</Button>
+                                <Button variant="ghost" size="sm" onClick={() => setDeletingAsset(asset)}>Delete</Button>
                               </div>
                             </td>
                           </tr>
@@ -328,9 +332,11 @@ export default function AssetsPage() {
                 ) : (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {(inventory?.by_type || []).map((row) => (
-                      <div key={row.type} className="flex items-center justify-between rounded-xl bg-white/50 px-3 py-2 text-sm">
-                        <span className="capitalize text-slate-600">{row.type} · {row.quantity} units</span>
-                        <span className="font-medium text-slate-900">{formatCurrency(row.value)}</span>
+                      <div key={row.type} className="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                        <span className="min-w-0 truncate capitalize text-slate-600">{row.type} · {row.quantity} units</span>
+                        <span className="shrink-0 font-medium tabular-nums text-slate-900" title={formatCurrency(row.value)}>
+                          {formatCurrencyCompact(row.value)}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -469,6 +475,16 @@ export default function AssetsPage() {
           />
         </form>
       </SimpleModal>
-    </DashboardLayout>
+      <ConfirmModal
+        isOpen={!!deletingAsset}
+        title="Delete fixed asset"
+        description={deletingAsset ? `Delete ${deletingAsset.name}? This removes it from the register.` : undefined}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleting}
+        onClose={() => setDeletingAsset(null)}
+        onConfirm={handleDelete}
+      />
+    </>
   );
 }

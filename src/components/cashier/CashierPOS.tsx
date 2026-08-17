@@ -468,10 +468,10 @@ export function CashierPOS() {
         if (!bookingId) throw new Error('Booking was not created');
         setDone({
           title: 'Booking charged',
-          subtitle: `Booking #${bookingId.slice(-8)}`,
+          subtitle: `Pickup is on Rentals · #${bookingId.slice(-8)}`,
           amount: paidAmount || total,
         });
-        success('Booking created', `#${bookingId.slice(-8)}`);
+        success('Booking created', 'Rental is waiting for pickup');
       }
       setCart([]);
       setCartOpen(false);
@@ -517,7 +517,7 @@ export function CashierPOS() {
         </div>
       </div>
 
-      <div className="cashier-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div className="cashier-scroll scroll-pad-keyboard min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {cart.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <Shirt className="mb-2 h-8 w-8 text-slate-300" />
@@ -806,10 +806,13 @@ export function CashierPOS() {
   return (
     <div className="cashier-shell relative flex h-full min-h-0 flex-1 bg-transparent">
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className={clsx(
+        <div
+          className={clsx(
           'shrink-0 border-b border-black/5 bg-white/40 backdrop-blur-xl',
           isPhone ? 'space-y-2 px-3 py-2' : 'space-y-3 px-3 py-3 sm:px-4'
-        )}>
+          )}
+          suppressHydrationWarning
+        >
           <div className="flex gap-2">
             <ModeTab active={mode === 'rental'} onClick={() => { setMode('rental'); setCart([]); }} icon={Shirt} label="Rental" />
             <ModeTab active={mode === 'sale'} onClick={() => { setMode('sale'); setCart([]); }} icon={ShoppingBag} label="Sale" />
@@ -822,7 +825,14 @@ export function CashierPOS() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Find suit, size, color, code…"
+                autoComplete="off"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-form-type="other"
                 className="h-12 w-full rounded-2xl glass-control pl-10 pr-3 text-base text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/40"
+                enterKeyHint="search"
+                inputMode="search"
+                suppressHydrationWarning
               />
             </div>
             <button
@@ -830,6 +840,7 @@ export function CashierPOS() {
               onClick={() => setScannerOpen(true)}
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 touch-manipulation"
               aria-label="Scan barcode"
+              suppressHydrationWarning
             >
               <QrCode className="h-5 w-5" />
             </button>
@@ -841,6 +852,7 @@ export function CashierPOS() {
                 type="button"
                 onClick={() => setDatesOpen(true)}
                 className="flex min-h-11 w-full items-center justify-between rounded-2xl glass-control px-3 text-left touch-manipulation"
+                suppressHydrationWarning
               >
                 <span className="flex items-center gap-2 text-sm font-medium text-slate-800">
                   <Calendar className="h-4 w-4 text-slate-400" />
@@ -858,7 +870,7 @@ export function CashierPOS() {
                       type="date"
                       value={rentalDate}
                       onChange={(e) => setRentalDate(e.target.value)}
-                      className="w-full bg-transparent text-sm text-slate-900 outline-none"
+                      className="w-full bg-transparent text-base text-slate-900 outline-none"
                     />
                   </div>
                 </label>
@@ -871,7 +883,7 @@ export function CashierPOS() {
                       min={rentalDate || undefined}
                       value={returnDate}
                       onChange={(e) => setReturnDate(e.target.value)}
-                      className="w-full bg-transparent text-sm text-slate-900 outline-none"
+                      className="w-full bg-transparent text-base text-slate-900 outline-none"
                     />
                   </div>
                 </label>
@@ -975,13 +987,13 @@ export function CashierPOS() {
       <div
         className={clsx(
           'flex min-h-0 flex-col glass-panel-strong',
-          isPhone
-            ? cartOpen
-              ? 'fixed inset-x-0 bottom-0 z-50 h-[min(85dvh,760px)] rounded-t-3xl shadow-2xl'
-              : 'hidden'
-            : cartOpen
-              ? 'fixed inset-x-0 bottom-0 z-40 h-[min(92dvh,920px)] rounded-t-3xl shadow-2xl lg:static lg:z-auto lg:h-full lg:w-[min(42vw,420px)] lg:shrink-0 lg:rounded-none lg:border-l lg:border-black/10 lg:shadow-none'
-              : 'hidden lg:flex lg:h-full lg:w-[min(42vw,420px)] lg:shrink-0 lg:border-l lg:border-black/10'
+            isPhone
+              ? cartOpen
+                ? 'fixed inset-x-0 z-50 h-[min(85dvh,760px)] max-h-[var(--vv-height,100dvh)] rounded-t-3xl shadow-2xl bottom-[var(--keyboard-inset,0px)]'
+                : 'hidden'
+              : cartOpen
+                ? 'fixed inset-x-0 z-40 h-[min(92dvh,920px)] max-h-[var(--vv-height,100dvh)] rounded-t-3xl shadow-2xl bottom-[var(--keyboard-inset,0px)] lg:static lg:z-auto lg:h-full lg:w-[min(42vw,420px)] lg:shrink-0 lg:rounded-none lg:border-l lg:border-black/10 lg:shadow-none lg:bottom-auto lg:max-h-none'
+                : 'hidden lg:flex lg:h-full lg:w-[min(42vw,420px)] lg:shrink-0 lg:border-l lg:border-black/10'
         )}
       >
         {checkoutPanel}
@@ -1003,8 +1015,8 @@ export function CashierPOS() {
           className={clsx(
             'fixed z-30 flex min-h-14 items-center justify-between rounded-2xl bg-indigo-600 px-4 text-white shadow-xl shadow-indigo-600/20 touch-manipulation',
             isPhone
-              ? 'inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-3'
-              : 'inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden'
+              ? 'keyboard-hide inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-3'
+              : 'keyboard-hide inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden'
           )}
         >
           <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-indigo-500 text-xs font-bold">

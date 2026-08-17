@@ -2,10 +2,9 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { FieldGroup, Input, NumberInput, Textarea } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import ClientOnly from '@/components/ClientOnly';
@@ -22,6 +21,7 @@ import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
 import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { BookingDetailsModal } from '@/components/modals/BookingDetailsModal';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, Pagination, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
@@ -83,7 +83,7 @@ function bookingRentalCaption(booking: Booking) {
 
 export default function BookingsPage() {
   const { user } = useAuth();
-  const { warning } = useToast();
+  const { warning, success, error: toastError } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<BookingFilters>({});
@@ -104,6 +104,8 @@ export default function BookingsPage() {
   const [downPayment, setDownPayment] = useState(0);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  const [payingBooking, setPayingBooking] = useState<Booking | null>(null);
+  const [paying, setPaying] = useState(false);
   // Previous static options states no longer used; keeping for future caching if needed
   const [bookingForm, setBookingForm] = useState<{
     customer_id: string;
@@ -252,7 +254,7 @@ export default function BookingsPage() {
     try {
       setCreating(true);
       if (!user?.id) {
-        alert('User not authenticated. Please login again.');
+        toastError('Please sign in again', 'Your session expired.');
         return;
       }
 
@@ -568,58 +570,43 @@ export default function BookingsPage() {
       setShowInvoiceModal(true);
     } catch (error) {
       console.error('Failed to generate invoice:', error);
-      alert('Failed to generate invoice. Please try again.');
+      toastError('Could not generate invoice', 'Please try again.');
     }
   };
 
-  const handleMakeFullPayment = async (bookingId: string) => {
+  const payingRemaining = payingBooking
+    ? payingBooking.remaining_amount || Math.max(0, ((payingBooking.total_amount || 0) - (payingBooking.discount_amount || 0)) - (payingBooking.paid_amount || 0))
+    : 0;
+
+  const submitFullPayment = async () => {
+    if (!payingBooking) return;
+    if (payingRemaining <= 0) {
+      warning('Already paid', 'This booking is already fully paid.');
+      setPayingBooking(null);
+      return;
+    }
     try {
-      // Find the booking to get the final amount
-      const booking = bookings.find(b => b.id === bookingId);
-      if (!booking) {
-        throw new Error('Booking not found');
-      }
-
-      // Calculate the full payment amount (final amount after discount)
-      const finalAmount = (booking.total_amount || 0) - (booking.discount_amount || 0);
-      
-      // Confirm the payment
-      const confirmed = confirm(
-        `Make full payment of ${formatCurrency(finalAmount)}?\n\n` +
-        `Current paid: ${formatCurrency(booking.paid_amount || 0)}\n` +
-        `Remaining: ${formatCurrency(booking.remaining_amount || 0)}`
-      );
-      
-      if (!confirmed) return;
-
-      const remaining = booking.remaining_amount || Math.max(0, finalAmount - (booking.paid_amount || 0));
-      if (remaining <= 0) {
-        alert('This booking is already fully paid.');
-        return;
-      }
+      setPaying(true);
       await apiClient.addPayment(
-        bookingId,
-        remaining,
-        booking.payment_method || 'cash',
+        payingBooking.id,
+        payingRemaining,
+        payingBooking.payment_method || 'cash',
         new Date().toISOString().slice(0, 10)
       );
-
-      // Refresh the bookings list
       await loadBookings();
-      
-      // Show success message
-      alert('Full payment completed successfully!');
-      
-    } catch (error) {
-      console.error('Failed to make full payment:', error);
-      alert('Failed to make full payment. Please try again.');
+      success('Payment recorded', formatCurrency(payingRemaining));
+      setPayingBooking(null);
+    } catch {
+      toastError('Payment failed', 'Please try again.');
+    } finally {
+      setPaying(false);
     }
   };
 
   // Rental creation is handled exclusively from the Rentals menu for UI simplicity
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Bookings"
         subtitle="Manage customer bookings and reservations"
@@ -725,7 +712,7 @@ export default function BookingsPage() {
                           </OverflowMenuItem>
                         )}
                         {booking.payment_status === 'partial' && booking.remaining_amount > 0 && (
-                          <OverflowMenuItem icon={<CreditCard className="h-4 w-4 text-slate-400" />} onClick={() => handleMakeFullPayment(booking.id)}>
+                          <OverflowMenuItem icon={<CreditCard className="h-4 w-4 text-slate-400" />} onClick={() => setPayingBooking(booking)}>
                             Collect balance
                           </OverflowMenuItem>
                         )}
@@ -752,155 +739,40 @@ export default function BookingsPage() {
           title="New Booking"
           onClose={() => setIsCreateModalOpen(false)}
         >
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <AutoCompleteSelect
-                label="Customer"
-                value={bookingForm.customer_id}
-                onChange={(val) => updateBookingField('customer_id', val)}
-                fetchOptions={fetchCustomerOptions}
-                error={formErrors.customer_id}
-                placeholder="Search customers (2+ chars)"
-              />
-              <Input label="Booking Date" type="date" value={bookingForm.booking_date} onChange={(e) => updateBookingField('booking_date', e.target.value)} error={formErrors.booking_date} />
-              <Input label="Appointment Date" type="date" value={bookingForm.appointment_date || ''} onChange={(e) => updateBookingField('appointment_date', e.target.value)} />
-              <Select
-                searchable={false}
-                label="Booking Guarantee"
-                value={bookingForm.booking_guarantee}
-                onChange={(e) => updateBookingField('booking_guarantee', e.target.value)}
-                options={[
-                  { value: 'KTP', label: 'KTP' },
-                  { value: 'Passport', label: 'Passport' },
-                  { value: 'Student ID', label: 'Student ID' },
-                  { value: 'Other', label: 'Other' },
-                ]}
-                error={formErrors.booking_guarantee}
-              />
-              {bookingForm.booking_guarantee === 'Other' && (
-                <Input
-                  label="Other Guarantee"
-                  value={bookingForm.booking_guarantee_other || ''}
-                  onChange={(e) => updateBookingField('booking_guarantee_other', e.target.value)}
-                  error={formErrors.booking_guarantee}
-                  placeholder="Enter guarantee type"
-                />
-              )}
-              <Select
-                searchable={false}
-                label="Occasion"
-                value={bookingForm.institution}
-                onChange={(e) => updateBookingField('institution', e.target.value)}
-                options={[
-                  { value: '', label: 'Unspecified' },
-                  ...BOOKING_OCCASION_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
-                ]}
-                error={formErrors.institution}
-              />
-              <Input label="Notes" value={bookingForm.notes || ''} onChange={(e) => updateBookingField('notes', e.target.value)} />
-              <Select
-                label="Package (optional)"
-                value={selectedPackageId}
-                onChange={(e) => handleSelectPackage(e.target.value)}
-                options={packageOptions.map(o => ({ value: o.value, label: o.label }))}
-              />
-              <Select searchable={false} label="Status" value={bookingForm.status} onChange={(e) => updateBookingField('status', e.target.value)} options={[
-                { value: 'pending', label: 'Pending' },
-                { value: 'confirmed', label: 'Confirmed' },
-                { value: 'active', label: 'Active' },
-                { value: 'completed', label: 'Completed' },
-                { value: 'cancelled', label: 'Cancelled' },
-              ]} />
-              <Select searchable={false} label="Payment Status" value={bookingForm.payment_status} onChange={(e) => updateBookingField('payment_status', e.target.value)} options={[
-                { value: 'pending', label: 'Pending' },
-                { value: 'partial', label: 'Partial' },
-                { value: 'completed', label: 'Completed' },
-              ]} />
-              <Select
-                searchable={false}
-                label="Payment Method"
-                value={bookingForm.payment_method}
-                onChange={(e) => updateBookingField('payment_method', e.target.value)}
-                options={[...BOOKING_PAYMENT_METHOD_OPTIONS]}
-              />
-              <Input label="Discount Code (optional)" value={discountCode} onChange={(e) => setDiscountCode(e.target.value)} placeholder="Enter code" />
-              <CurrencyInput label="Down Payment" value={downPayment} onChange={setDownPayment} />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="font-medium">Items</h4>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')}>Add trousers</Button>
-                  {selectedPackageId && (
-                    <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)}>Add add-on</Button>
-                  )}
-                  <Button size="sm" onClick={() => addItemLine()}>Add Item</Button>
-                </div>
-              </div>
-              <p className="text-xs text-gray-500">
-                Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair.
-                {selectedPackageId ? ' Mark extras as add-ons to charge them on top of the package.' : ''}
-              </p>
-              {formErrors.items && <div className="text-sm text-red-600">{formErrors.items}</div>}
-              <div className="space-y-3">
-                {bookingForm.items.map((it, idx) => {
-                  const packageLocked = !!selectedPackageId && !it.is_addon;
-                  return (
-                  <div key={idx} className="space-y-1">
-                    <div className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-4">
-                      <AutoCompleteSelect
-                        label={it.catalogue === 'trousers' ? 'Trousers' : it.is_addon ? 'Add-on' : 'Item'}
-                        value={it.item_id}
-                        onChange={(val) => updateItemField(idx, 'item_id', val)}
-                        fetchOptions={it.catalogue === 'trousers' ? fetchTrousersOptions : fetchItemOptions}
-                        placeholder={it.catalogue === 'trousers' ? 'Search trousers (2+ chars)' : 'Search items (2+ chars)'}
-                      />
-                    </div>
-                    <div className="col-span-2"><Input label="Qty" type="number" value={String(it.quantity)} onChange={(e) => updateItemField(idx, 'quantity', Number(e.target.value))} error={formErrors[`item_qty_${idx}`]} /></div>
-                    <div className="col-span-3"><CurrencyInput label="Unit Price" value={it.unit_price} onChange={(n) => updateItemField(idx, 'unit_price', n)} disabled={packageLocked} /></div>
-                    <div className="col-span-2"><CurrencyInput label="Discount" value={it.discount_amount || 0} onChange={(n) => updateItemField(idx, 'discount_amount', n)} disabled={packageLocked} /></div>
-                    <div className="col-span-1 flex justify-end"><Button variant="ghost" size="sm" onClick={() => removeItemLine(idx)}>X</Button></div>
-                    </div>
-                    {selectedPackageId && (
-                      <label className="flex items-center gap-2 text-xs text-gray-600">
-                        <input
-                          type="checkbox"
-                          checked={!!it.is_addon}
-                          onChange={(e) => updateItemField(idx, 'is_addon', e.target.checked)}
-                        />
-                        Add-on — charge this line on top of the package
-                      </label>
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-sm text-gray-700">
-              <div>
-                {selectedPackageId ? (
-                  <>
-                    Package: {formatCurrency(packagePrice)}
-                    {addonSubtotal > 0 ? ` + Add-ons: ${formatCurrency(addonSubtotal)}` : ''}
-                    {bookingDiscount > 0 ? ` | Discount: ${formatCurrency(bookingDiscount)}` : ''}
-                    {' '}· Total: {formatCurrency(bookingFinal)}
-                  </>
-                ) : (
-                  <>Total: {formatCurrency(bookingTotal)} | Discount: {formatCurrency(bookingDiscount)} | Final: {formatCurrency(bookingFinal)}</>
-                )}
-                <br />
-                Down Payment: {formatCurrency(downPayment)} | Remaining: {formatCurrency(remainingAmount)}
-              </div>
-              <div className="flex gap-2">
-                <Button variant="ghost" onClick={() => setIsCreateModalOpen(false)}>Cancel</Button>
-                <Button onClick={submitCreateBooking} loading={creating}>Create</Button>
-              </div>
-            </div>
-            {formErrors.submit && <div className="text-sm text-red-600">{formErrors.submit}</div>}
-          </div>
+          <BookingFormFields
+            bookingForm={bookingForm}
+            formErrors={formErrors}
+            selectedPackageId={selectedPackageId}
+            packageOptions={packageOptions}
+            discountCode={discountCode}
+            downPayment={downPayment}
+            locked={false}
+            fetchCustomerOptions={fetchCustomerOptions}
+            fetchItemOptions={fetchItemOptions}
+            fetchTrousersOptions={fetchTrousersOptions}
+            updateBookingField={updateBookingField}
+            updateItemField={updateItemField}
+            addItemLine={addItemLine}
+            removeItemLine={removeItemLine}
+            handleSelectPackage={handleSelectPackage}
+            setDiscountCode={setDiscountCode}
+            setDownPayment={setDownPayment}
+          />
+          <BookingFormTotals
+            selectedPackageId={selectedPackageId}
+            packagePrice={packagePrice}
+            addonSubtotal={addonSubtotal}
+            bookingDiscount={bookingDiscount}
+            bookingTotal={bookingTotal}
+            bookingFinal={bookingFinal}
+            downPayment={downPayment}
+            remainingAmount={remainingAmount}
+            submitError={formErrors.submit}
+            loading={creating}
+            submitLabel="Create"
+            onCancel={() => setIsCreateModalOpen(false)}
+            onSubmit={submitCreateBooking}
+          />
         </SimpleModal>
 
         {/* Edit Booking Modal */}
@@ -909,129 +781,40 @@ export default function BookingsPage() {
           title="Edit Booking"
           onClose={() => { setIsEditModalOpen(false); setActiveBooking(null); }}
         >
-          <div className="space-y-4">
-            {/* Reuse same form controls as create */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <AutoCompleteSelect label="Customer" value={bookingForm.customer_id} onChange={(val) => updateBookingField('customer_id', val)} fetchOptions={fetchCustomerOptions} error={formErrors.customer_id} placeholder="Search customers (2+ chars)" />
-              <Input label="Booking Date" type="date" value={bookingForm.booking_date} onChange={(e) => updateBookingField('booking_date', e.target.value)} error={formErrors.booking_date} />
-              <Input label="Appointment Date" type="date" value={bookingForm.appointment_date || ''} onChange={(e) => updateBookingField('appointment_date', e.target.value)} />
-              <Select
-                searchable={false}
-                label="Booking Guarantee"
-                value={bookingForm.booking_guarantee}
-                onChange={(e) => updateBookingField('booking_guarantee', e.target.value)}
-                options={[
-                  { value: 'KTP', label: 'KTP' },
-                  { value: 'Passport', label: 'Passport' },
-                  { value: 'Student ID', label: 'Student ID' },
-                  { value: 'Other', label: 'Other' },
-                ]}
-                error={formErrors.booking_guarantee}
-              />
-              {bookingForm.booking_guarantee === 'Other' && (
-                <Input
-                  label="Other Guarantee"
-                  value={bookingForm.booking_guarantee_other || ''}
-                  onChange={(e) => updateBookingField('booking_guarantee_other', e.target.value)}
-                  error={formErrors.booking_guarantee}
-                  placeholder="Enter guarantee type"
-                />
-              )}
-              <Select
-                searchable={false}
-                label="Occasion"
-                value={bookingForm.institution}
-                onChange={(e) => updateBookingField('institution', e.target.value)}
-                options={[
-                  { value: '', label: 'Unspecified' },
-                  ...BOOKING_OCCASION_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
-                ]}
-                error={formErrors.institution}
-              />
-              <Input label="Notes" value={bookingForm.notes || ''} onChange={(e) => updateBookingField('notes', e.target.value)} />
-              <Select label="Package (optional)" value={selectedPackageId} onChange={(e) => handleSelectPackage(e.target.value)} options={packageOptions.map(o => ({ value: o.value, label: o.label }))} disabled={activeBooking?.payment_status === 'completed'} />
-              <Select searchable={false} label="Status" value={bookingForm.status} onChange={(e) => updateBookingField('status', e.target.value)} options={[{ value: 'pending', label: 'Pending' }, { value: 'confirmed', label: 'Confirmed' }, { value: 'active', label: 'Active' }, { value: 'completed', label: 'Completed' }, { value: 'cancelled', label: 'Cancelled' }]} disabled={activeBooking?.payment_status === 'completed'} />
-              <Select searchable={false} label="Payment Status" value={bookingForm.payment_status} onChange={(e) => updateBookingField('payment_status', e.target.value)} options={[{ value: 'pending', label: 'Pending' }, { value: 'partial', label: 'Partial' }, { value: 'completed', label: 'Completed' }]} disabled={activeBooking?.payment_status === 'completed'} />
-              <Select
-                searchable={false}
-                label="Payment Method"
-                value={bookingForm.payment_method}
-                onChange={(e) => updateBookingField('payment_method', e.target.value)}
-                options={[...BOOKING_PAYMENT_METHOD_OPTIONS]}
-                disabled={activeBooking?.payment_status === 'completed'}
-              />
-              <Input label="Discount Code (optional)" value={discountCode} onChange={(e) => setDiscountCode(e.target.value)} placeholder="Enter code" disabled={activeBooking?.payment_status === 'completed'} />
-              <CurrencyInput label="Down Payment" value={downPayment} onChange={setDownPayment} disabled={activeBooking?.payment_status === 'completed'} />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="font-medium">Items</h4>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={activeBooking?.payment_status === 'completed'}>Add trousers</Button>
-                  {selectedPackageId && (
-                    <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={activeBooking?.payment_status === 'completed'}>Add add-on</Button>
-                  )}
-                  <Button size="sm" onClick={() => addItemLine()} disabled={activeBooking?.payment_status === 'completed'}>Add Item</Button>
-                </div>
-              </div>
-              <p className="text-xs text-gray-500">
-                Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair.
-                {selectedPackageId ? ' Mark extras as add-ons to charge them on top of the package.' : ''}
-              </p>
-              {formErrors.items && <div className="text-sm text-red-600">{formErrors.items}</div>}
-              <div className="space-y-3">
-                {bookingForm.items.map((it, idx) => {
-                  const locked = activeBooking?.payment_status === 'completed';
-                  const packageLocked = !!selectedPackageId && !it.is_addon;
-                  return (
-                  <div key={idx} className="space-y-1">
-                    <div className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-4"><AutoCompleteSelect label={it.catalogue === 'trousers' ? 'Trousers' : it.is_addon ? 'Add-on' : 'Item'} value={it.item_id} onChange={(val) => { if (!locked) updateItemField(idx, 'item_id', val); }} fetchOptions={it.catalogue === 'trousers' ? fetchTrousersOptions : fetchItemOptions} placeholder={it.catalogue === 'trousers' ? 'Search trousers (2+ chars)' : 'Search items (2+ chars)'} /></div>
-                    <div className="col-span-2"><Input label="Qty" type="number" value={String(it.quantity)} onChange={(e) => updateItemField(idx, 'quantity', Number(e.target.value))} disabled={locked} /></div>
-                    <div className="col-span-3"><CurrencyInput label="Unit Price" value={it.unit_price} onChange={(n) => updateItemField(idx, 'unit_price', n)} disabled={packageLocked || locked} /></div>
-                    <div className="col-span-2"><CurrencyInput label="Discount" value={it.discount_amount || 0} onChange={(n) => updateItemField(idx, 'discount_amount', n)} disabled={packageLocked || locked} /></div>
-                    <div className="col-span-1 flex justify-end"><Button variant="ghost" size="sm" onClick={() => removeItemLine(idx)}>X</Button></div>
-                    </div>
-                    {selectedPackageId && (
-                      <label className="flex items-center gap-2 text-xs text-gray-600">
-                        <input
-                          type="checkbox"
-                          checked={!!it.is_addon}
-                          disabled={locked}
-                          onChange={(e) => updateItemField(idx, 'is_addon', e.target.checked)}
-                        />
-                        Add-on — charge this line on top of the package
-                      </label>
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-sm text-gray-700">
-              <div>
-                {selectedPackageId ? (
-                  <>
-                    Package: {formatCurrency(packagePrice)}
-                    {addonSubtotal > 0 ? ` + Add-ons: ${formatCurrency(addonSubtotal)}` : ''}
-                    {bookingDiscount > 0 ? ` | Discount: ${formatCurrency(bookingDiscount)}` : ''}
-                    {' '}· Total: {formatCurrency(bookingFinal)}
-                  </>
-                ) : (
-                  <>Total: {formatCurrency(bookingTotal)} | Discount: {formatCurrency(bookingDiscount)} | Final: {formatCurrency(bookingFinal)}</>
-                )}
-                <br />
-                Down Payment: {formatCurrency(downPayment)} | Remaining: {formatCurrency(remainingAmount)}
-              </div>
-              <div className="flex gap-2">
-                <Button variant="ghost" onClick={() => { setIsEditModalOpen(false); setActiveBooking(null); }}>Cancel</Button>
-                <Button onClick={submitEditBooking} loading={creating}>Save</Button>
-              </div>
-            </div>
-            {formErrors.submit && <div className="text-sm text-red-600">{formErrors.submit}</div>}
-          </div>
+          <BookingFormFields
+            bookingForm={bookingForm}
+            formErrors={formErrors}
+            selectedPackageId={selectedPackageId}
+            packageOptions={packageOptions}
+            discountCode={discountCode}
+            downPayment={downPayment}
+            locked={activeBooking?.payment_status === 'completed'}
+            fetchCustomerOptions={fetchCustomerOptions}
+            fetchItemOptions={fetchItemOptions}
+            fetchTrousersOptions={fetchTrousersOptions}
+            updateBookingField={updateBookingField}
+            updateItemField={updateItemField}
+            addItemLine={addItemLine}
+            removeItemLine={removeItemLine}
+            handleSelectPackage={handleSelectPackage}
+            setDiscountCode={setDiscountCode}
+            setDownPayment={setDownPayment}
+          />
+          <BookingFormTotals
+            selectedPackageId={selectedPackageId}
+            packagePrice={packagePrice}
+            addonSubtotal={addonSubtotal}
+            bookingDiscount={bookingDiscount}
+            bookingTotal={bookingTotal}
+            bookingFinal={bookingFinal}
+            downPayment={downPayment}
+            remainingAmount={remainingAmount}
+            submitError={formErrors.submit}
+            loading={creating}
+            submitLabel="Save"
+            onCancel={() => { setIsEditModalOpen(false); setActiveBooking(null); }}
+            onSubmit={submitEditBooking}
+          />
         </SimpleModal>
 
         <BookingDetailsModal
@@ -1053,7 +836,7 @@ export default function BookingsPage() {
           }}
           onCollectBalance={
             activeBooking && activeBooking.payment_status === 'partial' && (activeBooking.remaining_amount || 0) > 0
-              ? () => { void handleMakeFullPayment(activeBooking.id); }
+              ? () => setPayingBooking(activeBooking)
               : undefined
           }
         />
@@ -1075,7 +858,357 @@ export default function BookingsPage() {
           }}
           invoice={invoiceData}
         />
+        <ConfirmModal
+          isOpen={!!payingBooking}
+          title="Record full payment"
+          confirmLabel="Take payment"
+          loading={paying}
+          onClose={() => setPayingBooking(null)}
+          onConfirm={submitFullPayment}
+          description={
+            payingBooking ? (
+              <div className="space-y-2 text-sm text-slate-600">
+                <p>Take the remaining balance on this booking?</p>
+                <div className="rounded-xl bg-slate-50 px-3 py-2">
+                  <div className="flex justify-between"><span>Paid</span><span className="tabular-nums">{formatCurrency(payingBooking.paid_amount || 0)}</span></div>
+                  <div className="flex justify-between font-semibold text-slate-900"><span>Remaining</span><span className="tabular-nums">{formatCurrency(payingRemaining)}</span></div>
+                </div>
+              </div>
+            ) : undefined
+          }
+        />
       </PageShell>
-    </DashboardLayout>
+    </>
+  );
+}
+
+type BookingFormState = {
+  customer_id: string;
+  booking_date: string;
+  appointment_date?: string;
+  booking_guarantee: string;
+  booking_guarantee_other?: string;
+  institution: BookingInstitution | '';
+  notes?: string;
+  status: Booking['status'];
+  payment_status: Booking['payment_status'];
+  payment_method: NonNullable<Booking['payment_method']>;
+  items: BookingFormItem[];
+};
+
+function BookingFormFields({
+  bookingForm,
+  formErrors,
+  selectedPackageId,
+  packageOptions,
+  discountCode,
+  downPayment,
+  locked,
+  fetchCustomerOptions,
+  fetchItemOptions,
+  fetchTrousersOptions,
+  updateBookingField,
+  updateItemField,
+  addItemLine,
+  removeItemLine,
+  handleSelectPackage,
+  setDiscountCode,
+  setDownPayment,
+}: {
+  bookingForm: BookingFormState;
+  formErrors: Record<string, string>;
+  selectedPackageId: string;
+  packageOptions: Array<{ value: string; label: string; price: number }>;
+  discountCode: string;
+  downPayment: number;
+  locked?: boolean;
+  fetchCustomerOptions: (query: string) => Promise<{ value: string; label: string }[]>;
+  fetchItemOptions: (query: string) => Promise<{ value: string; label: string }[]>;
+  fetchTrousersOptions: (query: string) => Promise<{ value: string; label: string }[]>;
+  updateBookingField: (field: keyof BookingFormState, value: string) => void;
+  updateItemField: (index: number, field: keyof BookingFormItem, value: string | number | boolean) => void;
+  addItemLine: (catalogue?: 'any' | 'trousers', isAddon?: boolean) => void;
+  removeItemLine: (index: number) => void;
+  handleSelectPackage: (pkgId: string) => void;
+  setDiscountCode: (code: string) => void;
+  setDownPayment: (n: number) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <FieldGroup title="Customer">
+        <AutoCompleteSelect
+          label="Customer"
+          value={bookingForm.customer_id}
+          onChange={(val) => updateBookingField('customer_id', val)}
+          fetchOptions={fetchCustomerOptions}
+          error={formErrors.customer_id}
+          placeholder="Search name or phone"
+        />
+      </FieldGroup>
+
+      <FieldGroup title="Dates">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input
+            label="Booking date"
+            type="date"
+            value={bookingForm.booking_date}
+            onChange={(e) => updateBookingField('booking_date', e.target.value)}
+            error={formErrors.booking_date}
+          />
+          <Input
+            label="Appointment date"
+            type="date"
+            value={bookingForm.appointment_date || ''}
+            onChange={(e) => updateBookingField('appointment_date', e.target.value)}
+          />
+        </div>
+      </FieldGroup>
+
+      <FieldGroup title="Items">
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={locked}>Add trousers</Button>
+          {selectedPackageId && (
+            <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={locked}>Add add-on</Button>
+          )}
+          <Button size="sm" onClick={() => addItemLine()} disabled={locked}>Add item</Button>
+        </div>
+        <p className="text-xs text-slate-500">
+          Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair.
+          {selectedPackageId ? ' Mark extras as add-ons to charge them on top of the package.' : ''}
+        </p>
+        {formErrors.items && <div className="text-sm text-red-600">{formErrors.items}</div>}
+        <div className="space-y-3">
+          {bookingForm.items.map((it, idx) => {
+            const packageLocked = !!selectedPackageId && !it.is_addon;
+            return (
+              <div key={idx} className="space-y-3 rounded-xl border border-black/10 bg-white p-3">
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <AutoCompleteSelect
+                      label={it.catalogue === 'trousers' ? 'Trousers' : it.is_addon ? 'Add-on' : 'Item'}
+                      value={it.item_id}
+                      onChange={(val) => { if (!locked) updateItemField(idx, 'item_id', val); }}
+                      fetchOptions={it.catalogue === 'trousers' ? fetchTrousersOptions : fetchItemOptions}
+                      placeholder={it.catalogue === 'trousers' ? 'Search trousers' : 'Search items'}
+                    />
+                  </div>
+                  <Button variant="ghost" size="sm" className="mt-7 shrink-0" onClick={() => removeItemLine(idx)} disabled={locked}>
+                    Remove
+                  </Button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <NumberInput
+                    label="Qty"
+                    min={1}
+                    value={it.quantity}
+                    onChange={(n) => updateItemField(idx, 'quantity', n)}
+                    error={formErrors[`item_qty_${idx}`]}
+                    disabled={locked}
+                  />
+                  <CurrencyInput
+                    label="Price"
+                    value={it.unit_price}
+                    onChange={(n) => updateItemField(idx, 'unit_price', n)}
+                    disabled={packageLocked || locked}
+                  />
+                  <CurrencyInput
+                    label="Discount"
+                    value={it.discount_amount || 0}
+                    onChange={(n) => updateItemField(idx, 'discount_amount', n)}
+                    disabled={packageLocked || locked}
+                  />
+                </div>
+                {selectedPackageId && (
+                  <label className="flex min-h-11 items-center gap-2 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={!!it.is_addon}
+                      disabled={locked}
+                      onChange={(e) => updateItemField(idx, 'is_addon', e.target.checked)}
+                    />
+                    Add-on — charge on top of the package
+                  </label>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </FieldGroup>
+
+      <FieldGroup title="Payment">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Select
+            searchable={false}
+            label="Payment method"
+            value={bookingForm.payment_method}
+            onChange={(e) => updateBookingField('payment_method', e.target.value)}
+            options={[...BOOKING_PAYMENT_METHOD_OPTIONS]}
+            disabled={locked}
+          />
+          <CurrencyInput
+            label="Down payment"
+            value={downPayment}
+            onChange={setDownPayment}
+            disabled={locked}
+          />
+          <Input
+            label="Discount code"
+            value={discountCode}
+            onChange={(e) => setDiscountCode(e.target.value)}
+            placeholder="Optional"
+            disabled={locked}
+          />
+          <Select
+            label="Package"
+            value={selectedPackageId}
+            onChange={(e) => handleSelectPackage(e.target.value)}
+            options={packageOptions.map((o) => ({ value: o.value, label: o.label }))}
+            disabled={locked}
+          />
+        </div>
+      </FieldGroup>
+
+      <FieldGroup title="Details">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Select
+            searchable={false}
+            label="Guarantee"
+            value={bookingForm.booking_guarantee}
+            onChange={(e) => updateBookingField('booking_guarantee', e.target.value)}
+            options={[
+              { value: 'KTP', label: 'KTP' },
+              { value: 'Passport', label: 'Passport' },
+              { value: 'Student ID', label: 'Student ID' },
+              { value: 'Other', label: 'Other' },
+            ]}
+            error={formErrors.booking_guarantee}
+          />
+          {bookingForm.booking_guarantee === 'Other' && (
+            <Input
+              label="Other guarantee"
+              value={bookingForm.booking_guarantee_other || ''}
+              onChange={(e) => updateBookingField('booking_guarantee_other', e.target.value)}
+              error={formErrors.booking_guarantee}
+              placeholder="Enter guarantee type"
+            />
+          )}
+          <Select
+            searchable={false}
+            label="Occasion"
+            value={bookingForm.institution}
+            onChange={(e) => updateBookingField('institution', e.target.value)}
+            options={[
+              { value: '', label: 'Unspecified' },
+              ...BOOKING_OCCASION_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
+            ]}
+            error={formErrors.institution}
+          />
+          <Select
+            searchable={false}
+            label="Status"
+            value={bookingForm.status}
+            onChange={(e) => updateBookingField('status', e.target.value)}
+            options={[
+              { value: 'pending', label: 'Pending' },
+              { value: 'confirmed', label: 'Confirmed' },
+              { value: 'active', label: 'Active' },
+              { value: 'completed', label: 'Completed' },
+              { value: 'cancelled', label: 'Cancelled' },
+            ]}
+            disabled={locked}
+          />
+          <Select
+            searchable={false}
+            label="Payment status"
+            value={bookingForm.payment_status}
+            onChange={(e) => updateBookingField('payment_status', e.target.value)}
+            options={[
+              { value: 'pending', label: 'Pending' },
+              { value: 'partial', label: 'Partial' },
+              { value: 'completed', label: 'Completed' },
+            ]}
+            disabled={locked}
+          />
+        </div>
+        <Textarea
+          label="Notes"
+          value={bookingForm.notes || ''}
+          onChange={(e) => updateBookingField('notes', e.target.value)}
+          placeholder="Optional"
+          rows={2}
+        />
+      </FieldGroup>
+    </div>
+  );
+}
+
+function BookingFormTotals({
+  selectedPackageId,
+  packagePrice,
+  addonSubtotal,
+  bookingDiscount,
+  bookingTotal,
+  bookingFinal,
+  downPayment,
+  remainingAmount,
+  submitError,
+  loading,
+  submitLabel,
+  onCancel,
+  onSubmit,
+}: {
+  selectedPackageId: string;
+  packagePrice: number;
+  addonSubtotal: number;
+  bookingDiscount: number;
+  bookingTotal: number;
+  bookingFinal: number;
+  downPayment: number;
+  remainingAmount: number;
+  submitError?: string;
+  loading: boolean;
+  submitLabel: string;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="mt-6 space-y-3 border-t border-black/5 pt-4">
+      <div className="space-y-1 text-sm text-slate-600">
+        {selectedPackageId ? (
+          <div className="flex justify-between">
+            <span>Package{addonSubtotal > 0 ? ' + add-ons' : ''}</span>
+            <span className="tabular-nums">{formatCurrency(packagePrice + addonSubtotal)}</span>
+          </div>
+        ) : (
+          <div className="flex justify-between">
+            <span>Items</span>
+            <span className="tabular-nums">{formatCurrency(bookingTotal)}</span>
+          </div>
+        )}
+        {bookingDiscount > 0 && (
+          <div className="flex justify-between">
+            <span>Discount</span>
+            <span className="tabular-nums">−{formatCurrency(bookingDiscount)}</span>
+          </div>
+        )}
+        <div className="flex justify-between font-semibold text-slate-900">
+          <span>Total</span>
+          <span className="tabular-nums">{formatCurrency(bookingFinal)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Down payment</span>
+          <span className="tabular-nums">{formatCurrency(downPayment)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Remaining</span>
+          <span className="tabular-nums">{formatCurrency(remainingAmount)}</span>
+        </div>
+      </div>
+      {submitError && <div className="text-sm text-red-600">{submitError}</div>}
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button onClick={onSubmit} loading={loading}>{submitLabel}</Button>
+      </div>
+    </div>
   );
 }

@@ -3,7 +3,6 @@
 import Link from 'next/link';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -26,13 +25,14 @@ const SimpleBarcodeScanner = dynamic(() => import('@/components/ui/SimpleBarcode
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 import { Item, ItemFilters, CreateItemRequest, Category, ItemFacets } from '@/types';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import { facetOptions } from '@/lib/select-options';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, Pagination, Skeleton } from '@/components/ui/DataDisplay';
 import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck, ArrowRightLeft, MoreHorizontal } from 'lucide-react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
+import SimpleModal from '@/components/modals/SimpleModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBranch } from '@/contexts/BranchContext';
 
@@ -327,56 +327,57 @@ export default function ItemsPage() {
   );
 
   const ItemCard = ({ item }: { item: Item }) => (
-    <Card padding="sm" className="relative z-0 h-full [&:has(details[open])]:z-30">
-      <CardContent>
-        <div className="flex items-center gap-3">
-          <Link
-            href={`/dashboard/items/${item.id}`}
-            className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-20 sm:w-20"
-          >
-            <SafeImage
-              src={item.thumbnail_url}
-              alt={item.name}
-              width={80}
-              height={80}
-              className="h-full w-full object-cover"
-              fallback={<Package className="h-7 w-7 text-slate-300" />}
-            />
-            {viewingAll && item.branch?.name && (
-              <span className="absolute bottom-1 left-1 max-w-[90%] truncate rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white">
-                {item.branch.name}
-              </span>
-            )}
-          </Link>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <Link
-                href={`/dashboard/items/${item.id}`}
-                className="min-w-0 line-clamp-2 text-sm font-semibold leading-snug text-slate-900 hover:text-indigo-700"
-              >
-                {item.name}
-              </Link>
-              <ItemActions item={item} />
-            </div>
-            <p className="mt-0.5 truncate text-xs text-slate-500">{itemFacts(item)}</p>
-            <div className="mt-1.5 flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold tabular-nums text-slate-900">
-                {formatCurrency(item.one_day_price)}
-                <span className="text-[11px] font-medium text-slate-400">/day</span>
-              </p>
-              <Badge variant={itemStatusVariant(item.status)} dot className="capitalize">
-                {item.status}
-              </Badge>
-            </div>
-            {item.code && (
-              <p className="mt-0.5 truncate font-mono text-[10px] tracking-wide text-slate-400" title={item.code}>
-                {item.code}
-              </p>
-            )}
-          </div>
+    <Card padding="none" className="relative z-0 h-full overflow-hidden [&:has(details[open])]:z-30">
+      <div className="relative flex aspect-square items-center justify-center bg-slate-100">
+        <SafeImage
+          src={item.thumbnail_url}
+          alt={item.name}
+          width={320}
+          height={320}
+          className="h-full w-full object-cover"
+          fallback={<Package className="h-10 w-10 text-slate-300" />}
+        />
+        <Link
+          href={`/dashboard/items/${item.id}`}
+          className="absolute inset-0"
+          aria-label={item.name}
+        />
+        <div className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
+          {item.size?.label && (
+            <span className="rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white">
+              {item.size.label}
+            </span>
+          )}
         </div>
-      </CardContent>
+        {viewingAll && item.branch?.name && (
+          <span className="pointer-events-none absolute bottom-2 left-2 max-w-[90%] truncate rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white">
+            {item.branch.name}
+          </span>
+        )}
+        <div className="absolute right-2 top-2">
+          <ItemActions item={item} />
+        </div>
+      </div>
+      <div className="space-y-0.5 p-2.5">
+        <Link
+          href={`/dashboard/items/${item.id}`}
+          className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900 hover:text-indigo-700"
+        >
+          {item.name}
+        </Link>
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-xs text-slate-500">
+            {item.color || item.brand || item.code}
+          </span>
+          <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900" title={formatCurrency(item.one_day_price)}>
+            {formatCurrencyCompact(item.one_day_price)}
+            <span className="text-[11px] font-medium text-slate-400">/day</span>
+          </span>
+        </div>
+        <Badge variant={itemStatusVariant(item.status)} dot className="capitalize">
+          {item.status}
+        </Badge>
+      </div>
     </Card>
   );
 
@@ -436,7 +437,7 @@ export default function ItemsPage() {
 
   return (
     <ErrorBoundary>
-      <DashboardLayout>
+      <>
         <PageShell
           title="Items"
           subtitle="Manage your inventory of suits and accessories"
@@ -454,7 +455,7 @@ export default function ItemsPage() {
                 placeholder={filters.barcode ? `Barcode: ${filters.barcode}` : "Search items..."}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className={filters.barcode ? 'border-blue-500 bg-blue-50' : undefined}
+                className={filters.barcode ? 'border-indigo-500 bg-indigo-50' : undefined}
               />
               <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex gap-1">
                 <button
@@ -637,17 +638,16 @@ export default function ItemsPage() {
         {/* Items Grid/List */}
         {loading ? (
           <div className={viewMode === 'grid'
-            ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            ? "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4"
             : "space-y-3"
           }>
             {Array.from({ length: 8 }).map((_, i) => (
               viewMode === 'grid' ? (
-                <div key={i} className="flex items-center gap-3 rounded-2xl glass-panel p-3">
-                  <Skeleton className="h-16 w-16 shrink-0 rounded-xl sm:h-20 sm:w-20" />
-                  <div className="flex-1 space-y-2">
+                <div key={i} className="overflow-hidden rounded-2xl glass-panel">
+                  <Skeleton className="aspect-square w-full rounded-none" />
+                  <div className="space-y-2 p-2.5">
                     <Skeleton className="h-4 w-3/4" />
                     <Skeleton className="h-3 w-1/2" />
-                    <Skeleton className="h-4 w-1/3" />
                   </div>
                 </div>
               ) : (
@@ -670,7 +670,7 @@ export default function ItemsPage() {
           />
         ) : (
           <div className={viewMode === 'grid' 
-            ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" 
+            ? "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" 
             : "space-y-3"
           }>
             {items.map((item) => 
@@ -740,55 +740,52 @@ export default function ItemsPage() {
         />
       )}
 
-      {/* Availability Modal */}
-      {availabilityForItem && (
-        <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold mb-4">Check Availability</h3>
-            <p className="text-sm text-gray-600 mb-4 truncate">Item: {availabilityForItem.name} #{availabilityForItem.code}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Rental Date</label>
-                <Input type="date" value={availabilityDates.start} onChange={(e) => setAvailabilityDates(prev => ({ ...prev, start: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Return Date</label>
-                <Input type="date" value={availabilityDates.end} onChange={(e) => setAvailabilityDates(prev => ({ ...prev, end: e.target.value }))} />
-              </div>
+      <SimpleModal
+        isOpen={Boolean(availabilityForItem)}
+        title="Check availability"
+        onClose={() => { setAvailabilityForItem(null); setAvailabilityResult(''); }}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => { setAvailabilityForItem(null); setAvailabilityResult(''); }}>Close</Button>
+            <Button
+              onClick={async () => {
+                if (!availabilityDates.start || !availabilityDates.end) {
+                  setAvailabilityResult('Please select both dates');
+                  return;
+                }
+                setCheckingAvailability(true);
+                try {
+                  if (availabilityForItem && availabilityForItem.status !== 'available') {
+                    setAvailabilityResult('Unavailable: item is not currently available');
+                  } else {
+                    setAvailabilityResult('Available for the selected dates');
+                  }
+                } finally {
+                  setCheckingAvailability(false);
+                }
+              }}
+              loading={checkingAvailability}
+            >
+              Check
+            </Button>
+          </>
+        }
+      >
+        {availabilityForItem && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 truncate">{availabilityForItem.name} · {availabilityForItem.code}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Rental date" type="date" value={availabilityDates.start} onChange={(e) => setAvailabilityDates((prev) => ({ ...prev, start: e.target.value }))} />
+              <Input label="Return date" type="date" value={availabilityDates.end} onChange={(e) => setAvailabilityDates((prev) => ({ ...prev, end: e.target.value }))} />
             </div>
             {availabilityResult && (
-              <div className={`mb-3 text-sm ${availabilityResult.startsWith('Available') ? 'text-green-700' : 'text-red-700'}`}>{availabilityResult}</div>
+              <p className={`text-sm ${availabilityResult.startsWith('Available') ? 'text-emerald-700' : 'text-red-600'}`}>{availabilityResult}</p>
             )}
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => { setAvailabilityForItem(null); setAvailabilityResult(''); }}>Close</Button>
-              <Button
-                onClick={async () => {
-                  if (!availabilityDates.start || !availabilityDates.end) {
-                    setAvailabilityResult('Please select both dates');
-                    return;
-                  }
-                  setCheckingAvailability(true);
-                  try {
-                    // Basic client-side rule: item must be currently status=available
-                    // For full accuracy, add a backend date-conflict endpoint later
-                    if (availabilityForItem.status !== 'available') {
-                      setAvailabilityResult('Unavailable: item is not currently available');
-                    } else {
-                      setAvailabilityResult('Available for the selected dates');
-                    }
-                  } finally {
-                    setCheckingAvailability(false);
-                  }
-                }}
-                loading={checkingAvailability}
-              >
-                Check
-              </Button>
-            </div>
           </div>
-        </div>
-      )}
-      </DashboardLayout>
+        )}
+      </SimpleModal>
+      </>
     </ErrorBoundary>
   );
 }

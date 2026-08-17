@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { FilePick, Input } from '@/components/ui/Input';
 import { Card, CardContent } from '@/components/ui/Card';
 import BarcodeScanner from '@/components/ui/BarcodeScanner';
 import { apiClient } from '@/lib/api';
@@ -135,8 +135,7 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
     }
   };
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleImageUpload = async (file: File | null) => {
     if (!file) return;
     
     setLoading(true);
@@ -177,9 +176,10 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
             </div>
             
             <div className="flex gap-2">
-              <Button 
+              <Button
+                variant="secondary"
                 onClick={() => setIsScannerOpen(true)}
-                className="flex-1 bg-gray-100 text-gray-700 hover:bg-gray-200"
+                className="flex-1"
               >
                 <Camera className="h-4 w-4 mr-2" />
                 Scan with Camera
@@ -209,7 +209,7 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
               Update
             </Button>
           </div>
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="mt-2 text-sm text-slate-500">
             Current quantity: {item.quantity}
           </p>
         </CardContent>
@@ -315,11 +315,13 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
               </div>
             )}
             
-            <input
-              type="file"
+            <FilePick
+              id="item-management-image"
+              label="Thumbnail"
               accept="image/*"
+              disabled={loading}
               onChange={handleImageUpload}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              buttonLabel="Choose image"
             />
           </div>
         </CardContent>
@@ -335,7 +337,7 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-sm text-gray-500">Status</p>
+              <p className="text-sm text-slate-500">Status</p>
               <p className={`font-semibold ${
                 item.status === 'available' ? 'text-green-600' :
                 item.status === 'rented' ? 'text-blue-600' :
@@ -346,17 +348,17 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Condition</p>
+              <p className="text-sm text-slate-500">Condition</p>
               <p className="font-semibold">
                 {item.condition.charAt(0).toUpperCase() + item.condition.slice(1)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Price/Day</p>
+              <p className="text-sm text-slate-500">Price/Day</p>
               <p className="font-semibold">{formatCurrency(item.one_day_price)}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Price/4hr</p>
+              <p className="text-sm text-slate-500">Price/4hr</p>
               <p className="font-semibold">{formatCurrency(item.four_hour_price)}</p>
             </div>
           </div>

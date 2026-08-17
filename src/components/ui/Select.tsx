@@ -1,8 +1,11 @@
 'use client';
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { ChevronDown, Loader2, Search, X } from 'lucide-react';
+import { useAnchoredMenu } from './anchored-menu';
+import { CONTROL_CLASS, controlBorderClass, fieldLabelClass } from './field';
 
 interface SelectOption {
   value: string;
@@ -60,27 +63,35 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
       name,
       placeholder,
       allowCustom = false,
-      clearable = true,
+      clearable,
     },
     ref,
   ) => {
-    const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
+    const generatedId = useId();
+    const selectId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : generatedId);
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [highlight, setHighlight] = useState(-1);
     const containerRef = useRef<HTMLDivElement>(null);
     const selected = options.find((option) => option.value === String(value ?? ''));
     const compact = size === 'sm';
+    const canClear = clearable ?? searchable;
+    const selectedLabel = selected?.label || '';
+    const filtering = searchable && query.trim() !== '' && query !== selectedLabel;
 
     const filtered = useMemo(() => {
+      if (!filtering) return options;
       const q = query.trim().toLowerCase();
-      if (!q) return options;
       return options.filter((option) => option.label.toLowerCase().includes(q) || option.value.toLowerCase().includes(q));
-    }, [options, query]);
+    }, [options, query, filtering]);
+
+    const menuStyle = useAnchoredMenu(open && !disabled, containerRef);
 
     useEffect(() => {
       function onDocClick(e: MouseEvent) {
         if (!containerRef.current?.contains(e.target as Node)) {
+          const menu = document.getElementById(`${selectId}-list`);
+          if (menu?.contains(e.target as Node)) return;
           setOpen(false);
           setQuery('');
           setHighlight(-1);
@@ -88,7 +99,7 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
       }
       document.addEventListener('mousedown', onDocClick);
       return () => document.removeEventListener('mousedown', onDocClick);
-    }, []);
+    }, [selectId]);
 
     const pick = (option: SelectOption) => {
       emitChange(onChange, option.value, name, selectId);
@@ -97,12 +108,18 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
       setHighlight(-1);
     };
 
-    const display = open && searchable ? query : query || selected?.label || '';
+    const display = open && searchable ? (query || selectedLabel) : selectedLabel || query;
+
+    const closeMenu = () => {
+      setOpen(false);
+      setQuery('');
+      setHighlight(-1);
+    };
 
     return (
       <div className={clsx(fullWidth ? 'w-full' : 'w-auto', 'relative')} ref={containerRef} suppressHydrationWarning>
         {label && (
-          <label htmlFor={selectId} className="mb-1.5 block text-sm font-medium text-slate-700">
+          <label htmlFor={selectId} className={fieldLabelClass()}>
             {label}
           </label>
         )}
@@ -138,11 +155,11 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
               setOpen(true);
               onSearch?.(next);
             }}
-            onFocus={() => {
-              if (!disabled) {
-                setOpen(true);
-                onSearch?.(query);
-              }
+            onFocus={(e) => {
+              if (disabled) return;
+              setOpen(true);
+              onSearch?.(query);
+              e.target.select();
             }}
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') {
@@ -153,25 +170,22 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
                 e.preventDefault();
                 setHighlight((h) => Math.max(h - 1, 0));
               } else if (e.key === 'Enter') {
+                if (!open) return;
                 e.preventDefault();
                 if (highlight >= 0 && highlight < filtered.length) pick(filtered[highlight]);
                 else if (filtered.length === 1) pick(filtered[0]);
                 else if (allowCustom && query.trim()) pick({ value: query.trim(), label: query.trim() });
               } else if (e.key === 'Escape') {
-                setOpen(false);
-                setQuery('');
-                setHighlight(-1);
+                e.preventDefault();
+                e.stopPropagation();
+                closeMenu();
               }
             }}
             className={clsx(
-              'block w-full rounded-xl border text-slate-900 glass-control',
-              'placeholder:text-slate-400 touch-manipulation',
-              compact ? 'min-h-9 py-1.5 text-xs font-semibold' : 'min-h-[44px] py-2.5 text-sm',
+              CONTROL_CLASS,
+              compact ? 'min-h-9 py-1.5 text-sm font-semibold' : 'min-h-[44px] py-2.5',
               searchable ? (compact ? 'pl-8 pr-14' : 'pl-9 pr-16') : (compact ? 'pl-3 pr-8' : 'pl-3 pr-10'),
-              error
-                ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
-                : 'border-black/10 focus:border-indigo-500/60 focus:ring-indigo-500/40',
-              'focus:outline-none focus:ring-1 transition-colors',
+              controlBorderClass(error),
               !searchable && 'cursor-pointer',
               disabled && 'cursor-not-allowed opacity-60',
               className,
@@ -179,7 +193,7 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
           />
           <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center">
             {searching && <Loader2 className="mr-0.5 h-4 w-4 animate-spin text-slate-400" />}
-            {clearable && selected && selected.value !== '' && !disabled && (
+            {canClear && selected && selected.value !== '' && !disabled && (
               <button
                 type="button"
                 aria-label="Clear selection"
@@ -198,11 +212,12 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
           </div>
         </div>
 
-        {open && !disabled && (
+        {open && !disabled && typeof document !== 'undefined' && createPortal(
           <ul
             id={`${selectId}-list`}
             role="listbox"
-            className="absolute z-[60] mt-1 max-h-64 w-full overflow-auto rounded-xl border border-black/10 bg-white py-1 shadow-lg"
+            style={menuStyle}
+            className="overflow-auto rounded-xl border border-black/10 bg-white py-1 shadow-lg"
           >
             {filtered.length === 0 && (
               <li className="px-3 py-3 text-sm text-slate-500">{emptyMessage}</li>
@@ -227,7 +242,8 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
                 {option.label}
               </li>
             ))}
-          </ul>
+          </ul>,
+          document.body,
         )}
 
         {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}

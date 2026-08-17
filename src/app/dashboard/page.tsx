@@ -3,10 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatCurrency, formatNumber } from '@/lib/currency';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { formatCurrency, formatCurrencyCompact, formatNumber } from '@/lib/currency';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { PageShell, StatGrid } from '@/components/ui/PageShell';
+import { MetricTile, PageShell, StatGrid } from '@/components/ui/PageShell';
 import { Badge } from '@/components/ui/DataDisplay';
 import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
@@ -160,7 +159,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title={`Welcome back, ${user?.first_name ?? 'there'}`}
         subtitle="A quick snapshot of what matters today."
@@ -180,8 +179,9 @@ export default function DashboardPage() {
             value:    loading
                         ? ''
                         : s.format === 'currency'
-                          ? formatCurrency(stats?.[s.key] as number ?? 0)
+                          ? formatCurrencyCompact(stats?.[s.key] as number ?? 0)
                           : formatNumber(stats?.[s.key] as number ?? 0),
+            title:    s.format === 'currency' ? formatCurrency(stats?.[s.key] as number ?? 0) : undefined,
             icon:      s.icon,
             iconBg:    s.iconBg,
             iconColor: s.iconColor,
@@ -206,51 +206,48 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                    <TrendingUp className="h-3.5 w-3.5" /> Revenue
-                  </div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">
-                    {loading ? '—' : formatCurrency(pnl?.profit_and_loss?.totals?.total_revenue || 0)}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                    <Wallet className="h-3.5 w-3.5" /> Expenses
-                  </div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">
-                    {loading ? '—' : formatCurrency(pnl?.profit_and_loss?.totals?.expenses || 0)}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Net profit</div>
-                  <div className={`mt-1 text-lg font-bold ${(pnl?.profit_and_loss?.totals?.net_profit || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {loading ? '—' : formatCurrency(pnl?.profit_and_loss?.totals?.net_profit || 0)}
-                  </div>
-                </div>
+                <MetricTile
+                  label="Revenue"
+                  icon={<TrendingUp />}
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.profit_and_loss?.totals?.total_revenue || 0)}
+                  title={formatCurrency(pnl?.profit_and_loss?.totals?.total_revenue || 0)}
+                />
+                <MetricTile
+                  label="Expenses"
+                  icon={<Wallet />}
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.profit_and_loss?.totals?.expenses || 0)}
+                  title={formatCurrency(pnl?.profit_and_loss?.totals?.expenses || 0)}
+                />
+                <MetricTile
+                  label="Net profit"
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.profit_and_loss?.totals?.net_profit || 0)}
+                  title={formatCurrency(pnl?.profit_and_loss?.totals?.net_profit || 0)}
+                  valueClassName={(pnl?.profit_and_loss?.totals?.net_profit || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}
+                />
               </div>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Cash on Hand</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">
-                    {loading ? '—' : formatCurrency(pnl?.cash_on_hand || 0)}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    Drawer {formatCurrency(pnl?.cash_drawer || 0)} · Bank {formatCurrency(pnl?.bank || 0)}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Accounts Receivable</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">
-                    {loading ? '—' : formatCurrency(pnl?.balance_sheet?.accounts_receivable || 0)}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Dividends this year</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">
-                    {loading ? '—' : formatCurrency(pnl?.year_dividends || 0)}
-                  </div>
-                </div>
+                <MetricTile
+                  label="Cash on Hand"
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.cash_on_hand || 0)}
+                  title={formatCurrency(pnl?.cash_on_hand || 0)}
+                  sub={`Drawer ${formatCurrencyCompact(pnl?.cash_drawer || 0)} · Bank ${formatCurrencyCompact(pnl?.bank || 0)}`}
+                />
+                <MetricTile
+                  label="Accounts Receivable"
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.balance_sheet?.accounts_receivable || 0)}
+                  title={formatCurrency(pnl?.balance_sheet?.accounts_receivable || 0)}
+                />
+                <MetricTile
+                  label="Dividends this year"
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.year_dividends || 0)}
+                  title={formatCurrency(pnl?.year_dividends || 0)}
+                />
               </div>
             </CardContent>
           </Card>
@@ -268,26 +265,25 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                    <Landmark className="h-3.5 w-3.5" /> Total assets
-                  </div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">
-                    {loading ? '—' : formatCurrency(assets?.total_value || 0)}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Inventory</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">
-                    {loading ? '—' : formatCurrency(assets?.inventory?.total_value || 0)}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-black/5 bg-white/50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">Fixed assets</div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">
-                    {loading ? '—' : formatCurrency(assets?.fixed?.total_value || 0)}
-                  </div>
-                </div>
+                <MetricTile
+                  label="Total assets"
+                  icon={<Landmark />}
+                  loading={loading}
+                  value={formatCurrencyCompact(assets?.total_value || 0)}
+                  title={formatCurrency(assets?.total_value || 0)}
+                />
+                <MetricTile
+                  label="Inventory"
+                  loading={loading}
+                  value={formatCurrencyCompact(assets?.inventory?.total_value || 0)}
+                  title={formatCurrency(assets?.inventory?.total_value || 0)}
+                />
+                <MetricTile
+                  label="Fixed assets"
+                  loading={loading}
+                  value={formatCurrencyCompact(assets?.fixed?.total_value || 0)}
+                  title={formatCurrency(assets?.fixed?.total_value || 0)}
+                />
               </div>
             </CardContent>
           </Card>
@@ -350,6 +346,6 @@ export default function DashboardPage() {
           </Card>
         </div>
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }

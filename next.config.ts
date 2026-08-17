@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   // Prevent Next from treating the user home as workspace root
   // when multiple lockfiles exist on the machine.
   outputFileTracingRoot: __dirname,
+  // Tree-shake icon/UI barrels so each menu page compiles a smaller graph.
+  experimental: {
+    optimizePackageImports: ['lucide-react', '@headlessui/react'],
+  },
   // Avoid dev/build fighting over the same `.next` directory.
   // In this repo we sometimes run `next build` while `next dev` is running,
   // which can delete/overwrite chunk files and cause runtime errors like:

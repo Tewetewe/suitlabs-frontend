@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -209,7 +208,7 @@ export default function CustomersPage() {
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-gray-500">Loading...</div>
+        <div className="animate-pulse text-slate-500">Loading...</div>
       </div>
     );
   }
@@ -220,7 +219,7 @@ export default function CustomersPage() {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Customers"
         subtitle={
@@ -391,28 +390,14 @@ export default function CustomersPage() {
               placeholder="Street, city"
             />
 
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                Notes (optional)
-              </label>
-              <textarea
-                rows={3}
-                value={formData.notes || ''}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Anything staff should know…"
-                className={[
-                  'block w-full rounded-xl border text-slate-900',
-                  'glass-control',
-                  'placeholder:text-slate-400 text-sm',
-                  'px-3 py-2 touch-manipulation resize-y',
-                  'border-black/10 focus:border-indigo-500/60 focus:ring-indigo-500/40',
-                  'focus:outline-none focus:ring-1 transition-colors',
-                ].join(' ')}
-              />
-              <p className="mt-1.5 text-xs text-slate-500">
-                Visible to staff only.
-              </p>
-            </div>
+            <Textarea
+              label="Notes (optional)"
+              rows={3}
+              value={formData.notes || ''}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Anything staff should know…"
+              helperText="Visible to staff only."
+            />
           </form>
         </SimpleModal>
       </PageShell>
@@ -435,6 +420,6 @@ export default function CustomersPage() {
         itemDetails={deletingCustomer ? deletingCustomer.email : undefined}
         loading={deleteLoading}
       />
-    </DashboardLayout>
+    </>
   );
 }

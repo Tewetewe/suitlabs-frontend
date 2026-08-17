@@ -4,11 +4,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, NumberInput } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
-import { CreateSaleRequest, Customer, Item, RentalItem, SaleLineType, SalePaymentMethod } from '@/types';
+import { CreateSaleRequest, Item, RentalItem, SaleLineType, SalePaymentMethod } from '@/types';
+import { customerOptionLabel } from '@/lib/branch-scope';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -92,6 +93,27 @@ export function SaleComposer({
     }, 250);
     return () => clearTimeout(handle);
   }, [search, loadSellable]);
+
+  const fetchCustomerPage = useCallback(async (query: string, page: number) => {
+    try {
+      const response = await apiClient.getCustomers({
+        search: query || undefined,
+        page,
+        limit: 20,
+        is_active: true,
+      });
+      const rows = response?.data?.data?.customers || [];
+      return {
+        options: rows.map((customer) => ({
+          value: customer.id,
+          label: customerOptionLabel(customer),
+        })),
+        hasMore: Boolean(response?.data?.pagination?.has_next),
+      };
+    } catch {
+      return { options: [], hasMore: false };
+    }
+  }, []);
 
   const addItem = (item: Item, lineType: SaleLineType = item.type === 'suit' || item.type === 'jacket' ? 'clearance' : 'retail') => {
     setCart((prev) => {
@@ -257,15 +279,13 @@ export function SaleComposer({
                     )}
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    <Input
+                    <NumberInput
                       label="Qty"
-                      type="number"
                       min={1}
                       value={line.quantity}
-                      onChange={(e) => {
-                        const qty = Math.max(1, Number(e.target.value) || 1);
+                      onChange={(qty) => {
                         if (line.replacement_for_item_id) return;
-                        setCart((prev) => prev.map((entry) => (entry.key === line.key ? { ...entry, quantity: qty } : entry)));
+                        setCart((prev) => prev.map((entry) => (entry.key === line.key ? { ...entry, quantity: Math.max(1, qty || 1) } : entry)));
                       }}
                       disabled={!!line.replacement_for_item_id}
                     />
@@ -293,13 +313,10 @@ export function SaleComposer({
             value={selectedCustomerId}
             onChange={setSelectedCustomerId}
             placeholder="Walk-in or search customer"
-            fetchOptions={async (query) => {
-              const customers: Customer[] = await apiClient.searchCustomers(query);
-              return customers.map((customer) => ({
-                value: customer.id,
-                label: `${customer.first_name} ${customer.last_name} · ${customer.phone}`,
-              }));
-            }}
+            minQueryLength={0}
+            emptyMessage="No matching customers"
+            emptyOption={{ value: '', label: 'Walk-in' }}
+            fetchPage={fetchCustomerPage}
           />
           <Select
             label="Payment method"

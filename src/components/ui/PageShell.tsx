@@ -69,13 +69,13 @@ export function PageSection({ title, description, action, children, className }:
   return (
     <div className={clsx('space-y-4', className)}>
       {(title || action) && (
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             {title && (
               <h2 className="text-base font-semibold text-slate-800">{title}</h2>
             )}
             {description && (
-              <p className="text-sm text-slate-500">{description}</p>
+              <p className="mt-0.5 text-sm text-slate-500">{description}</p>
             )}
           </div>
           {action && <div>{action}</div>}
@@ -87,7 +87,7 @@ export function PageSection({ title, description, action, children, className }:
 }
 
 // ---------------------------------------------------------------------------
-// StatGrid — responsive row of KPI stat cards
+// StatGrid — two-row KPI grid (2 cols on phones, 3 cols from tablet up)
 // ---------------------------------------------------------------------------
 
 interface StatItem {
@@ -100,38 +100,89 @@ interface StatItem {
   iconColor?: string;
   /** Small trend/sub-label below the value */
   sub?: string;
+  /** Full value shown on hover when the visible value is truncated */
+  title?: string;
   /** If true shows a pulse skeleton instead of value */
   loading?: boolean;
 }
 
 export function StatGrid({ stats }: { stats: StatItem[] }) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-      {stats.map((stat, i) => (
-        <div
-          key={i}
-          className="glass-panel rounded-2xl p-4 flex flex-col gap-3"
-        >
-          {stat.icon && (
-            <span className={clsx('inline-flex h-9 w-9 items-center justify-center rounded-lg', stat.iconBg ?? 'bg-indigo-50')}>
-              <span className={clsx('h-4 w-4', stat.iconColor ?? 'text-indigo-600')}>
-                {stat.icon}
-              </span>
-            </span>
-          )}
-          <div>
-            <p className="text-xs font-medium text-slate-500 truncate">{stat.label}</p>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {stats.map((stat, i) => {
+        const valueText = String(stat.value ?? '');
+        return (
+          <div
+            key={i}
+            className="glass-panel min-w-0 overflow-hidden rounded-2xl px-3.5 py-3"
+          >
+            <div className="flex items-center gap-2">
+              {stat.icon && (
+                <span className={clsx('inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md', stat.iconBg ?? 'bg-indigo-50')}>
+                  <span className={clsx('[&>svg]:h-3.5 [&>svg]:w-3.5', stat.iconColor ?? 'text-indigo-600')}>
+                    {stat.icon}
+                  </span>
+                </span>
+              )}
+              <p className="min-w-0 truncate text-xs font-medium text-slate-500">{stat.label}</p>
+            </div>
             {stat.loading ? (
-              <div className="mt-1 h-7 w-16 rounded-md bg-slate-100 animate-skeleton" />
+              <div className="mt-2 h-6 w-16 rounded-md bg-slate-100 animate-skeleton" />
             ) : (
-              <p className="mt-0.5 text-2xl font-bold text-slate-900 tabular-nums">{stat.value}</p>
+              <p
+                className="mt-2 truncate text-lg font-semibold tabular-nums tracking-tight text-slate-900"
+                title={stat.title || valueText}
+              >
+                {stat.value}
+              </p>
             )}
             {stat.sub && !stat.loading && (
-              <p className="mt-0.5 text-xs text-slate-400">{stat.sub}</p>
+              <p className="mt-0.5 truncate text-xs text-slate-400" title={stat.sub}>
+                {stat.sub}
+              </p>
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MetricTile — compact KPI used inside cards or as a light page row
+// ---------------------------------------------------------------------------
+
+interface MetricTileProps {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  icon?: React.ReactNode;
+  valueClassName?: string;
+  title?: string;
+  loading?: boolean;
+}
+
+export function MetricTile({ label, value, sub, icon, valueClassName, title, loading }: MetricTileProps) {
+  const valueText = typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
+  return (
+    <div className="min-w-0 overflow-hidden rounded-xl bg-slate-50 px-3.5 py-3">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+        {icon && <span className="shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
+        <span className="truncate">{label}</span>
+      </div>
+      {loading ? (
+        <div className="mt-1 h-6 w-20 rounded-md bg-slate-100 animate-skeleton" />
+      ) : (
+        <p
+          className={clsx('mt-0.5 truncate text-base font-semibold tabular-nums tracking-tight text-slate-900', valueClassName)}
+          title={title ?? valueText}
+        >
+          {value}
+        </p>
+      )}
+      {sub != null && sub !== '' && !loading && (
+        <p className="mt-0.5 truncate text-xs text-slate-400">{sub}</p>
+      )}
     </div>
   );
 }

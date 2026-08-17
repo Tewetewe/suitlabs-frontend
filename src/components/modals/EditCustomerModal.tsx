@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
 import { Customer, CreateCustomerRequest } from '@/types';
-import { X } from 'lucide-react';
+import SimpleModal from '@/components/modals/SimpleModal';
 
 interface EditCustomerModalProps {
   isOpen: boolean;
@@ -118,140 +118,88 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
   if (!isOpen || !customer) return null;
 
   return (
-    <div className="fixed inset-0 bg-white flex items-center justify-center p-2 sm:p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[95vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b">
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Edit Customer</h2>
-          <Button variant="ghost" size="sm" onClick={onClose} className="p-2">
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <SimpleModal
+      isOpen={isOpen}
+      title="Edit customer"
+      onClose={onClose}
+      size="md"
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button type="submit" form="edit-customer-form" loading={loading}>Save</Button>
+        </>
+      }
+    >
+        <form id="edit-customer-form" onSubmit={handleSubmit} className="space-y-4">
           {errors.general && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {errors.general}
-            </div>
+            <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{errors.general}</div>
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                First Name *
-              </label>
-              <Input
-                value={formData.first_name}
-                onChange={(e) => handleInputChange('first_name', e.target.value)}
-                placeholder="John"
-                error={errors.first_name}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Last Name *
-              </label>
-              <Input
-                value={formData.last_name}
-                onChange={(e) => handleInputChange('last_name', e.target.value)}
-                placeholder="Doe"
-                error={errors.last_name}
-              />
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email *
-            </label>
             <Input
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              placeholder="john.doe@example.com"
-              error={errors.email}
+              label="First Name *"
+              value={formData.first_name}
+              onChange={(e) => handleInputChange('first_name', e.target.value)}
+              placeholder="John"
+              error={errors.first_name}
             />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Phone *
-            </label>
             <Input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => handleInputChange('phone', e.target.value)}
-              placeholder="+1 (555) 123-4567"
-              error={errors.phone}
+              label="Last Name *"
+              value={formData.last_name}
+              onChange={(e) => handleInputChange('last_name', e.target.value)}
+              placeholder="Doe"
+              error={errors.last_name}
             />
           </div>
 
+          <Input
+            label="Email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => handleInputChange('email', e.target.value)}
+            placeholder="john.doe@example.com"
+            error={errors.email}
+          />
+
+          <Input
+            label="Phone *"
+            type="tel"
+            value={formData.phone}
+            onChange={(e) => handleInputChange('phone', e.target.value)}
+            placeholder="08xx-xxxx-xxxx"
+            error={errors.phone}
+          />
+
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Instagram
-              </label>
-              <Input
-                value={formData.instagram || ''}
-                onChange={(e) => handleInputChange('instagram', e.target.value)}
-                placeholder="@username"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                TikTok
-              </label>
-              <Input
-                value={formData.tiktok || ''}
-                onChange={(e) => handleInputChange('tiktok', e.target.value)}
-                placeholder="@username"
-              />
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Address
-            </label>
             <Input
-              value={formData.address || ''}
-              onChange={(e) => handleInputChange('address', e.target.value)}
-              placeholder="123 Main St, City, State, Postal Code, Country"
+              label="Instagram"
+              value={formData.instagram || ''}
+              onChange={(e) => handleInputChange('instagram', e.target.value)}
+              placeholder="@username"
+            />
+            <Input
+              label="TikTok"
+              value={formData.tiktok || ''}
+              onChange={(e) => handleInputChange('tiktok', e.target.value)}
+              placeholder="@username"
             />
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes
-            </label>
-            <textarea
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-              rows={3}
-              value={formData.notes || ''}
-              onChange={(e) => handleInputChange('notes', e.target.value)}
-              placeholder="Additional notes about the customer..."
-            />
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-3 pt-4 sm:pt-6">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1 h-12 sm:h-10 text-base sm:text-sm order-2 sm:order-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="flex-1 h-12 sm:h-10 text-base sm:text-sm order-1 sm:order-2"
-            >
-              {loading ? 'Updating...' : 'Update Customer'}
-            </Button>
-          </div>
+
+          <Input
+            label="Address"
+            value={formData.address || ''}
+            onChange={(e) => handleInputChange('address', e.target.value)}
+            placeholder="Street, city"
+          />
+
+          <Textarea
+            label="Notes"
+            rows={3}
+            value={formData.notes || ''}
+            onChange={(e) => handleInputChange('notes', e.target.value)}
+            placeholder="Anything staff should know…"
+          />
         </form>
-      </div>
-    </div>
+    </SimpleModal>
   );
 }

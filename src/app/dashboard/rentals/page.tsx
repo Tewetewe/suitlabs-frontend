@@ -2,10 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import ClientOnly from '@/components/ClientOnly';
@@ -20,6 +19,7 @@ import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
 import { RentalDetailsModal } from '@/components/modals/RentalDetailsModal';
 import { EditRentalModal } from '@/components/modals/EditRentalModal';
 import { PickupRentalModal } from '@/components/modals/PickupRentalModal';
+import SimpleModal from '@/components/modals/SimpleModal';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { useToast } from '@/contexts/ToastContext';
@@ -27,7 +27,7 @@ import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 
 export default function RentalsPage() {
   const { user } = useAuth();
-  const { warning } = useToast();
+  const { warning, success, error: toastError } = useToast();
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,8 +85,6 @@ export default function RentalsPage() {
     }
   };
 
-
-
   const handleViewRental = (rental: Rental) => {
     setSelectedRental(rental);
     setShowDetailsModal(true);
@@ -95,7 +93,7 @@ export default function RentalsPage() {
   const handleActivateRental = async (rentalId: string) => {
     try {
       if (!user?.id) {
-        alert('User not authenticated. Please login again.');
+        toastError('Please sign in again', 'Your session expired.');
         return;
       }
       await apiClient.activateRental(rentalId, user.id);
@@ -132,7 +130,7 @@ export default function RentalsPage() {
         if (!isNaN(dt.getTime())) isoActual = dt.toISOString();
       }
       if (!user?.id) {
-        alert('User not authenticated. Please login again.');
+        toastError('Please sign in again', 'Your session expired.');
         return;
       }
       await apiClient.completeRental(selectedRental.id, user.id, isoActual, parsedCharge, damageNotes || undefined, chargePaymentMethod);
@@ -157,10 +155,9 @@ export default function RentalsPage() {
       setShowInvoiceModal(true);
     } catch (error) {
       console.error('Failed to complete rental:', error);
-      alert('Failed to complete rental.');
+      toastError('Could not complete rental', 'Please try again.');
     }
   };
-
 
   const handleEditRental = (rental: Rental) => {
     setSelectedRental(rental);
@@ -184,7 +181,7 @@ export default function RentalsPage() {
     if (!selectedRental || !newRentalDate || !newReturnDate) return;
     
     if (new Date(newReturnDate) <= new Date(newRentalDate)) {
-      alert('Return date must be after rental date');
+      warning('Check the dates', 'Return date must be after rental date.');
       return;
     }
 
@@ -192,13 +189,14 @@ export default function RentalsPage() {
     try {
       await apiClient.changeRentalDates(selectedRental.id, newRentalDate, newReturnDate);
       await loadRentals();
+      success('Dates updated');
       setShowChangeDatesModal(false);
       setSelectedRental(null);
       setNewRentalDate('');
       setNewReturnDate('');
     } catch (error) {
       console.error('Failed to change rental dates:', error);
-      alert('Failed to change rental dates. Please try again.');
+      toastError('Could not change dates', 'Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -206,12 +204,12 @@ export default function RentalsPage() {
 
   const handleSubmitCancelRental = async () => {
     if (!selectedRental || !cancellationReason.trim()) {
-      alert('Please provide a cancellation reason');
+      warning('Reason needed', 'Please provide a cancellation reason.');
       return;
     }
 
     if (!user?.id) {
-      alert('User not authenticated. Please login again.');
+      toastError('Please sign in again', 'Your session expired.');
       return;
     }
 
@@ -219,12 +217,13 @@ export default function RentalsPage() {
     try {
       await apiClient.cancelRentalWithReason(selectedRental.id, cancellationReason, user.id);
       await loadRentals();
+      success('Rental cancelled');
       setShowCancelModal(false);
       setSelectedRental(null);
       setCancellationReason('');
     } catch (error) {
       console.error('Failed to cancel rental:', error);
-      alert('Failed to cancel rental. Please try again.');
+      toastError('Could not cancel rental', 'Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -241,7 +240,7 @@ export default function RentalsPage() {
   const activeRentals = filteredRentals.filter(r => r.status !== 'cancelled');
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Rentals"
         subtitle="Track active and completed rentals"
@@ -371,7 +370,7 @@ export default function RentalsPage() {
         {/* Pagination */}
         {!loading && rentals.length > 0 && (
           <div className="flex items-center justify-between py-4">
-            <div className="text-sm text-gray-500">Page {currentPage}</div>
+            <div className="text-sm text-slate-500">Page {currentPage}</div>
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -439,200 +438,78 @@ export default function RentalsPage() {
           rental={selectedRental}
         />
 
-        {/* Change Dates Modal */}
-        {showChangeDatesModal && selectedRental && (
-          <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold mb-4">Change Rental Dates</h3>
-              <p className="text-gray-600 mb-4">
-                Rental ID: {selectedRental.id}
-              </p>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    New Rental Date
-                  </label>
-                  <Input
-                    type="date"
-                    value={newRentalDate}
-                    onChange={(e) => setNewRentalDate(e.target.value)}
-                    className="w-full"
-                    min={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    New Return Date
-                  </label>
-                  <Input
-                    type="date"
-                    value={newReturnDate}
-                    onChange={(e) => setNewReturnDate(e.target.value)}
-                    className="w-full"
-                    min={newRentalDate || new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-
-                <div className="text-sm text-gray-500">
-                  <p>Current dates:</p>
-                  <p>Rental: {selectedRental.rental_date.split('T')[0]}</p>
-                  <p>Return: {selectedRental.return_date.split('T')[0]}</p>
-                </div>
-              </div>
-
-              <div className="flex gap-2 justify-end mt-6">
-                <Button 
-                  variant="ghost" 
-                  onClick={() => {
-                    setShowChangeDatesModal(false);
-                    setNewRentalDate('');
-                    setNewReturnDate('');
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  variant="primary" 
-                  onClick={handleSubmitChangeDates}
-                  disabled={isSubmitting || !newRentalDate || !newReturnDate}
-                  loading={isSubmitting}
-                >
-                  Change Dates
-                </Button>
-              </div>
-            </div>
+        <SimpleModal
+          isOpen={showChangeDatesModal && Boolean(selectedRental)}
+          title="Change dates"
+          onClose={() => { setShowChangeDatesModal(false); setNewRentalDate(''); setNewReturnDate(''); }}
+          size="sm"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => { setShowChangeDatesModal(false); setNewRentalDate(''); setNewReturnDate(''); }} disabled={isSubmitting}>Cancel</Button>
+              <Button onClick={handleSubmitChangeDates} disabled={isSubmitting || !newRentalDate || !newReturnDate} loading={isSubmitting}>Save dates</Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <Input label="Rental date" type="date" value={newRentalDate} onChange={(e) => setNewRentalDate(e.target.value)} min={new Date().toISOString().split('T')[0]} />
+            <Input label="Return date" type="date" value={newReturnDate} onChange={(e) => setNewReturnDate(e.target.value)} min={newRentalDate || new Date().toISOString().split('T')[0]} />
+            {selectedRental && (
+              <p className="text-xs text-slate-500">Current: {selectedRental.rental_date.split('T')[0]} → {selectedRental.return_date.split('T')[0]}</p>
+            )}
           </div>
-        )}
+        </SimpleModal>
 
-        {/* Complete Rental Modal */}
-        {showCompleteModal && selectedRental && (
-          <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold mb-4">Complete Rental</h3>
-              <p className="text-gray-600 mb-4">Rental ID: {selectedRental.id}</p>
-              <p className="mb-4 text-sm text-slate-600">
-                If anything is missing, record lost items / add-ons first, then complete.
-              </p>
-              <Link
-                href={`/dashboard/sales?rental_id=${selectedRental.id}&customer_id=${selectedRental.user_id}`}
-                className="mb-4 inline-flex"
-              >
-                <Button variant="secondary" size="sm">
-                  <ShoppingBag className="h-4 w-4" />
-                  Lost items / add-ons
-                </Button>
+        <SimpleModal
+          isOpen={showCompleteModal && Boolean(selectedRental)}
+          title="Complete rental"
+          onClose={() => setShowCompleteModal(false)}
+          size="md"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setShowCompleteModal(false)}>Cancel</Button>
+              <Button onClick={submitCompleteRental}>Complete</Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">If anything is missing, record lost items or add-ons first.</p>
+            {selectedRental && (
+              <Link href={`/dashboard/sales?rental_id=${selectedRental.id}&customer_id=${selectedRental.user_id}`} className="inline-flex">
+                <Button variant="secondary" size="sm"><ShoppingBag className="h-4 w-4" /> Lost items / add-ons</Button>
               </Link>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Actual Return Date (optional)</label>
-                <Input
-                  type="date"
-                  value={actualReturnDate}
-                  onChange={(e) => setActualReturnDate(e.target.value)}
-                />
-                <p className="text-xs text-gray-500 mt-1">Leave empty to use now. Set a past date to backdate and compute late fee correctly.</p>
-              </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Defect/Damage Notes</label>
-                  <textarea
-                    value={damageNotes}
-                    onChange={(e) => setDamageNotes(e.target.value)}
-                    placeholder="Describe any damages or defects..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Damage Charge</label>
-                  <CurrencyInput
-                    value={damageCharges}
-                    onChange={(n) => setDamageCharges(n ? String(n) : '')}
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Leave 0 if no damage charge.</p>
-                </div>
-                <Select
-                  searchable={false}
-                  label="Paid with (damage / late fee)"
-                  options={[...SALE_PAYMENT_METHOD_OPTIONS]}
-                  value={chargePaymentMethod}
-                  onChange={(e) => setChargePaymentMethod(e.target.value)}
-                />
-            <div className="flex items-center gap-2">
-              <input
-                id="send-maintenance"
-                type="checkbox"
-                className="h-4 w-4"
-                checked={sendToMaintenance}
-                onChange={(e) => setSendToMaintenance(e.target.checked)}
-              />
-              <label htmlFor="send-maintenance" className="text-sm text-gray-700">Send rented items to maintenance</label>
-            </div>
-              </div>
-              <div className="flex gap-2 justify-end mt-6">
-                <Button variant="ghost" onClick={() => setShowCompleteModal(false)}>Cancel</Button>
-                <Button variant="primary" onClick={submitCompleteRental}>Complete Rental</Button>
-              </div>
-            </div>
+            )}
+            <Input label="Actual return date" type="date" value={actualReturnDate} onChange={(e) => setActualReturnDate(e.target.value)} helperText="Leave empty to use now." />
+            <Textarea label="Damage notes" rows={3} value={damageNotes} onChange={(e) => setDamageNotes(e.target.value)} placeholder="Optional" />
+            <CurrencyInput label="Damage charge" value={damageCharges} onChange={(n) => setDamageCharges(n ? String(n) : '')} helperText="Leave 0 if none." />
+            <Select searchable={false} label="Paid with" options={[...SALE_PAYMENT_METHOD_OPTIONS]} value={chargePaymentMethod} onChange={(e) => setChargePaymentMethod(e.target.value)} />
+            <label className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
+              <input id="send-maintenance" type="checkbox" className="h-4 w-4" checked={sendToMaintenance} onChange={(e) => setSendToMaintenance(e.target.checked)} />
+              Send rented items to maintenance
+            </label>
           </div>
-        )}
+        </SimpleModal>
 
-        {/* Cancel Rental Modal */}
-        {showCancelModal && selectedRental && (
-          <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold mb-4">Cancel Rental</h3>
-              <p className="text-gray-600 mb-4">
-                Rental ID: {selectedRental.id}
+        <SimpleModal
+          isOpen={showCancelModal && Boolean(selectedRental)}
+          title="Cancel rental"
+          onClose={() => { setShowCancelModal(false); setCancellationReason(''); }}
+          size="sm"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => { setShowCancelModal(false); setCancellationReason(''); }} disabled={isSubmitting}>Keep rental</Button>
+              <Button variant="danger" onClick={handleSubmitCancelRental} disabled={isSubmitting || !cancellationReason.trim()} loading={isSubmitting}>Cancel rental</Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <Textarea label="Reason" required rows={3} value={cancellationReason} onChange={(e) => setCancellationReason(e.target.value)} placeholder="Why is this rental cancelled?" />
+            {selectedRental && (
+              <p className="text-xs text-slate-500 capitalize">
+                {selectedRental.status} · {selectedRental.rental_date.split('T')[0]} → {selectedRental.return_date.split('T')[0]}
               </p>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Cancellation Reason <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={cancellationReason}
-                    onChange={(e) => setCancellationReason(e.target.value)}
-                    placeholder="Please provide a reason for cancellation..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                    rows={3}
-                    required
-                  />
-                </div>
-
-                <div className="text-sm text-gray-500">
-                  <p>Current status: <span className="font-medium capitalize">{selectedRental.status}</span></p>
-                  <p>Rental period: {selectedRental.rental_date.split('T')[0]} to {selectedRental.return_date.split('T')[0]}</p>
-                </div>
-              </div>
-
-              <div className="flex gap-2 justify-end mt-6">
-                <Button 
-                  variant="ghost" 
-                  onClick={() => {
-                    setShowCancelModal(false);
-                    setCancellationReason('');
-                  }}
-                  disabled={isSubmitting}
-                >
-                  No, Keep Rental
-                </Button>
-                <Button 
-                  variant="danger" 
-                  onClick={handleSubmitCancelRental}
-                  disabled={isSubmitting || !cancellationReason.trim()}
-                  loading={isSubmitting}
-                >
-                  Yes, Cancel Rental
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
-        )}
+        </SimpleModal>
 
         <PickupRentalModal
           isOpen={showPickupModal}
@@ -644,6 +521,6 @@ export default function RentalsPage() {
           rental={selectedRental}
         />
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }

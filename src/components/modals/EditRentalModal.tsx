@@ -2,12 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { apiClient } from '@/lib/api';
 import { Rental } from '@/types';
-import { Calendar, DollarSign, AlertCircle } from 'lucide-react';
 
 interface EditRentalModalProps {
   isOpen: boolean;
@@ -104,102 +103,55 @@ export function EditRentalModal({ isOpen, onClose, onSuccess, rental }: EditRent
       <div className="space-y-6">
         {/* Status Warning */}
         {rental.status !== 'pending' && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
-            <p className="text-sm text-yellow-700 flex items-center">
-              <AlertCircle className="h-4 w-4 mr-2" />
-              Only pending rentals can be edited. Current status: {rental.status}
-            </p>
+          <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Only pending rentals can be edited. Current status: {rental.status}
           </div>
         )}
 
-        {/* Rental Dates */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Calendar className="h-4 w-4 inline mr-2" />
-              Rental Date
-            </label>
-            <Input
-              type="date"
-              value={form.rental_date}
-              onChange={(e) => setForm({ ...form, rental_date: e.target.value })}
-              disabled={rental.status !== 'pending'}
-            />
-            {errors.rental_date && (
-              <p className="mt-1 text-sm text-red-600 flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
-                {errors.rental_date}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Calendar className="h-4 w-4 inline mr-2" />
-              Return Date
-            </label>
-            <Input
-              type="date"
-              value={form.return_date}
-              onChange={(e) => setForm({ ...form, return_date: e.target.value })}
-              min={form.rental_date}
-              disabled={rental.status !== 'pending'}
-            />
-            {errors.return_date && (
-              <p className="mt-1 text-sm text-red-600 flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
-                {errors.return_date}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Security Deposit */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <DollarSign className="h-4 w-4 inline mr-2" />
-            Security Deposit
-          </label>
-          <CurrencyInput
-            value={form.security_deposit}
-            onChange={(n) => setForm({ ...form, security_deposit: n })}
-            placeholder="0"
+          <Input
+            label="Rental date"
+            type="date"
+            value={form.rental_date}
+            onChange={(e) => setForm({ ...form, rental_date: e.target.value })}
             disabled={rental.status !== 'pending'}
+            error={errors.rental_date}
           />
-          {errors.security_deposit && (
-            <p className="mt-1 text-sm text-red-600 flex items-center">
-              <AlertCircle className="h-4 w-4 mr-1" />
-              {errors.security_deposit}
-            </p>
-          )}
+          <Input
+            label="Return date"
+            type="date"
+            value={form.return_date}
+            onChange={(e) => setForm({ ...form, return_date: e.target.value })}
+            min={form.rental_date}
+            disabled={rental.status !== 'pending'}
+            error={errors.return_date}
+          />
         </div>
 
-        {/* Notes */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Notes
-          </label>
-          <textarea
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            rows={3}
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="Additional notes..."
-          />
-        </div>
+        <CurrencyInput
+          label="Security deposit"
+          value={form.security_deposit}
+          onChange={(n) => setForm({ ...form, security_deposit: n })}
+          placeholder="0"
+          disabled={rental.status !== 'pending'}
+          error={errors.security_deposit}
+        />
+
+        <Textarea
+          label="Notes"
+          rows={3}
+          value={form.notes}
+          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          placeholder="Additional notes..."
+        />
 
         {/* Submit Error */}
         {errors.submit && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-3">
-            <p className="text-sm text-red-600 flex items-center">
-              <AlertCircle className="h-4 w-4 mr-2" />
-              {errors.submit}
-            </p>
-          </div>
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{errors.submit}</div>
         )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+        <div className="flex justify-end gap-3 pt-4 border-t border-black/5">
           <Button variant="ghost" onClick={handleClose} disabled={loading}>
             Cancel
           </Button>

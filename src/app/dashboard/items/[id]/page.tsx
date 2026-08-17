@@ -3,25 +3,61 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { BarcodeLabel } from '@/components/ui/BarcodeLabel';
 import { SafeImage } from '@/components/ui/SafeImage';
+import { PageShell } from '@/components/ui/PageShell';
+import { Badge } from '@/components/ui/DataDisplay';
+import { DetailRow, DetailRows, MoneyRow } from '@/components/modals/detail-layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api';
 import { Item, Rental, Booking, CreateItemRequest } from '@/types';
 import { formatCurrency } from '@/lib/currency';
-import { formatDate } from '@/lib/date';
-import { getAndroidBluetoothProductLabelUrl, getBprintProductLabelUrl } from '@/lib/bprint';
+import { formatDateShort } from '@/lib/date';
+import { printProductLabel } from '@/lib/print-router';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import EditItemModal from '@/components/modals/EditItemModal';
 import { useToast } from '@/contexts/ToastContext';
-import { ArrowRightLeft, Edit } from 'lucide-react';
+import { ArrowRightLeft, ChevronLeft, ChevronRight, Edit, X, ZoomIn } from 'lucide-react';
+import clsx from 'clsx';
 
-const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
-const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+function itemStatusVariant(status: string): 'success' | 'primary' | 'warning' | 'danger' | 'default' {
+  switch (status) {
+    case 'available':
+      return 'success';
+    case 'rented':
+      return 'primary';
+    case 'maintenance':
+      return 'warning';
+    case 'retired':
+    case 'damaged':
+    case 'lost':
+      return 'danger';
+    default:
+      return 'default';
+  }
+}
+
+function conditionVariant(condition: string): 'success' | 'warning' | 'danger' | 'default' {
+  switch (condition) {
+    case 'excellent':
+      return 'success';
+    case 'fair':
+      return 'warning';
+    case 'poor':
+      return 'danger';
+    default:
+      return 'default';
+  }
+}
+
+function typeLabel(type: string) {
+  if (type === 'shirts') return 'Shirt';
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
 
 export default function ItemDetailPage() {
   const routeParams = useParams<{ id: string }>();
@@ -35,7 +71,6 @@ export default function ItemDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadingThumb, setUploadingThumb] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [imagesExpanded, setImagesExpanded] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
   const [generatingBarcode, setGeneratingBarcode] = useState(false);
@@ -44,7 +79,15 @@ export default function ItemDetailPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingRentals, setLoadingRentals] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [deletingImage, setDeletingImage] = useState<string | null>(null);
   const [pairedTrousers, setPairedTrousers] = useState<Item | null>(null);
+  const viewerImages = Array.from(
+    new Set(
+      [item?.thumbnail_url, ...(item?.images || [])].filter(
+        (url): url is string => Boolean(url && url.trim()),
+      ),
+    ),
+  );
 
   const loadRentalsAndBookings = useCallback(async () => {
     try {
@@ -85,7 +128,6 @@ export default function ItemDetailPage() {
     load();
   }, [id, loadRentalsAndBookings]);
 
-
   const generateBarcode = async () => {
     if (!item) return;
     
@@ -110,7 +152,6 @@ export default function ItemDetailPage() {
       link.click();
     }
   };
-
 
   const refreshItem = useCallback(async () => {
     if (!id) return;
@@ -191,9 +232,20 @@ export default function ItemDetailPage() {
     }
   };
 
+  const confirmDeleteGalleryImage = async () => {
+    if (!deletingImage) return;
+    await deleteGalleryImage(deletingImage);
+    setDeletingImage(null);
+  };
+
   const openImageModal = (index: number) => {
     setSelectedImageIndex(index);
     setIsZoomed(false);
+  };
+
+  const openImageModalFor = (url: string) => {
+    const index = viewerImages.indexOf(url);
+    openImageModal(index >= 0 ? index : 0);
   };
 
   const closeImageModal = () => {
@@ -202,558 +254,433 @@ export default function ItemDetailPage() {
   };
 
   const nextImage = () => {
-    if (item?.images && selectedImageIndex !== null) {
-      setSelectedImageIndex((selectedImageIndex + 1) % item.images.length);
-    }
+    if (viewerImages.length === 0 || selectedImageIndex === null) return;
+    setSelectedImageIndex((selectedImageIndex + 1) % viewerImages.length);
+    setIsZoomed(false);
   };
 
   const prevImage = () => {
-    if (item?.images && selectedImageIndex !== null) {
-      setSelectedImageIndex(selectedImageIndex === 0 ? item.images.length - 1 : selectedImageIndex - 1);
-    }
+    if (viewerImages.length === 0 || selectedImageIndex === null) return;
+    setSelectedImageIndex(selectedImageIndex === 0 ? viewerImages.length - 1 : selectedImageIndex - 1);
+    setIsZoomed(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  useEffect(() => {
     if (selectedImageIndex === null) return;
-    
-    switch (e.key) {
-      case 'Escape':
-        closeImageModal();
-        break;
-      case 'ArrowLeft':
-        prevImage();
-        break;
-      case 'ArrowRight':
-        nextImage();
-        break;
-      case ' ':
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeImageModal();
+      if (e.key === 'ArrowLeft') prevImage();
+      if (e.key === 'ArrowRight') nextImage();
+      if (e.key === ' ') {
         e.preventDefault();
-        setIsZoomed(!isZoomed);
-        break;
-    }
-  };
+        setIsZoomed((zoomed) => !zoomed);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedImageIndex, viewerImages.length]);
 
   return (
-    <DashboardLayout>
-      <div className="space-y-4 sm:space-y-6">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Item Detail</h1>
-          <div className="flex items-center gap-2">
-            {item && (
+    <>
+      <PageShell
+        title={item?.name || 'Item'}
+        subtitle={item ? `#${item.code}` : undefined}
+        toolbar={
+          <Link href="/dashboard/items">
+            <Button variant="ghost">Back</Button>
+          </Link>
+        }
+        action={
+          item ? (
+            <>
+              <Button variant="secondary" onClick={() => setTransferOpen(true)} disabled={item.status !== 'available'}>
+                <ArrowRightLeft className="h-4 w-4" />
+                Transfer
+              </Button>
               <Button variant="secondary" onClick={() => setEditing(true)}>
                 <Edit className="h-4 w-4" />
                 Edit
               </Button>
-            )}
-            <Link href="/dashboard/items">
-              <Button variant="ghost">Back to Items</Button>
-            </Link>
-          </div>
-        </div>
-
+            </>
+          ) : undefined
+        }
+      >
         {loading ? (
-          <div className="text-gray-500">Loading...</div>
+          <div className="text-slate-500">Loading...</div>
         ) : error ? (
           <div className="text-red-600">{error}</div>
         ) : !item ? (
-          <div className="text-gray-500">Item not found</div>
+          <div className="text-slate-500">Item not found</div>
         ) : (
           <>
           <Card>
             <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1">
-                  <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,280px)_1fr]">
+                <div>
+                  <button
+                    type="button"
+                    disabled={!item.thumbnail_url}
+                    onClick={() => item.thumbnail_url && openImageModalFor(item.thumbnail_url)}
+                    className={clsx(
+                      'relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl bg-slate-100',
+                      item.thumbnail_url ? 'cursor-zoom-in group' : 'cursor-default',
+                    )}
+                  >
                     <SafeImage
                       src={item.thumbnail_url}
                       alt={item.name}
                       width={800}
                       height={800}
                       className="h-full w-full object-cover"
-                      fallback={<div className="h-full w-full grid place-items-center text-gray-400">No image</div>}
+                      fallback={<div className="h-full w-full grid place-items-center text-slate-400">No image</div>}
                     />
-                  </div>
-                  <div className="mt-3">
-                    <label className="text-sm text-gray-600">Update Thumbnail</label>
-                    <div className="mt-2">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => uploadThumbnail(e.target.files?.[0] || null)}
-                        disabled={uploadingThumb}
-                        id="thumbnail-upload"
-                        className="hidden"
-                      />
-                      <label
-                        htmlFor="thumbnail-upload"
-                        className={`
-                          inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer transition-colors duration-200
-                          ${uploadingThumb ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                      >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        {uploadingThumb ? 'Uploading...' : 'Choose Thumbnail'}
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="lg:col-span-2 space-y-4">
-                  <div>
-                    <h2 className="text-2xl font-semibold text-gray-900">{item.name}</h2>
-                    <p className="text-gray-500">Code: #{item.code}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <BranchBadge branch={item.branch} always />
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setEditing(true)}
-                      >
-                        <Edit className="h-4 w-4" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setTransferOpen(true)}
-                        disabled={item.status !== 'available'}
-                      >
-                        <ArrowRightLeft className="h-4 w-4" />
-                        Transfer
-                      </Button>
-                    </div>
-                    <div className="mt-4 space-y-3">
-                      <div className="text-sm text-gray-700 flex items-center gap-2">
-                        <span className="text-gray-500">Barcode:</span>
-                        <span className="font-mono">{item.barcode || 'No barcode assigned'}</span>
-                        {!item.barcode && (
-                          <Button
-                            onClick={generateBarcode}
-                            disabled={generatingBarcode}
-                            className="ml-2 px-3 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                          >
-                            {generatingBarcode ? 'Generating...' : 'Generate Barcode'}
-                          </Button>
-                        )}
-                      </div>
-                      {item.barcode && (
-                        <div className="bg-white p-4 rounded-lg border border-gray-200 inline-block">
-                          <BarcodeLabel
-                            value={item.barcode}
-                            itemName={item.name}
-                            itemCode={item.code}
-                            format="CODE128"
-                            width={2}
-                            height={60}
-                            fontSize={10}
-                            onImageGenerated={setLabelImageUrl}
-                            className="max-w-full"
-                          />
-                          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                            {labelImageUrl && (
-                              <Button
-                                onClick={downloadLabel}
-                                className="px-3 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700"
-                              >
-                                Download Label
-                              </Button>
-                            )}
-                            {(!isAndroid && !isIOS) || isIOS ? (
-                              <Button
-                                onClick={() => { window.location.href = getBprintProductLabelUrl(item.id); }}
-                                className="px-3 py-1 text-xs border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md"
-                              >
-                                Print (iOS)
-                              </Button>
-                            ) : null}
-                            {(!isAndroid && !isIOS) || isAndroid ? (
-                              <Button
-                                onClick={() => { window.location.href = getAndroidBluetoothProductLabelUrl(item.id); }}
-                                className="px-3 py-1 text-xs border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md"
-                              >
-                                Print (Android)
-                              </Button>
-                            ) : null}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm text-gray-500">Status</div>
-                      <div className="font-medium capitalize">{item.status}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-500">Condition</div>
-                      <div className="font-medium capitalize">{item.condition}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-500">Brand / Color</div>
-                      <div className="font-medium">{item.brand || '-'} {item.color ? `• ${item.color}` : ''}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-500">Size</div>
-                      <div className="font-medium">{item.size?.label || '-'}</div>
-                    </div>
-                    {item.trousers_code && item.type !== 'trousers' && (
-                      <div className="col-span-2">
-                        <div className="text-sm text-gray-500">Default trousers</div>
-                        {pairedTrousers ? (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Link href={`/dashboard/items/${pairedTrousers.id}`} className="font-mono font-medium text-blue-700 hover:underline">
-                              {pairedTrousers.name} ({pairedTrousers.code})
-                            </Link>
-                            <Link href="/dashboard/items?type=trousers" className="text-sm text-blue-700 hover:underline">
-                              Find other trousers
-                            </Link>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono font-medium">{item.trousers_code}</span>
-                            <Link href="/dashboard/items?type=trousers" className="text-sm text-blue-700 hover:underline">
-                              Find other trousers
-                            </Link>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {item.detail_size && (
-                      <div>
-                        <div className="text-sm text-gray-500">Detail Size</div>
-                        <div className="font-medium">{item.detail_size}</div>
-                      </div>
-                    )}
-                    {item.owner && (
-                      <div>
-                        <div className="text-sm text-gray-500">Owner</div>
-                        <div className="font-medium">{item.owner}</div>
-                      </div>
-                    )}
-                    <div>
-                      <div className="text-sm text-gray-500">Quantity</div>
-                      <div className="font-medium">{item.quantity}</div>
-                    </div>
-                    {item.category && (
-                      <div>
-                        <div className="text-sm text-gray-500">Category</div>
-                        <div className="font-medium text-blue-600">
-                          📁 {item.category.name}
-                        </div>
-                      </div>
-                    )}
-                    <div>
-                      <div className="text-sm text-gray-500">Pricing</div>
-                      <div className="flex flex-col text-gray-900">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-sm text-gray-500 w-16">3-day</span>
-                          <span className="font-medium">{formatCurrency(item.standard_price)}</span>
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-sm text-gray-500 w-16">Day</span>
-                          <span className="font-medium">{formatCurrency(item.one_day_price)}</span>
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-sm text-gray-500 w-16">4 hr</span>
-                          <span className="font-medium">{formatCurrency(item.four_hour_price)}</span>
-                        </div>
-                        {isAdmin && typeof item.purchase_price === 'number' && (
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-sm text-gray-500 w-16">Buy</span>
-                            <span className="font-medium">{formatCurrency(item.purchase_price)}</span>
-                          </div>
-                        )}
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-sm text-gray-500 w-16">Sell</span>
-                          <span className="font-medium">{formatCurrency(item.selling_price || 0)}</span>
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-sm text-gray-500 w-16">Sellable</span>
-                          <span className="font-medium">{item.is_sellable ? 'Yes' : 'No'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {item.description && (
-                    <div>
-                      <div className="text-sm text-gray-500">Description</div>
-                      <div>{item.description}</div>
-                    </div>
-                  )}
-
-                  {Array.isArray(item.tags) && item.tags.length > 0 && (
-                    <div>
-                      <div className="text-sm text-gray-500 mb-1">Tags</div>
-                      <div className="flex flex-wrap gap-2">
-                        {item.tags.map((t) => (
-                          <span key={t} className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700">{t}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {/* Gallery */}
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-2">
-                  <button
-                    onClick={() => setImagesExpanded(!imagesExpanded)}
-                    className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-                  >
-                    <span>Images</span>
-                    <span className="text-gray-400">
-                      {imagesExpanded ? '▼' : '▶'}
-                    </span>
-                    {Array.isArray(item.images) && item.images.length > 0 && (
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-                        {item.images.length}
+                    {item.thumbnail_url && (
+                      <span className="pointer-events-none absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-800">
+                          <ZoomIn className="h-3.5 w-3.5" />
+                          Click to zoom
+                        </span>
                       </span>
                     )}
                   </button>
-                  {imagesExpanded && (
+                  <div className="mt-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => uploadThumbnail(e.target.files?.[0] || null)}
+                      disabled={uploadingThumb}
+                      id="thumbnail-upload"
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="thumbnail-upload"
+                      className={clsx(
+                        'inline-flex min-h-11 cursor-pointer items-center text-sm font-medium text-indigo-700',
+                        uploadingThumb && 'pointer-events-none opacity-50',
+                      )}
+                    >
+                      {uploadingThumb ? 'Uploading…' : item.thumbnail_url ? 'Change photo' : 'Add photo'}
+                    </label>
+                  </div>
+                </div>
+
+                <div className="min-w-0 space-y-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={itemStatusVariant(item.status)} dot className="capitalize">{item.status}</Badge>
+                    <Badge variant={conditionVariant(item.condition)} className="capitalize">{item.condition}</Badge>
+                    <BranchBadge branch={item.branch} always />
+                  </div>
+
+                  <DetailRows>
+                    <DetailRow label="Type" value={typeLabel(item.type)} />
+                    <DetailRow label="Brand" value={item.brand} />
+                    <DetailRow label="Color" value={item.color} />
+                    <DetailRow label="Size" value={item.size?.label} />
+                    <DetailRow label="Detail size" value={item.detail_size} />
+                    <DetailRow label="Category" value={item.category?.name} />
+                    <DetailRow label="Owner" value={item.owner} />
+                    <DetailRow label="Quantity" value={item.quantity} />
+                  </DetailRows>
+
+                  {item.trousers_code && item.type !== 'trousers' && (
                     <div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => uploadGalleryImage(e.target.files?.[0] || null)}
-                        disabled={uploadingImage}
-                        id="gallery-upload"
-                        className="hidden"
-                      />
-                      <label
-                        htmlFor="gallery-upload"
-                        className={`
-                          inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer transition-colors duration-200
-                          ${uploadingImage ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                      >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        {uploadingImage ? 'Uploading...' : 'Add Image'}
-                      </label>
+                      <div className="text-sm text-slate-500">Default trousers</div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {pairedTrousers ? (
+                          <Link href={`/dashboard/items/${pairedTrousers.id}`} className="text-sm font-medium text-indigo-700 hover:underline">
+                            {pairedTrousers.name} ({pairedTrousers.code})
+                          </Link>
+                        ) : (
+                          <span className="font-mono text-sm font-medium text-slate-900">{item.trousers_code}</span>
+                        )}
+                        <Link href="/dashboard/items?type=trousers" className="text-sm text-slate-500 hover:text-slate-800">
+                          Find other trousers
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+
+                  {item.description && (
+                    <p className="text-sm leading-relaxed text-slate-700">{item.description}</p>
+                  )}
+
+                  {Array.isArray(item.tags) && item.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {item.tags.map((t) => (
+                        <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{t}</span>
+                      ))}
                     </div>
                   )}
                 </div>
-                {imagesExpanded && (
-                  <div className="mt-3">
-                    {Array.isArray(item.images) && item.images.length > 0 ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                        {item.images.map((img, index) => (
-                          <div 
-                            key={`${img}-${index}`} 
-                            className="aspect-square bg-gray-100 rounded-lg overflow-hidden group relative cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-lg"
-                            onClick={() => openImageModal(index)}
-                          >
-                            <SafeImage
-                              src={img}
-                              alt={`${item.name} ${index + 1}`}
-                              width={400}
-                              height={400}
-                              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-110"
-                              fallback={<div className="h-full w-full grid place-items-center text-gray-400">image</div>}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-2">
-                              <span className="text-white text-sm font-medium">
-                                {index + 1}
-                              </span>
-                            </div>
-                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
-                              <div className="bg-white/90 backdrop-blur-sm rounded-full p-1">
-                                <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                                </svg>
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (confirm('Are you sure you want to delete this image?')) {
-                                    deleteGalleryImage(img);
-                                  }
-                                }}
-                                className="bg-red-500 hover:bg-red-600 text-white rounded-full p-1 transition-colors duration-200"
-                                disabled={uploadingImage}
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-gray-500 py-8 text-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
-                        <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        No images uploaded yet
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Image Modal */}
-                {selectedImageIndex !== null && item?.images && (
-                  <div 
-                    className="fixed inset-0 bg-white z-50 flex items-center justify-center p-4"
-                    onClick={closeImageModal}
-                    onKeyDown={handleKeyDown}
-                    tabIndex={0}
-                  >
-                    <div className="relative max-w-7xl max-h-full w-full h-full flex items-center justify-center">
-                      {/* Close Button */}
-                      <button
-                        onClick={closeImageModal}
-                        className="absolute top-4 right-4 z-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white rounded-full p-2 transition-colors duration-200"
-                      >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-
-                      {/* Navigation Arrows */}
-                      {item.images.length > 1 && (
-                        <>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); prevImage(); }}
-                            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white rounded-full p-3 transition-colors duration-200"
-                          >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); nextImage(); }}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white rounded-full p-3 transition-colors duration-200"
-                          >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </button>
-                        </>
-                      )}
-
-                      {/* Image */}
-                      <div 
-                        className={`relative max-w-full max-h-full transition-transform duration-300 ${isZoomed ? 'scale-150' : 'scale-100'}`}
-                        onClick={(e) => { e.stopPropagation(); setIsZoomed(!isZoomed); }}
-                      >
-                        <SafeImage
-                          src={item.images[selectedImageIndex]}
-                          alt={`${item.name} ${selectedImageIndex + 1}`}
-                          width={1200}
-                          height={800}
-                          className="max-w-full max-h-full object-contain rounded-lg"
-                        />
-                      </div>
-
-                      {/* Image Counter */}
-                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm">
-                        {selectedImageIndex + 1} / {item.images.length}
-                      </div>
-
-                      {/* Zoom Hint */}
-                      <div className="absolute top-4 left-4 bg-white/20 backdrop-blur-sm text-white px-3 py-1 rounded-full text-xs">
-                        Click to zoom • Space to toggle • Arrow keys to navigate
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Rental and Booking Information */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardContent>
+                <h2 className="mb-3 text-sm font-semibold text-slate-900">Pricing</h2>
+                <div className="space-y-2">
+                  <MoneyRow label="3-day" value={formatCurrency(item.standard_price)} />
+                  <MoneyRow label="1 day" value={formatCurrency(item.one_day_price)} />
+                  <MoneyRow label="4 hours" value={formatCurrency(item.four_hour_price)} />
+                  {isAdmin && typeof item.purchase_price === 'number' && (
+                    <MoneyRow label="Buying price" value={formatCurrency(item.purchase_price)} />
+                  )}
+                  <MoneyRow label="Selling price" value={formatCurrency(item.selling_price || 0)} />
+                  <MoneyRow label="Sellable" value={item.is_sellable ? 'Yes' : 'No'} />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent>
+                <h2 className="mb-3 text-sm font-semibold text-slate-900">Label</h2>
+                {item.barcode ? (
+                  <div>
+                    <p className="mb-3 font-mono text-sm text-slate-600">{item.barcode}</p>
+                    <BarcodeLabel
+                      value={item.barcode}
+                      itemName={item.name}
+                      itemCode={item.code}
+                      format="CODE128"
+                      width={2}
+                      height={60}
+                      fontSize={10}
+                      onImageGenerated={setLabelImageUrl}
+                      className="max-w-full"
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {labelImageUrl && (
+                        <Button size="sm" variant="secondary" onClick={downloadLabel}>
+                          Download
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={async () => {
+                          try {
+                            await printProductLabel(
+                              {
+                                id: item.id,
+                                name: item.name,
+                                code: item.code,
+                                barcode: item.barcode || item.code,
+                                brand: item.brand,
+                                color: item.color,
+                                size: item.size,
+                              },
+                              labelImageUrl || undefined,
+                            );
+                          } catch (err) {
+                            toastError('Could not print label', err instanceof Error ? err.message : 'Please try again.');
+                          }
+                        }}
+                      >
+                        Print
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm text-slate-500">No barcode yet.</p>
+                    <Button className="mt-3" size="sm" onClick={generateBarcode} loading={generatingBarcode}>
+                      Generate barcode
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardContent>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">Photos</h2>
+                <div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => uploadGalleryImage(e.target.files?.[0] || null)}
+                    disabled={uploadingImage}
+                    id="gallery-upload"
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="gallery-upload"
+                    className={clsx(
+                      'inline-flex min-h-11 cursor-pointer items-center text-sm font-medium text-indigo-700',
+                      uploadingImage && 'pointer-events-none opacity-50',
+                    )}
+                  >
+                    {uploadingImage ? 'Uploading…' : 'Add photo'}
+                  </label>
+                </div>
+              </div>
+              {Array.isArray(item.images) && item.images.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                  {item.images.map((img, index) => (
+                    <div
+                      key={`${img}-${index}`}
+                      className="group relative aspect-square cursor-pointer overflow-hidden rounded-xl bg-slate-100"
+                      onClick={() => openImageModalFor(img)}
+                    >
+                      <SafeImage
+                        src={img}
+                        alt={`${item.name} ${index + 1}`}
+                        width={400}
+                        height={400}
+                        className="h-full w-full object-cover"
+                        fallback={<div className="grid h-full w-full place-items-center text-slate-400">image</div>}
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingImage(img);
+                        }}
+                        className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-slate-700 opacity-0 transition-opacity group-hover:opacity-100"
+                        disabled={uploadingImage}
+                        aria-label="Delete photo"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="py-6 text-center text-sm text-slate-500">No extra photos yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
+                {selectedImageIndex !== null && viewerImages[selectedImageIndex] && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+                    onClick={closeImageModal}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Item image"
+                  >
+                    <div className="relative flex h-full w-full max-w-6xl items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={closeImageModal}
+                        className="absolute right-4 top-4 z-10 rounded-full bg-white/15 p-2 text-white backdrop-blur-sm hover:bg-white/25"
+                        aria-label="Close"
+                      >
+                        <X className="h-6 w-6" />
+                      </button>
+
+                      {viewerImages.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                            className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 p-3 text-white backdrop-blur-sm hover:bg-white/25"
+                            aria-label="Previous image"
+                          >
+                            <ChevronLeft className="h-6 w-6" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                            className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 p-3 text-white backdrop-blur-sm hover:bg-white/25"
+                            aria-label="Next image"
+                          >
+                            <ChevronRight className="h-6 w-6" />
+                          </button>
+                        </>
+                      )}
+
+                      <div
+                        className={clsx(
+                          'max-h-full max-w-full overflow-auto rounded-lg',
+                          isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in',
+                        )}
+                        onClick={(e) => { e.stopPropagation(); setIsZoomed((zoomed) => !zoomed); }}
+                      >
+                        <SafeImage
+                          src={viewerImages[selectedImageIndex]}
+                          alt={`${item.name} ${selectedImageIndex + 1}`}
+                          width={1600}
+                          height={1600}
+                          className={clsx(
+                            'rounded-lg object-contain transition-transform duration-200',
+                            isZoomed ? 'max-w-none w-[min(200vw,1600px)]' : 'max-h-[85vh] max-w-full',
+                          )}
+                        />
+                      </div>
+
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-4 py-2 text-sm text-white backdrop-blur-sm">
+                        {selectedImageIndex + 1} / {viewerImages.length}
+                      </div>
+                      <div className="absolute left-4 top-4 rounded-full bg-black/50 px-3 py-1 text-xs text-white backdrop-blur-sm">
+                        Click image to zoom · Esc to close
+                      </div>
+                    </div>
+                  </div>
+                )}
+
           {(rentals.length > 0 || bookings.length > 0) && (
             <Card>
               <CardContent>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Current Rentals & Bookings</h2>
-                
-                {/* Active Rentals */}
-                {rentals.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-md font-medium text-gray-700 mb-3">Active Rentals ({rentals.length})</h3>
-                    <div className="space-y-3">
-                      {rentals.map((rental) => (
-                        <div key={rental.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="font-medium text-red-900">
-                                Rental #{rental.id.slice(-8)}
-                              </div>
-                              <div className="text-sm text-red-700">
-                                Customer: {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : 'Unknown'}
-                              </div>
-                              <div className="text-sm text-red-700">
-                                Dates: {formatDate(rental.rental_date)} - {formatDate(rental.return_date)}
-                              </div>
-                              <div className="text-sm text-red-700">
-                                Status: <span className="font-medium">{rental.status}</span>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-sm font-medium text-red-900">
-                                {formatCurrency(rental.total_cost)}
-                              </div>
-                            </div>
+                <h2 className="mb-3 text-sm font-semibold text-slate-900">Current bookings and rentals</h2>
+                <ul className="divide-y divide-black/5">
+                  {rentals.map((rental) => {
+                    const name = rental.customer
+                      ? `${rental.customer.first_name} ${rental.customer.last_name}`.trim()
+                      : 'Customer';
+                    return (
+                      <li key={rental.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-slate-900">{name}</span>
+                            <Badge variant={rental.status === 'overdue' ? 'danger' : 'primary'} dot className="capitalize">{rental.status}</Badge>
                           </div>
+                          <p className="mt-0.5 text-sm text-slate-500">
+                            {formatDateShort(rental.rental_date)} → {formatDateShort(rental.return_date)}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Active Bookings */}
-                {bookings.length > 0 && (
-                  <div>
-                    <h3 className="text-md font-medium text-gray-700 mb-3">Active Bookings ({bookings.length})</h3>
-                    <div className="space-y-3">
-                      {bookings.map((booking) => (
-                        <div key={booking.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="font-medium text-yellow-900">
-                                Booking #{booking.id.slice(-8)}
-                              </div>
-                              <div className="text-sm text-yellow-700">
-                                Customer: {booking.customer ? `${booking.customer.first_name} ${booking.customer.last_name}` : 'Unknown'}
-                              </div>
-                              <div className="text-sm text-yellow-700">
-                                Date: {formatDate(booking.booking_date)}
-                                {booking.appointment_date && ` → ${formatDate(booking.appointment_date)}`}
-                              </div>
-                              <div className="text-sm text-yellow-700">
-                                Status: <span className="font-medium">{booking.status}</span>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-sm font-medium text-yellow-900">
-                                {formatCurrency((booking.total_amount || 0) - (booking.discount_amount || 0))}
-                              </div>
-                            </div>
+                        <div className="shrink-0 text-sm font-medium tabular-nums text-slate-900">
+                          {formatCurrency(rental.total_cost)}
+                        </div>
+                      </li>
+                    );
+                  })}
+                  {bookings.map((booking) => {
+                    const name = booking.customer
+                      ? `${booking.customer.first_name} ${booking.customer.last_name}`.trim()
+                      : 'Customer';
+                    return (
+                      <li key={booking.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-slate-900">{name}</span>
+                            <Badge variant="warning" className="capitalize">{booking.status.replace('_', ' ')}</Badge>
                           </div>
+                          <p className="mt-0.5 text-sm text-slate-500">
+                            {formatDateShort(booking.booking_date)}
+                            {booking.appointment_date ? ` → ${formatDateShort(booking.appointment_date)}` : ''}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
+                        <div className="shrink-0 text-sm font-medium tabular-nums text-slate-900">
+                          {formatCurrency((booking.total_amount || 0) - (booking.discount_amount || 0))}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
                 {loadingRentals && (
-                  <div className="text-center text-gray-500 py-4">
-                    Loading rental and booking information...
-                  </div>
+                  <p className="pt-3 text-sm text-slate-500">Loading…</p>
                 )}
               </CardContent>
             </Card>
           )}
         </>
         )}
-      </div>
+      </PageShell>
       <EditItemModal
         isOpen={editing}
         onClose={() => setEditing(false)}
@@ -766,8 +693,17 @@ export default function ItemDetailPage() {
         onClose={() => setTransferOpen(false)}
         onTransferred={setItem}
       />
-    </DashboardLayout>
+      <ConfirmModal
+        isOpen={!!deletingImage}
+        title="Delete image"
+        description="Remove this photo from the item gallery?"
+        confirmLabel="Delete"
+        variant="danger"
+        loading={uploadingImage}
+        onClose={() => setDeletingImage(null)}
+        onConfirm={confirmDeleteGalleryImage}
+      />
+    </>
   );
 }
-
 

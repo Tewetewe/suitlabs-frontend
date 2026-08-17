@@ -26,7 +26,7 @@ export function Card({ children, className, padding = 'sm', clickable = false, o
   return (
     <Component
       className={clsx(
-        'glass-panel rounded-2xl flex flex-col',
+        'glass-panel min-w-0 overflow-hidden rounded-2xl flex flex-col',
         paddingClasses[padding],
         clickable && 'hover:shadow-md active:shadow-sm transition-all duration-150 touch-manipulation w-full text-left',
         className
@@ -74,11 +74,12 @@ export function CardTitle({ children, className, size = 'md' }: CardTitleProps) 
 interface CardContentProps {
   children: React.ReactNode;
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export function CardContent({ children, className }: CardContentProps) {
+export function CardContent({ children, className, style }: CardContentProps) {
   return (
-    <div className={clsx('text-slate-700 flex-1', className)} suppressHydrationWarning>
+    <div className={clsx('text-slate-700 flex-1', className)} style={style} suppressHydrationWarning>
       {children}
     </div>
   );

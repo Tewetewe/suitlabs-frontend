@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MapPin, Plus } from 'lucide-react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -154,7 +153,7 @@ export default function BranchesPage() {
   const modalOpen = creating || !!editing;
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Branches"
         subtitle="Physical shops, receipt text, geofence, and each shop's Google Sheet"
@@ -243,6 +242,6 @@ export default function BranchesPage() {
           </label>
         </div>
       </SimpleModal>
-    </DashboardLayout>
+    </>
   );
 }

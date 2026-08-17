@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -105,18 +104,18 @@ export default function UsersPage() {
   // Show loading while checking authentication
   if (authLoading) {
     return (
-      <DashboardLayout>
+      <>
         <div className="flex items-center justify-center py-24">
           <div className="text-center text-slate-500">Loading...</div>
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   // Admin-only page guard (in case router.replace hasn't happened yet)
   if (!isAdmin) {
     return (
-      <DashboardLayout>
+      <>
         <PageShell title="Users" subtitle="Admin access required">
           <EmptyState
             icon={<Shield className="h-10 w-10" />}
@@ -125,12 +124,12 @@ export default function UsersPage() {
             action={<Button onClick={() => router.replace('/dashboard')}>Go back</Button>}
           />
         </PageShell>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Users"
         subtitle={isAdmin ? 'Manage system users and their permissions' : 'View system users and their information'}
@@ -224,7 +223,6 @@ export default function UsersPage() {
           )}
         </div>
 
-
         {/* Add User Modal - Only for Admins */}
         {canAddUsers && (
           <AddUserModal
@@ -235,6 +233,6 @@ export default function UsersPage() {
           />
         )}
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }

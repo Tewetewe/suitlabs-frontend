@@ -13,6 +13,17 @@ const IOS_SCHEME = 'bprint://';
 const ANDROID_SCHEME = 'my.bluetoothprint.scheme://';
 const SUITLABS_PRINT_BRIDGE_SCHEME = 'suitlabs-print://print';
 
+export const THERMER_ANDROID_PACKAGE = 'mate.bluetoothprint';
+export const PRINT_BRIDGE_ANDROID_PACKAGE = 'com.suitlabs.printbridge';
+
+export function isAndroidDevice(): boolean {
+  return typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+}
+
+export function isIOSDevice(): boolean {
+  return typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
 function buildResponseUrl(path: string, query: string): string {
   return `${getApiBase()}${path}${query}`;
 }
@@ -30,16 +41,6 @@ function buildAndroidBridgeUrl(path: string, query: string): string {
   return `${SUITLABS_PRINT_BRIDGE_SCHEME}?url=${encodeURIComponent(responseUrl)}`;
 }
 
-export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
-  const fmt = format ? `&format=${format}` : '';
-  return buildIosUrl('/api/v1/bprint/booking-invoice', `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`);
-}
-
-export function getBprintRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
-  const fmt = format ? `&format=${format}` : '';
-  return buildIosUrl('/api/v1/bprint/rental-invoice', `?rental_id=${encodeURIComponent(rentalId)}${fmt}`);
-}
-
 export function getAndroidBridgeBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full'): string {
   return buildAndroidBridgeUrl(
     '/api/v1/bprint/booking-invoice',
@@ -52,6 +53,16 @@ export function getAndroidBridgeRentalInvoiceUrl(rentalId: string): string {
     '/api/v1/bprint/rental-invoice',
     `?rental_id=${encodeURIComponent(rentalId)}`,
   );
+}
+
+export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
+  const fmt = format ? `&format=${format}` : '';
+  return buildIosUrl('/api/v1/bprint/booking-invoice', `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`);
+}
+
+export function getBprintRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
+  const fmt = format ? `&format=${format}` : '';
+  return buildIosUrl('/api/v1/bprint/rental-invoice', `?rental_id=${encodeURIComponent(rentalId)}${fmt}`);
 }
 
 export function getBprintProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {
@@ -72,4 +83,54 @@ export function getAndroidBluetoothRentalInvoiceUrl(rentalId: string, format?: '
 export function getAndroidBluetoothProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {
   const fmt = format ? `&format=${format}` : '';
   return buildAndroidUrl('/api/v1/bprint/product-label', `?item_id=${encodeURIComponent(itemId)}${fmt}`);
+}
+
+/**
+ * Chrome intercepts intent:// and starts the print app without navigating
+ * away from SuitLabs. Custom schemes via location.href replace the page.
+ */
+export function toAndroidIntentUrl(customUrl: string, packageName: string): string {
+  const separator = '://';
+  const index = customUrl.indexOf(separator);
+  if (index < 0) {
+    return customUrl;
+  }
+  const scheme = customUrl.slice(0, index);
+  const rest = customUrl.slice(index + separator.length).replace(/#/g, '%23');
+  return `intent://${rest}#Intent;scheme=${scheme};package=${packageName};end`;
+}
+
+export function launchPrintUrl(url: string, androidPackage?: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const isAndroid = /android/i.test(navigator.userAgent);
+  if (isAndroid && androidPackage) {
+    window.location.href = toAndroidIntentUrl(url, androidPackage);
+    return;
+  }
+  window.location.href = url;
+}
+
+/** Open Thermer / Bluetooth Print without replacing the SuitLabs page on Android. */
+export function openBprint(iosUrl: string, androidUrl: string): boolean {
+  if (typeof window === 'undefined') return false;
+  if (isAndroidDevice()) {
+    launchPrintUrl(androidUrl, THERMER_ANDROID_PACKAGE);
+    return true;
+  }
+  if (isIOSDevice()) {
+    window.location.href = iosUrl;
+    return true;
+  }
+  return false;
+}
+
+/** Open the SuitLabs Print Bridge without replacing the SuitLabs page. */
+export function openPrintBridge(url: string): boolean {
+  if (typeof window === 'undefined' || !isAndroidDevice()) {
+    return false;
+  }
+  launchPrintUrl(url, PRINT_BRIDGE_ANDROID_PACKAGE);
+  return true;
 }
