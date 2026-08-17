@@ -2,6 +2,7 @@ import path from 'path';
 import { test, expect } from '@playwright/test';
 import {
   chooseSelect,
+  closeDialog,
   createInventoryItem,
   fillSearch,
   goTo,
@@ -83,6 +84,7 @@ test.describe('Admin shops', () => {
       await page.getByTestId('pos-item').first().click();
       await page.getByTestId('pos-pay-cash').click();
       await page.getByTestId('pos-charge').click();
+      await closeDialog(page);
       await expect(page.getByTestId('pos-done').getByText('Sale complete')).toBeVisible();
     }
     await switchShop(page, 'Jimbaran');

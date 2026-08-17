@@ -14,14 +14,16 @@
  * The print dialog is the floor — it needs no setup and no permissions, so the
  * button is never a dead end.
  */
-import type { InvoiceData, Rental } from '@/types';
+import type { InvoiceData, Rental, Sale } from '@/types';
 import {
   getAndroidBluetoothProductLabelUrl,
   getAndroidBridgeBookingInvoiceUrl,
   getAndroidBridgeRentalInvoiceUrl,
+  getAndroidBridgeSaleInvoiceUrl,
   getBprintBookingInvoiceUrl,
   getBprintProductLabelUrl,
   getBprintRentalInvoiceUrl,
+  getBprintSaleInvoiceUrl,
   isAndroidDevice,
   isIOSDevice,
   openBprint,
@@ -145,6 +147,24 @@ export async function printRentalInvoice(rental: Rental): Promise<PrintOutcome> 
   }
 
   printReceiptNode(findOpenReceiptNode(), `Rental ${rental.id.slice(-8)}`);
+  return { route: 'browser', drawer: false };
+}
+
+export async function printSaleInvoice(sale: Sale): Promise<PrintOutcome> {
+  if (isAndroidDevice()) {
+    openPrintBridge(getAndroidBridgeSaleInvoiceUrl(sale.id));
+    return { route: 'bridge', drawer: true };
+  }
+  if (isIOSDevice()) {
+    openBprint(getBprintSaleInvoiceUrl(sale.id), getAndroidBridgeSaleInvoiceUrl(sale.id));
+    return { route: 'bprint', drawer: false };
+  }
+  if (hasThermalPrinter()) {
+    await viaThermal(() => thermalPrinter.printSaleInvoice(sale));
+    return { route: 'thermal', drawer: true };
+  }
+
+  printReceiptNode(findOpenReceiptNode(), `Sale ${sale.sale_number}`);
   return { route: 'browser', drawer: false };
 }
 

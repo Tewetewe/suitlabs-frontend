@@ -147,7 +147,7 @@ export function RentalDetailsModal({
                 <DetailListItem
                   key={line.id || `${line.item_id}-${line.quantity}`}
                   title={`${line.item?.name || 'Item'}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
-                  subtitle={[line.item?.brand, line.item?.color, line.item?.size?.label].filter(Boolean).join(' · ')}
+                  subtitle={[line.item?.code, line.item?.brand, line.item?.color, line.item?.size?.label].filter(Boolean).join(' · ')}
                   trailing={formatCurrency(line.total_price || 0)}
                 />
               ))}

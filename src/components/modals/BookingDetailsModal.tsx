@@ -171,7 +171,7 @@ export function BookingDetailsModal({
                   <DetailListItem
                     key={line.id}
                     title={`${line.item?.name || 'Item'}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
-                    subtitle={line.is_addon ? 'Add-on' : undefined}
+                    subtitle={[line.item?.code, line.is_addon ? 'Add-on' : null].filter(Boolean).join(' · ') || undefined}
                     trailing={showPrice ? formatCurrency(line.final_price || line.total_price || 0) : undefined}
                   />
                 );

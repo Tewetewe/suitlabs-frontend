@@ -55,6 +55,13 @@ export function getAndroidBridgeRentalInvoiceUrl(rentalId: string): string {
   );
 }
 
+export function getAndroidBridgeSaleInvoiceUrl(saleId: string): string {
+  return buildAndroidBridgeUrl(
+    '/api/v1/bprint/sale-invoice',
+    `?sale_id=${encodeURIComponent(saleId)}`,
+  );
+}
+
 export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
   const fmt = format ? `&format=${format}` : '';
   return buildIosUrl('/api/v1/bprint/booking-invoice', `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`);
@@ -63,6 +70,11 @@ export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full
 export function getBprintRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
   const fmt = format ? `&format=${format}` : '';
   return buildIosUrl('/api/v1/bprint/rental-invoice', `?rental_id=${encodeURIComponent(rentalId)}${fmt}`);
+}
+
+export function getBprintSaleInvoiceUrl(saleId: string, format?: 'entries' | 'object' | 'array'): string {
+  const fmt = format ? `&format=${format}` : '';
+  return buildIosUrl('/api/v1/bprint/sale-invoice', `?sale_id=${encodeURIComponent(saleId)}${fmt}`);
 }
 
 export function getBprintProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {
@@ -78,6 +90,11 @@ export function getAndroidBluetoothBookingInvoiceUrl(bookingId: string, type: 'd
 export function getAndroidBluetoothRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
   const fmt = format ? `&format=${format}` : '';
   return buildAndroidUrl('/api/v1/bprint/rental-invoice', `?rental_id=${encodeURIComponent(rentalId)}${fmt}`);
+}
+
+export function getAndroidBluetoothSaleInvoiceUrl(saleId: string, format?: 'entries' | 'object' | 'array'): string {
+  const fmt = format ? `&format=${format}` : '';
+  return buildAndroidUrl('/api/v1/bprint/sale-invoice', `?sale_id=${encodeURIComponent(saleId)}${fmt}`);
 }
 
 export function getAndroidBluetoothProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {

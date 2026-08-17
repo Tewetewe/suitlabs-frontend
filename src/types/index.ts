@@ -1232,6 +1232,7 @@ export interface PaymentProof {
 
 export interface InvoiceItem {
   description: string;
+  item_code?: string;
   quantity: number;
   unit_price: number;
   total: number;

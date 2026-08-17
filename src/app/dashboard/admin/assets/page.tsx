@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
-import { Badge, EmptyState, Pagination } from '@/components/ui/DataDisplay';
+import { Badge, EmptyState } from '@/components/ui/DataDisplay';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,8 +31,6 @@ const CATEGORY_OPTIONS: { value: FixedAssetCategory; label: string }[] = [
   { value: 'electronics', label: 'Electronics' },
   { value: 'other', label: 'Other' },
 ];
-
-const LIST_PAGE_SIZE = 10;
 
 const PURCHASE_PAYMENT_OPTIONS = [
   { value: 'cash', label: 'Cash' },
@@ -77,16 +75,12 @@ export default function AssetsPage() {
   const [saving, setSaving] = useState(false);
   const [deletingAsset, setDeletingAsset] = useState<FixedAsset | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [fixedPage, setFixedPage] = useState(1);
-  const [inventoryPage, setInventoryPage] = useState(1);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       setReport(await apiClient.getAssets());
       setLoadError(null);
-      setFixedPage(1);
-      setInventoryPage(1);
     } catch {
       setLoadError('Failed to load assets');
       setReport(null);
@@ -188,10 +182,6 @@ export default function AssetsPage() {
   const fixed = report?.fixed;
   const fixedItems = fixed?.items || [];
   const inventoryItems = inventory?.items || [];
-  const fixedTotalPages = Math.max(1, Math.ceil(fixedItems.length / LIST_PAGE_SIZE));
-  const inventoryTotalPages = Math.max(1, Math.ceil(inventoryItems.length / LIST_PAGE_SIZE));
-  const pagedFixed = fixedItems.slice((fixedPage - 1) * LIST_PAGE_SIZE, fixedPage * LIST_PAGE_SIZE);
-  const pagedInventory = inventoryItems.slice((inventoryPage - 1) * LIST_PAGE_SIZE, inventoryPage * LIST_PAGE_SIZE);
 
   return (
     <>
@@ -267,7 +257,6 @@ export default function AssetsPage() {
                     No fixed assets yet. Add chairs, racks, and other shop equipment.
                   </div>
                 ) : (
-                  <>
                   <div className="overflow-x-auto rounded-2xl border border-black/5">
                     <table className="min-w-full text-sm">
                       <thead className="bg-white/60">
@@ -282,7 +271,7 @@ export default function AssetsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-black/5 bg-white/30">
-                        {pagedFixed.map((asset) => (
+                        {fixedItems.map((asset) => (
                           <tr key={asset.id} className={asset.status === 'disposed' ? 'text-slate-400' : 'text-slate-800'}>
                             <td className="px-4 py-3 font-medium">
                               {asset.name}
@@ -311,15 +300,6 @@ export default function AssetsPage() {
                       </tbody>
                     </table>
                   </div>
-                  <Pagination
-                    className="mt-3"
-                    page={Math.min(fixedPage, fixedTotalPages)}
-                    totalPages={fixedTotalPages}
-                    total={fixedItems.length}
-                    perPage={LIST_PAGE_SIZE}
-                    onPageChange={setFixedPage}
-                  />
-                  </>
                 )}
               </CardContent>
             </Card>
@@ -351,7 +331,6 @@ export default function AssetsPage() {
                   No inventory value recorded yet. Add buying price on each item.
                 </div>
               ) : (
-                <>
               <div className="overflow-x-auto rounded-2xl border border-black/5">
               <table className="min-w-full text-sm">
                 <thead className="bg-white/60">
@@ -365,7 +344,7 @@ export default function AssetsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/5 bg-white/30">
-                  {pagedInventory.map((item) => (
+                  {inventoryItems.map((item) => (
                     <tr key={item.id} className="text-slate-800">
                       <td className="px-4 py-3 font-medium">{item.code}</td>
                       <td className="px-4 py-3">{item.name}</td>
@@ -378,15 +357,6 @@ export default function AssetsPage() {
                 </tbody>
               </table>
               </div>
-              <Pagination
-                className="mt-3"
-                page={Math.min(inventoryPage, inventoryTotalPages)}
-                totalPages={inventoryTotalPages}
-                total={inventoryItems.length}
-                perPage={LIST_PAGE_SIZE}
-                onPageChange={setInventoryPage}
-              />
-                </>
               )}
             </div>
           </>

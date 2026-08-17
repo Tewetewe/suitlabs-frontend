@@ -63,11 +63,6 @@ test.describe('Admin books', () => {
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Fixed asset recorded')).toBeVisible();
     const row = page.getByRole('row', { name: new RegExp(name) });
-    for (let i = 0; i < 15 && !(await row.isVisible().catch(() => false)); i++) {
-      const next = page.getByRole('button', { name: 'Next', exact: true }).or(page.getByRole('button', { name: 'Next →' }));
-      if (!(await next.first().isEnabled().catch(() => false))) break;
-      await next.first().click();
-    }
     await expect(row).toBeVisible();
     await row.getByRole('button', { name: 'Dispose' }).click();
     await expect(page.getByText(/disposed/i).first()).toBeVisible();
@@ -118,7 +113,7 @@ test.describe('Admin books', () => {
 
   test('E2E-40 close checklist screens are reachable before lock', async ({ page }) => {
     await goTo(page, 'rentals');
-    await expect(page.getByText(/Page \d+|No rentals|pending|active|completed/)).toBeVisible();
+    await expect(page.getByText(/No rentals|pending|active|completed|shown/)).toBeVisible();
     await goTo(page, 'expenses');
     await expect(page.getByRole('button', { name: 'Add Expense' }).first()).toBeVisible();
     await goTo(page, 'assets');

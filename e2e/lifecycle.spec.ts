@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   clickRowAction,
   createPosBooking,
+  expectHiddenRowActions,
   findRowAcrossPages,
   goTo,
   localISODate,
@@ -75,10 +76,7 @@ test.describe('Booking and rental lifecycle', () => {
   test('E2E-15 fully paid booking hides Edit and Collect balance', async ({ page }) => {
     const customer = await createPosBooking(page, 'full');
     const booking = await searchBooking(page, customer.fullName);
-    await booking.getByLabel('Actions').click();
-    await expect(booking.getByRole('button', { name: 'Edit' })).toHaveCount(0);
-    await expect(booking.getByRole('button', { name: 'Collect balance' })).toHaveCount(0);
-    await page.keyboard.press('Escape');
+    await expectHiddenRowActions(booking, ['Edit', 'Collect balance']);
   });
 
   test('E2E-21 never collected: cancel pending rental with a reason', async ({ page }) => {

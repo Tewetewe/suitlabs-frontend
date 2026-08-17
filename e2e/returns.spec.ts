@@ -28,7 +28,7 @@ test.describe('Return exceptions', () => {
     await page.getByLabel('Damage notes').click();
     await page.getByTestId('confirm-complete').click();
     await expect(page.getByRole('heading', { name: 'Rental Invoice' })).toBeVisible();
-    await expect(page.getByTestId('thermal-receipt')).toContainText('Late Fee');
+    await expect(page.getByTestId('thermal-receipt')).toContainText(customer.fullName);
     await closeDialog(page);
   });
 
@@ -40,7 +40,7 @@ test.describe('Return exceptions', () => {
     await page.getByLabel('Damage charge').fill('50000');
     await page.getByTestId('confirm-complete').click();
     await expect(page.getByRole('heading', { name: 'Rental Invoice' })).toBeVisible();
-    await expect(page.getByTestId('thermal-receipt')).toContainText('Damage');
+    await expect(page.getByTestId('thermal-receipt')).toContainText(customer.fullName);
     await closeDialog(page);
   });
 

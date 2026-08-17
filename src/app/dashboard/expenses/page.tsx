@@ -9,13 +9,14 @@ import { Button } from '@/components/ui/Button';
 import { Input, NumberInput } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
-import { Badge, EmptyState, FilterBar, Pagination } from '@/components/ui/DataDisplay';
+import { Badge, EmptyState, FilterBar, InfiniteScrollSentinel } from '@/components/ui/DataDisplay';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { useBranch } from '@/contexts/BranchContext';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { apiClient } from '@/lib/api';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import type {
@@ -93,13 +94,8 @@ export default function ExpensesPage() {
   const [category, setCategory] = useState<ExpenseCategory | ''>('');
   const [status, setStatus] = useState<ExpenseStatus | ''>('recorded');
 
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expensesLoading, setExpensesLoading] = useState(true);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const itemsPerPage = 12;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
@@ -122,25 +118,11 @@ export default function ExpensesPage() {
 
   const range = useMemo(() => monthBounds(selectedYear, selectedMonth), [selectedYear, selectedMonth]);
 
-  const loadData = useCallback(async () => {
+  const loadMeta = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      setLoading(true);
-      const [list, monthSummary] = await Promise.all([
-        apiClient.getExpenses({
-          start_date: range.start,
-          end_date: range.end,
-          search: debouncedSearch || undefined,
-          category: category || undefined,
-          status: status || undefined,
-          page: currentPage,
-          limit: itemsPerPage,
-        }),
-        apiClient.getExpenseSummary({ startDate: range.start, endDate: range.end }),
-      ]);
-      setExpenses(list.data?.data?.expenses || []);
-      setTotal(list.data?.pagination?.total || 0);
-      setTotalPages(list.data?.pagination?.total_pages || 1);
+      setExpensesLoading(true);
+      const monthSummary = await apiClient.getExpenseSummary({ startDate: range.start, endDate: range.end });
       setSummary(monthSummary);
       if (isAdmin) {
         try {
@@ -152,20 +134,51 @@ export default function ExpensesPage() {
     } catch (err) {
       console.error(err);
       error('Failed to load expenses', 'Please try again.');
-      setExpenses([]);
       setSummary(null);
     } finally {
-      setLoading(false);
+      setExpensesLoading(false);
     }
-  }, [isAuthenticated, range.start, range.end, debouncedSearch, category, status, currentPage, error, isAdmin]);
+  }, [isAuthenticated, range.start, range.end, error, isAdmin]);
+
+  const loadExpensesPage = useCallback(async (page: number) => {
+    if (!isAuthenticated) return { items: [] as Expense[], hasMore: false, total: 0 };
+    try {
+      const list = await apiClient.getExpenses({
+        start_date: range.start,
+        end_date: range.end,
+        search: debouncedSearch || undefined,
+        category: category || undefined,
+        status: status || undefined,
+        page,
+        limit: LIST_PAGE_SIZE,
+      });
+      const items = list.data?.data?.expenses || [];
+      const pagination = list.data?.pagination;
+      return { items, hasMore: hasNextPage(pagination, items.length), total: pagination?.total || 0 };
+    } catch (err) {
+      console.error(err);
+      error('Failed to load expenses', 'Please try again.');
+      return { items: [] as Expense[], hasMore: false, total: 0 };
+    }
+  }, [isAuthenticated, range.start, range.end, debouncedSearch, category, status, error]);
+
+  const {
+    items: expenses,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    reload,
+    sentinelRef,
+  } = useInfiniteList(loadExpensesPage);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([reload(), loadMeta()]);
+  }, [reload, loadMeta]);
 
   useEffect(() => {
-    if (isAuthenticated) loadData();
-  }, [loadData, isAuthenticated]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, category, status, selectedYear, selectedMonth]);
+    if (isAuthenticated) void loadMeta();
+  }, [loadMeta, isAuthenticated]);
 
   const openCreate = () => {
     setEditing(null);
@@ -216,7 +229,7 @@ export default function ExpensesPage() {
         success('Expense recorded', created.expense_number);
       }
       closeModal();
-      await loadData();
+      await refreshAll();
     } catch (err) {
       console.error(err);
       error('Could not save expense', 'Check the form and try again.');
@@ -232,7 +245,7 @@ export default function ExpensesPage() {
       await apiClient.voidExpense(voiding.id);
       success('Expense voided', `${voiding.expense_number} no longer counts toward P&L.`);
       setVoiding(null);
-      await loadData();
+      await refreshAll();
     } catch (err) {
       console.error(err);
       error('Could not void expense', 'Please try again.');
@@ -252,7 +265,7 @@ export default function ExpensesPage() {
       await apiClient.createRecurringExpense(recurringForm);
       success('Recurring expense saved', 'It will post automatically each month.');
       setRecurringOpen(false);
-      await loadData();
+      await refreshAll();
     } catch (err) {
       console.error(err);
       error('Could not save recurring expense', 'Please try again.');
@@ -290,12 +303,14 @@ export default function ExpensesPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <MetricTile
             label="This month"
+            loading={expensesLoading}
             value={formatCurrencyCompact(summary?.total_amount || 0)}
             title={formatCurrency(summary?.total_amount || 0)}
           />
-          <MetricTile label="Entries" value={summary?.count || 0} />
+          <MetricTile label="Entries" loading={expensesLoading} value={summary?.count || 0} />
           <MetricTile
             label="Top category"
+            loading={expensesLoading}
             value={summary?.by_category?.[0] ? categoryLabel(summary.by_category[0].category) : '—'}
           />
         </div>
@@ -351,7 +366,7 @@ export default function ExpensesPage() {
                                   try {
                                     await apiClient.postRecurringExpense(row.id);
                                     success('Posted', row.description);
-                                    await loadData();
+                                    await refreshAll();
                                   } catch (err) {
                                     console.error(err);
                                     error('Could not post', 'It may already be posted this month.');
@@ -365,7 +380,7 @@ export default function ExpensesPage() {
                                 variant="ghost"
                                 onClick={async () => {
                                   await apiClient.updateRecurringExpense(row.id, { is_active: !row.is_active });
-                                  await loadData();
+                                  await refreshAll();
                                 }}
                               >
                                 {row.is_active ? 'Pause' : 'Resume'}
@@ -505,12 +520,12 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        <Pagination
-          page={currentPage}
-          totalPages={totalPages}
+        <InfiniteScrollSentinel
+          sentinelRef={sentinelRef}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          loaded={expenses.length}
           total={total}
-          perPage={itemsPerPage}
-          onPageChange={setCurrentPage}
         />
       </PageShell>
 

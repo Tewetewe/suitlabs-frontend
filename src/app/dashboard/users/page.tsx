@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -13,54 +13,61 @@ import { Plus, Edit, Trash2, UserCog, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow } from '@/components/ui/DataDisplay';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 
 export default function UsersPage() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading, user: currentUser } = useAuth();
   const { success, error: toastError } = useToast();
-  const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [deactivating, setDeactivating] = useState<User | null>(null);
   const [deactivatingBusy, setDeactivatingBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebouncedValue(searchTerm, 400);
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
-  const [currentPage] = useState(1);
-  const [itemsPerPage] = useState(12);
+  const isAdmin = currentUser?.role === 'admin';
+  const ready = Boolean(isAuthenticated && !authLoading && isAdmin);
 
   useEffect(() => {
-    const isAdmin = currentUser?.role === 'admin';
-
-    if (isAuthenticated && !authLoading && isAdmin) {
-      loadUsers();
-    } else if (!authLoading && (!isAuthenticated || !isAdmin)) {
-      setLoading(false);
-      // This page is admin-only. Non-admins should not be able to access it directly.
-      if (isAuthenticated && !isAdmin) {
-        router.replace('/dashboard');
-      }
+    if (!authLoading && isAuthenticated && !isAdmin) {
+      router.replace('/dashboard');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, authLoading, currentUser?.role, currentPage, itemsPerPage, searchTerm, router]);
+  }, [authLoading, isAuthenticated, isAdmin, router]);
 
-  const loadUsers = async () => {
+  useEffect(() => {
+    if (!ready) return;
+    apiClient.getBranches().then(setBranches).catch(() => setBranches([]));
+  }, [ready]);
+
+  const loadUsersPage = useCallback(async (page: number) => {
+    if (!ready) return { items: [] as User[], hasMore: false, total: 0 };
     try {
-      setLoading(true);
-      const [{ users: rows }, shops] = await Promise.all([
-        apiClient.getUsers({ page: currentPage, limit: itemsPerPage, search: searchTerm }),
-        apiClient.getBranches(),
-      ]);
-      setUsers(Array.isArray(rows) ? rows : []);
-      setBranches(shops);
-    } catch (error) {
-      console.error('Failed to load users:', error);
-      setUsers([]);
-    } finally {
-      setLoading(false);
+      const { users: rows, pagination } = await apiClient.getUsers({
+        page,
+        limit: LIST_PAGE_SIZE,
+        search: debouncedSearch || undefined,
+      });
+      const items = Array.isArray(rows) ? rows : [];
+      return { items, hasMore: hasNextPage(pagination, items.length), total: pagination?.total || 0 };
+    } catch (err) {
+      console.error('Failed to load users:', err);
+      return { items: [] as User[], hasMore: false, total: 0 };
     }
-  };
+  }, [ready, debouncedSearch]);
+
+  const {
+    items: users,
+    setItems: setUsers,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    reload,
+    sentinelRef,
+  } = useInfiniteList(loadUsersPage);
 
   const roleVariant = (role: string): 'danger' | 'primary' | 'success' | 'default' => {
     switch (role) {
@@ -93,8 +100,6 @@ export default function UsersPage() {
     }
   };
 
-  // Role-based permission checks
-  const isAdmin = currentUser?.role === 'admin';
   const canAddUsers = isAdmin;
   const canEditUsers = isAdmin;
   const canDeleteUsers = isAdmin;
@@ -230,6 +235,14 @@ export default function UsersPage() {
           )}
         </div>
 
+        <InfiniteScrollSentinel
+          sentinelRef={sentinelRef}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          loaded={filteredUsers.length}
+          total={total}
+        />
+
         {/* Add User Modal - Only for Admins */}
         {canAddUsers && (
           <AddUserModal
@@ -253,7 +266,7 @@ export default function UsersPage() {
               await apiClient.deactivateUser(deactivating.id);
               success('User deactivated', `${deactivating.first_name} ${deactivating.last_name} can no longer sign in.`);
               setDeactivating(null);
-              await loadUsers();
+              await reload();
             } catch {
               toastError('Could not deactivate user', 'Please try again.');
             } finally {

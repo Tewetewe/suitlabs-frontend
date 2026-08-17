@@ -564,6 +564,13 @@ class APIClient {
     return response.data.data!;
   }
 
+  async getBookingByInvoice(barcode: string): Promise<Booking> {
+    const response = await this.client.get<APIResponse<Booking>>(
+      `/api/v1/bookings/by-invoice?barcode=${encodeURIComponent(barcode)}`,
+    );
+    return response.data.data!;
+  }
+
   async createBooking(booking: CreateBookingRequest): Promise<Booking> {
     const response = await this.client.post<CreateResponse<Booking>>('/api/v1/bookings', booking);
     return response.data.data;

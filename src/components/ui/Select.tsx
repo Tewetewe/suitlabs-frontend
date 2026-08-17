@@ -72,12 +72,16 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [highlight, setHighlight] = useState(-1);
+    const [editing, setEditing] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
     const selected = options.find((option) => option.value === String(value ?? ''));
     const compact = size === 'sm';
     const canClear = clearable ?? searchable;
     const selectedLabel = selected?.label || '';
-    const filtering = searchable && query.trim() !== '' && query !== selectedLabel;
+    const hasSelection = Boolean(selected && selected.value !== '');
+    const locked = searchable && hasSelection && !editing;
+    const filtering = searchable && !locked && query.trim() !== '';
 
     const filtered = useMemo(() => {
       if (!filtering) return options;
@@ -95,6 +99,7 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
           setOpen(false);
           setQuery('');
           setHighlight(-1);
+          setEditing(false);
         }
       }
       document.addEventListener('mousedown', onDocClick);
@@ -106,14 +111,42 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
       setOpen(false);
       setQuery('');
       setHighlight(-1);
+      setEditing(false);
     };
 
-    const display = open && searchable ? (query || selectedLabel) : selectedLabel || query;
+    const clearSelection = () => {
+      emitChange(onChange, '', name, selectId);
+      setQuery('');
+      setHighlight(-1);
+      setEditing(true);
+      onSearch?.('');
+      setOpen(true);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    };
+
+    const unselectToSearch = () => {
+      if (disabled) return;
+      setEditing(true);
+      setQuery('');
+      setHighlight(-1);
+      onSearch?.('');
+      setOpen(true);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    };
+
+    const setInputNode = (el: HTMLInputElement | null) => {
+      inputRef.current = el;
+      if (typeof ref === 'function') ref(el);
+      else if (ref) ref.current = el;
+    };
+
+    const display = locked ? selectedLabel : (open && searchable ? query : selectedLabel || query);
 
     const closeMenu = () => {
       setOpen(false);
       setQuery('');
       setHighlight(-1);
+      setEditing(false);
     };
 
     return (
@@ -131,7 +164,7 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
             )} />
           )}
           <input
-            ref={ref}
+            ref={setInputNode}
             id={selectId}
             name={name}
             disabled={disabled}
@@ -141,7 +174,7 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
             data-lpignore="true"
             data-1p-ignore="true"
             data-form-type="other"
-            readOnly={!searchable}
+            readOnly={!searchable || locked}
             role="combobox"
             aria-expanded={open}
             aria-controls={selectId ? `${selectId}-list` : undefined}
@@ -149,19 +182,31 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
             placeholder={searching ? 'Searching…' : (placeholder || searchPlaceholder || 'Select…')}
             value={display}
             suppressHydrationWarning
+            onPointerDown={() => {
+              if (locked) unselectToSearch();
+            }}
             onChange={(e) => {
+              if (locked) return;
               const next = e.target.value;
               setQuery(next);
               setOpen(true);
               onSearch?.(next);
             }}
-            onFocus={(e) => {
+            onFocus={() => {
               if (disabled) return;
+              if (locked) {
+                unselectToSearch();
+                return;
+              }
               setOpen(true);
               onSearch?.(query);
-              e.target.select();
             }}
             onKeyDown={(e) => {
+              if ((e.key === 'Backspace' || e.key === 'Delete') && locked && canClear && !disabled) {
+                e.preventDefault();
+                clearSelection();
+                return;
+              }
               if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 setOpen(true);
@@ -174,7 +219,7 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
                 e.preventDefault();
                 if (highlight >= 0 && highlight < filtered.length) pick(filtered[highlight]);
                 else if (filtered.length === 1) pick(filtered[0]);
-                else if (allowCustom && query.trim()) pick({ value: query.trim(), label: query.trim() });
+                else if (allowCustom && !locked && query.trim()) pick({ value: query.trim(), label: query.trim() });
               } else if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
@@ -186,7 +231,7 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
               compact ? 'min-h-9 py-1.5 text-sm font-semibold' : 'min-h-[44px] py-2.5',
               searchable ? (compact ? 'pl-8 pr-14' : 'pl-9 pr-16') : (compact ? 'pl-3 pr-8' : 'pl-3 pr-10'),
               controlBorderClass(error),
-              !searchable && 'cursor-pointer',
+              (!searchable || locked) && 'cursor-pointer',
               disabled && 'cursor-not-allowed opacity-60',
               className,
             )}
@@ -200,10 +245,7 @@ export const Select = forwardRef<HTMLInputElement, SelectProps>(
                 tabIndex={-1}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 suppressHydrationWarning
-                onClick={() => {
-                  emitChange(onChange, '', name, selectId);
-                  setQuery('');
-                }}
+                onClick={clearSelection}
               >
                 <X className="h-4 w-4" />
               </button>

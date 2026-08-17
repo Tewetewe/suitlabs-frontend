@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
+import { InvoiceSearchField } from '@/components/ui/InvoiceSearchField';
 import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
@@ -21,20 +22,17 @@ import { EditRentalModal } from '@/components/modals/EditRentalModal';
 import { PickupRentalModal } from '@/components/modals/PickupRentalModal';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { useToast } from '@/contexts/ToastContext';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 
 export default function RentalsPage() {
   const { user } = useAuth();
   const { warning, success, error: toastError } = useToast();
-  const [rentals, setRentals] = useState<Rental[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebouncedValue(searchTerm, 400);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -55,34 +53,36 @@ export default function RentalsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch]);
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (q) setSearchTerm(q);
+  }, []);
 
-  useEffect(() => {
-    loadRentals();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, itemsPerPage, debouncedSearch]);
-
-  // Hydration warnings are already handled globally in `HydrationSuppressor`.
-
-  const loadRentals = async () => {
+  const loadRentalsPage = useCallback(async (page: number) => {
     try {
-      setLoading(true);
       const response = await apiClient.getRentals({
-        page: currentPage,
-        limit: itemsPerPage,
+        page,
+        limit: LIST_PAGE_SIZE,
         search: debouncedSearch || undefined,
       });
       const data = response?.data?.data?.rentals || [];
-      setRentals(Array.isArray(data) ? data : []);
+      const pagination = response?.data?.pagination;
+      const items = Array.isArray(data) ? data : [];
+      return { items, hasMore: hasNextPage(pagination, items.length), total: pagination?.total || 0 };
     } catch {
-      // Avoid noisy console spam; show a user-facing hint instead.
       warning('Unable to load rentals', 'Backend may be offline. Please try again.');
-      setRentals([]);
-    } finally {
-      setLoading(false);
+      return { items: [], hasMore: false, total: 0 };
     }
-  };
+  }, [debouncedSearch, warning]);
+
+  const {
+    items: rentals,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    reload,
+    sentinelRef,
+  } = useInfiniteList(loadRentalsPage);
 
   const rentalStatusVariant = (s: string): 'success' | 'warning' | 'default' | 'danger' => {
     switch (s) {
@@ -107,7 +107,7 @@ export default function RentalsPage() {
         return;
       }
       await apiClient.activateRental(rentalId, user.id);
-      await loadRentals();
+      await reload();
       setShowDetailsModal(false);
     } catch (error) {
       console.error('Failed to activate rental:', error);
@@ -154,7 +154,7 @@ export default function RentalsPage() {
           }
         }
       }
-      await loadRentals();
+      await reload();
       setShowCompleteModal(false);
       setShowDetailsModal(false);
       // Refresh selected rental to show updated totals, then show invoice
@@ -198,7 +198,7 @@ export default function RentalsPage() {
     setIsSubmitting(true);
     try {
       await apiClient.changeRentalDates(selectedRental.id, newRentalDate, newReturnDate);
-      await loadRentals();
+      await reload();
       success('Dates updated');
       setShowChangeDatesModal(false);
       setSelectedRental(null);
@@ -226,7 +226,7 @@ export default function RentalsPage() {
     setIsSubmitting(true);
     try {
       await apiClient.cancelRentalWithReason(selectedRental.id, cancellationReason, user.id);
-      await loadRentals();
+      await reload();
       success('Rental cancelled');
       setShowCancelModal(false);
       setSelectedRental(null);
@@ -271,10 +271,27 @@ export default function RentalsPage() {
       >
         <ClientOnly>
           <FilterBar>
-            <Input
-              placeholder="Search rentals..."
+            <InvoiceSearchField
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={setSearchTerm}
+              placeholder="Search name or scan invoice…"
+              onFound={async (booking) => {
+                if (!booking.rental_id) {
+                  toastError('No rental yet', 'This booking has not been turned into a rental.');
+                  return;
+                }
+                try {
+                  const rental = await apiClient.getRental(booking.rental_id);
+                  setSelectedRental(rental);
+                  if (rental.status === 'pending') {
+                    setShowPickupModal(true);
+                  } else {
+                    setShowDetailsModal(true);
+                  }
+                } catch {
+                  toastError('Rental not found', 'The booking is there, but the rental could not be opened.');
+                }
+              }}
             />
           </FilterBar>
         </ClientOnly>
@@ -297,7 +314,10 @@ export default function RentalsPage() {
                 : `Rental #${rental.id.slice(-8)}`;
               const itemSummary = (rental.items || [])
                 .slice(0, 2)
-                .map((line) => line.item?.name || 'Item')
+                .map((line) => {
+                  const name = line.item?.name || 'Item';
+                  return line.item?.code ? `${name} ${line.item.code}` : name;
+                })
                 .join(', ') + ((rental.items?.length || 0) > 2 ? ` +${rental.items!.length - 2}` : '');
               const meta = [
                 `${formatDateShort(rental.rental_date)} – ${formatDateShort(rental.return_date)}`,
@@ -320,7 +340,7 @@ export default function RentalsPage() {
                       </div>
                       {meta && <p className="mt-0.5 truncate text-sm text-slate-500">{meta}</p>}
                     </button>
-                    <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:justify-end">
                       {rental.status === 'pending' && (
                         <Button size="sm" data-testid="rental-pickup" onClick={() => handlePickupRental(rental.id)}>Pickup</Button>
                       )}
@@ -385,36 +405,21 @@ export default function RentalsPage() {
           </p>
         )}
 
-        {/* Pagination */}
-        {!loading && rentals.length > 0 && (
-          <div className="flex items-center justify-between py-4">
-            <div className="text-sm text-slate-500">Page {currentPage}</div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage <= 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCurrentPage(currentPage + 1)}
-                disabled={rentals.length < itemsPerPage}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+        {!loading && filteredRentals.length > 0 && (
+          <InfiniteScrollSentinel
+            sentinelRef={sentinelRef}
+            loadingMore={loadingMore}
+            hasMore={hasMore}
+            loaded={filteredRentals.length}
+            total={total}
+          />
         )}
 
         {/* Modals */}
         <CreateRentalModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
-          onSuccess={() => loadRentals()}
+          onSuccess={() => { void reload(); }}
         />
 
         <RentalDetailsModal
@@ -445,7 +450,7 @@ export default function RentalsPage() {
             setSelectedRental(null);
           }}
           rental={selectedRental}
-          onSuccess={() => loadRentals()}
+          onSuccess={() => { void reload(); }}
         />
 
         <RentalInvoiceModal
@@ -536,7 +541,7 @@ export default function RentalsPage() {
             setShowPickupModal(false);
             setSelectedRental(null);
           }}
-          onSuccess={() => loadRentals()}
+          onSuccess={() => { void reload(); }}
           rental={selectedRental}
         />
       </PageShell>

@@ -55,7 +55,9 @@ export default function AutoCompleteSelect({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const locked = Boolean(value);
   const listId = useId();
   const menuStyle = useAnchoredMenu(open, containerRef);
 
@@ -144,6 +146,15 @@ export default function AutoCompleteSelect({
     setHighlight(-1);
   };
 
+  const clearSelection = () => {
+    onChange('');
+    setSelectedLabel('');
+    setQuery('');
+    setHighlight(-1);
+    setOpen(true);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
   const visibleOptions = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
@@ -174,7 +185,7 @@ export default function AutoCompleteSelect({
     }
   };
 
-  const displayValue = open ? (query || selectedLabel) : (query || selectedLabel);
+  const displayValue = locked ? selectedLabel : query;
 
   return (
     <div className="w-full relative" ref={containerRef}>
@@ -184,19 +195,21 @@ export default function AutoCompleteSelect({
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <input
+          ref={inputRef}
           className={clsx(
             CONTROL_CLASS,
             'pl-9 pr-16',
             controlBorderClass(error),
+            locked && 'cursor-pointer',
           )}
           placeholder={searching ? 'Searching…' : placeholder}
           value={displayValue}
+          readOnly={locked}
           onChange={(e) => {
-            const next = e.target.value;
-            setQuery(next);
+            if (locked) return;
+            setQuery(e.target.value);
             setOpen(true);
             setHighlight(-1);
-            if (value && next !== selectedLabel) onChange('');
           }}
           autoComplete="off"
           autoCorrect="off"
@@ -207,11 +220,22 @@ export default function AutoCompleteSelect({
           role="combobox"
           aria-expanded={open}
           aria-controls={listId}
-          onFocus={(e) => {
+          onFocus={() => {
+            if (locked && clearable) {
+              clearSelection();
+              return;
+            }
             setOpen(true);
-            e.target.select();
+          }}
+          onPointerDown={() => {
+            if (locked && clearable) clearSelection();
           }}
           onKeyDown={(e) => {
+            if ((e.key === 'Backspace' || e.key === 'Delete') && locked && clearable) {
+              e.preventDefault();
+              clearSelection();
+              return;
+            }
             if (e.key === 'ArrowDown') {
               e.preventDefault();
               setOpen(true);
@@ -223,7 +247,7 @@ export default function AutoCompleteSelect({
               if (!open) return;
               e.preventDefault();
               if (highlight >= 0 && highlight < visibleOptions.length) pick(visibleOptions[highlight]);
-              else if (visibleOptions.length === 1) pick(visibleOptions[0]);
+              else if (!locked && visibleOptions.length === 1) pick(visibleOptions[0]);
             } else if (e.key === 'Escape') {
               e.preventDefault();
               e.stopPropagation();
@@ -239,11 +263,7 @@ export default function AutoCompleteSelect({
               type="button"
               aria-label="Clear selection"
               className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              onClick={() => {
-                onChange('');
-                setSelectedLabel('');
-                setQuery('');
-              }}
+              onClick={clearSelection}
             >
               <X className="h-4 w-4" />
             </button>

@@ -3,6 +3,8 @@ import {
   clickRowAction,
   closeDialog,
   createPosBooking,
+  dismissIssuedInvoice,
+  expectHiddenRowActions,
   findRowAcrossPages,
   goTo,
   localISODate,
@@ -33,14 +35,12 @@ test.describe('Floor flows', () => {
     await clickRowAction(booking, 'Collect balance');
     await page.getByRole('button', { name: 'Take payment' }).click();
     await expect(page.getByRole('heading', { name: 'Record full payment' })).toHaveCount(0);
+    await dismissIssuedInvoice(page, 'Booking Invoice');
     await expect(booking).toContainText('Paid');
 
     await clickRowAction(booking, 'Full invoice');
     await closeDialog(page);
-    await booking.getByLabel('Actions').click();
-    await expect(booking.getByRole('button', { name: 'Edit' })).toHaveCount(0);
-    await expect(booking.getByRole('button', { name: 'Collect balance' })).toHaveCount(0);
-    await page.keyboard.press('Escape');
+    await expectHiddenRowActions(booking, ['Edit', 'Collect balance']);
 
     await goTo(page, 'rentals');
     const activeRental = await findRowAcrossPages(page, 'rental-row', customer.fullName);

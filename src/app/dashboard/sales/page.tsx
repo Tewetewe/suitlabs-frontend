@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { Badge, EmptyState, FilterBar, SkeletonRow } from '@/components/ui/DataDisplay';
+import { Badge, EmptyState, FilterBar, InfiniteScrollSentinel, SkeletonRow } from '@/components/ui/DataDisplay';
 import { SaleComposer } from '@/components/sales/SaleComposer';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
@@ -17,8 +17,10 @@ import { formatPaymentMethod } from '@/lib/payment-methods';
 import { CreateSaleRequest, Rental, Sale, SaleSource } from '@/types';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { SaleInvoiceModal } from '@/components/modals/SaleInvoiceModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { ShoppingBag } from 'lucide-react';
+import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 
 function sourceLabel(source: SaleSource) {
   switch (source) {
@@ -36,39 +38,43 @@ function SalesPageInner() {
   const { success, error } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
   const [source, setSource] = useState<SaleSource | ''>('');
   const [linkedRental, setLinkedRental] = useState<Rental | null>(null);
   const [cancellingSale, setCancellingSale] = useState<Sale | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [saleInvoice, setSaleInvoice] = useState<Sale | null>(null);
   const bookingId = searchParams?.get('booking_id') || undefined;
   const rentalId = searchParams?.get('rental_id') || undefined;
   const customerId = searchParams?.get('customer_id') || undefined;
 
-  const loadSales = useCallback(async () => {
+  const loadSalesPage = useCallback(async (page: number) => {
     try {
-      setLoading(true);
       const response = await apiClient.getSales({
         search: search || undefined,
         source: source || undefined,
-        page: 1,
-        limit: 30,
+        page,
+        limit: LIST_PAGE_SIZE,
       });
-      setSales(response.data?.data?.sales || []);
+      const items = response.data?.data?.sales || [];
+      const pagination = response.data?.pagination;
+      return { items, hasMore: hasNextPage(pagination, items.length), total: pagination?.total || 0 };
     } catch {
       error('Unable to load sales', 'Please try again.');
-      setSales([]);
-    } finally {
-      setLoading(false);
+      return { items: [] as Sale[], hasMore: false, total: 0 };
     }
   }, [search, source, error]);
 
-  useEffect(() => {
-    void loadSales();
-  }, [loadSales]);
+  const {
+    items: sales,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    reload,
+    sentinelRef,
+  } = useInfiniteList(loadSalesPage);
 
   useEffect(() => {
     if (!rentalId) {
@@ -91,7 +97,8 @@ function SalesPageInner() {
       setSubmitting(true);
       const sale = await apiClient.createSale(payload);
       success('Sale recorded', sale.sale_number);
-      await loadSales();
+      setSaleInvoice(sale);
+      await reload();
     } catch (e) {
       error('Sale failed', e instanceof Error ? e.message : 'Please check stock and try again.');
       throw e;
@@ -107,7 +114,7 @@ function SalesPageInner() {
       await apiClient.cancelSale(cancellingSale.id);
       success('Sale cancelled', cancellingSale.sale_number);
       setCancellingSale(null);
-      await loadSales();
+      await reload();
     } catch (e) {
       error('Cancel failed', e instanceof Error ? e.message : 'Please try again.');
     } finally {
@@ -217,6 +224,13 @@ function SalesPageInner() {
             ))}
           </div>
         )}
+        <InfiniteScrollSentinel
+          sentinelRef={sentinelRef}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          loaded={sales.length}
+          total={total}
+        />
       </div>
     </PageShell>
     <ConfirmModal
@@ -228,6 +242,11 @@ function SalesPageInner() {
       loading={cancelling}
       onClose={() => setCancellingSale(null)}
       onConfirm={handleCancel}
+    />
+    <SaleInvoiceModal
+      isOpen={!!saleInvoice}
+      sale={saleInvoice}
+      onClose={() => setSaleInvoice(null)}
     />
     </>
   );

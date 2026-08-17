@@ -183,12 +183,14 @@ export async function findRowAcrossPages(page: Page, testId: string, name: strin
       await search.fill(name);
       await page.waitForTimeout(700);
     }
-    for (let pageNo = 0; pageNo < 25; pageNo++) {
+    for (let i = 0; i < 25; i++) {
       if (await row.isVisible().catch(() => false)) return row;
-      const next = page.getByRole('button', { name: 'Next', exact: true });
-      if (!(await next.isVisible()) || !(await next.isEnabled())) break;
-      await next.click();
-      await page.waitForTimeout(400);
+      const prevCount = await page.getByTestId(testId).count();
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(500);
+      const nextCount = await page.getByTestId(testId).count();
+      const loadingMore = await page.getByText('Loading more…').isVisible().catch(() => false);
+      if (nextCount === prevCount && !loadingMore) break;
     }
     await page.reload();
     await expect(page.getByPlaceholder(/Search/).or(page.getByText(/No \w+ found/)).first()).toBeVisible();
@@ -199,20 +201,32 @@ export async function findRowAcrossPages(page: Page, testId: string, name: strin
 
 export async function clickRowAction(row: Locator, name: string) {
   const page = row.page();
-  const details = row.locator('details');
   let href: string | null = null;
   await expect(async () => {
-    if ((await details.getAttribute('open')) == null) {
-      await row.getByLabel('Actions').click();
+    const menu = page.getByRole('menu');
+    if (!(await menu.isVisible().catch(() => false))) {
+      await row.getByLabel(/actions/i).click();
     }
-    const action = row.getByRole('button', { name }).or(row.getByRole('link', { name }));
-    await expect(action.first()).toBeVisible({ timeout: 2500 });
-    href = await action.first().getAttribute('href');
-    if (!href) await action.first().click({ timeout: 2500 });
+    const action = menu.getByRole('menuitem', { name });
+    await expect(action).toBeVisible({ timeout: 2500 });
+    href = await action.getAttribute('href');
+    if (!href) await action.click({ timeout: 2500 });
   }).toPass({ timeout: 15_000 });
   if (href) {
     await page.goto(href, { waitUntil: 'domcontentloaded' });
   }
+}
+
+export async function expectHiddenRowActions(row: Locator, names: string[]) {
+  const page = row.page();
+  await row.getByLabel(/actions/i).click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  for (const name of names) {
+    await expect(menu.getByRole('menuitem', { name })).toHaveCount(0);
+  }
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
 }
 
 export async function setPosDate(page: Page, testId: 'pos-rental-date' | 'pos-return-date', value: string) {
@@ -268,6 +282,11 @@ export async function closeDialog(page: Page) {
     }
     await expect(dialog).toHaveCount(0, { timeout: 2500 });
   }).toPass({ timeout: 15_000 });
+}
+
+export async function dismissIssuedInvoice(page: Page, title: 'Booking Invoice' | 'Sale Invoice' = 'Booking Invoice') {
+  await expect(page.getByRole('heading', { name: title })).toBeVisible({ timeout: 20_000 });
+  await closeDialog(page);
 }
 
 export type PosBookingOpts = {
@@ -350,6 +369,7 @@ export async function createPosBooking(
   else if (opts.payMethod === 'transfer') await page.getByTestId('pos-pay-transfer').click();
   else if (opts.payMethod === 'cash') await page.getByTestId('pos-pay-cash').click();
   await page.getByTestId('pos-charge').click();
+  await dismissIssuedInvoice(page, 'Booking Invoice');
   await expect(page.getByTestId('pos-done').getByText('Booking charged')).toBeVisible();
   return { ...customer, rentalDate, returnDate, itemName: bookedName };
 }

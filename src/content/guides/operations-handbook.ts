@@ -232,7 +232,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <tbody>
         <tr><td><b>Cashier</b></td><td>The POS. Rental mode and Sale mode, barcode scan, ticket, occasion, payment, charge.</td><td>One charge writes a <b>Booking</b> <i>and</i> its <b>Rental</b>, already on <code>pending</code>. Pickup still happens on Rentals. Set both dates before picking items or the catalogue won't filter by availability.</td></tr>
         <tr><td><b>Dashboard</b></td><td>Today at a glance: item count, bookings, active rentals, today's revenue, low stock, maintenance. For an admin, also this month's accrual summary and the shop's asset value.</td><td>Today's revenue is accrual, not the cash in the drawer. Staff see only the six counts.</td></tr>
-        <tr><td><b>Bookings</b></td><td>The full booking list. Edit, <b>Collect balance</b>, print DP or full invoices, add a sale on top.</td><td>A booking with payment status <code>completed</code> is deliberately locked from editing. While its rental is still <code>pending</code>, editing the booking rewrites the rental to match; after pickup the two are independent.</td></tr>
+        <tr><td><b>Bookings</b></td><td>The full booking list. Edit, <b>Collect balance</b> (which issues the full invoice), reprint DP or full invoices, add a sale on top.</td><td>A booking with payment status <code>completed</code> is deliberately locked from editing. While its rental is still <code>pending</code>, editing the booking rewrites the rental to match; after pickup the two are independent.</td></tr>
         <tr><td><b>Rentals</b></td><td>Pickup the pending rental the POS created, change dates, complete, cancel with a reason.</td><td>Everything chargeable — lost items, damage, add-ons — must be recorded <b>before</b> Complete. <b>New Rental</b> is only for legacy bookings that have no rental.</td></tr>
         <tr><td><b>Sales</b></td><td>Walk-in retail, booking add-ons, and rental-return charges — including the lost-item replacement screen. Cancel a sale here.</td><td>Only items marked sellable appear. An ex-rental suit sells as clearance, not retail. A replacement line also marks the lost item <code>lost</code>.</td></tr>
         <tr><td><b>Expenses</b></td><td>Money out, by category, with the payment method. Monthly summary. Recurring templates (admin only).</td><td>Void, never delete. Record on the day the money actually moved.</td></tr>
@@ -623,8 +623,8 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <text x="681" y="112" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">Receipt JSON</text>
         <text x="681" y="132" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">fetched from the API</text>
         <line x1="622" y1="146" x2="740" y2="146" stroke="currentColor" opacity=".3"/>
-        <text x="681" y="168" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">plain text lines only</text>
-        <text x="681" y="186" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">no barcode, no QR</text>
+        <text x="681" y="168" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">plain text + invoice barcode</text>
+        <text x="681" y="186" text-anchor="middle" font-size="11" fill="currentColor" opacity=".75">no QR</text>
         <text x="681" y="210" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".6">branch receipt text</text>
 
         <path d="M 382 186 L 382 214 L 848 214 L 848 190" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#dv-a)"/>
@@ -691,8 +691,8 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <ul class="plain">
     <li>A fixed <b>SUITLABS BALI</b> heading, then the <b>branch receipt subtitle, address and phone</b> — those three are edited on the Branches page, so check a real print after any branch edit.</li>
     <li>Invoice number, date, the last eight of the booking id, DP or FULL, payment status, the customer's name, the item lines, and the totals. It closes with a thank-you and <code>suitlabs.bali</code>.</li>
-    <li><b>No barcode and no QR code.</b> The only barcode the shop prints is the <b>CODE128 item label</b> from the item detail page — that is what the POS scanner reads. Non-alphanumeric characters are stripped from it.</li>
-    <li>Paper is 58&nbsp;mm.</li>
+    <li><b>Invoice barcode (CODE128)</b> under the invoice number — scan it at the POS to open that booking or rental. Hyphens are stripped so the scanner can read it. Item labels stay the CODE128 barcode from the item page.</li>
+    <li>No QR code. Paper is 58&nbsp;mm.</li>
   </ul>
 
   <div class="flag care">

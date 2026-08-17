@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import { useCashierChrome } from '@/components/cashier/CashierChromeContext';
 
 interface SimpleModalProps {
   isOpen: boolean;
@@ -28,6 +29,8 @@ const sizeClass = {
 
 export default function SimpleModal({ isOpen, title, onClose, children, size = 'lg', footer, overflowVisible = false, nested = false }: SimpleModalProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
+  const { chrome } = useCashierChrome();
+  const blockBackdrop = chrome === 'phone';
 
   useEffect(() => {
     if (!isOpen) return;
@@ -54,11 +57,18 @@ export default function SimpleModal({ isOpen, title, onClose, children, size = '
       aria-modal
       role="dialog"
     >
-      <div className="absolute inset-0 bg-white/90 backdrop-blur-md" onClick={onClose} />
+      <div
+        className={clsx(
+          'absolute inset-0',
+          blockBackdrop ? 'bg-white' : 'bg-white/90 backdrop-blur-md max-md:bg-white max-md:backdrop-blur-none',
+        )}
+        onClick={onClose}
+      />
 
       <div
         className={clsx(
-          'relative z-10 flex w-full min-h-0 flex-col glass-panel-strong',
+          'relative z-10 flex w-full min-h-0 flex-col',
+          blockBackdrop ? 'bg-white' : 'glass-panel-strong',
           'max-h-full rounded-t-2xl rounded-b-none animate-slide-up',
           'md:max-h-[min(90dvh,100%)] md:rounded-2xl',
           sizeClass[size]
@@ -86,7 +96,10 @@ export default function SimpleModal({ isOpen, title, onClose, children, size = '
         </div>
 
         {footer && (
-          <div className="shrink-0 border-t border-black/5 bg-white/90 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-5 flex flex-wrap justify-end gap-2 md:rounded-b-2xl">
+          <div className={clsx(
+            'shrink-0 border-t border-black/5 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-5 flex flex-wrap justify-end gap-2 md:rounded-b-2xl',
+            blockBackdrop ? 'bg-white' : 'bg-white/90',
+          )}>
             {footer}
           </div>
         )}

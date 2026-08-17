@@ -2,15 +2,17 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/Button';
-import { formatCurrency } from '@/lib/currency';
 import { InvoiceData } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { printBookingInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
+import { invoiceBarcodeValue } from '@/lib/barcode';
 import { ThermalPrinterButton } from '@/components/print/ThermalPrinterButton';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
+import Barcode from '@/components/ui/Barcode';
 
 interface BookingInvoiceModalProps {
   isOpen: boolean;
@@ -22,6 +24,14 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
   const { error: toastError, success } = useToast();
 
   if (!isOpen || !invoice) return null;
+
+  const rackItems = (invoice.items || [])
+    .filter((item) => item.item_code || (item.description && !item.description.toUpperCase().includes('PACKAGE')))
+    .map((item) => ({
+      name: item.description.replace(/^\s*•\s*/, '').replace(/^Add-on:\s*/i, ''),
+      code: item.item_code,
+      quantity: item.quantity,
+    }));
 
   // Bprint-style date formats (match backend bprint)
   const bprintDate = (d: string | Date) =>
@@ -144,11 +154,6 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
     }
   };
 
-  // Check if package pricing (items with zero prices)
-  const isPackagePricing = invoice.items && invoice.items.length > 0 && 
-    invoice.items.every((it) => (it.unit_price || 0) <= 0 && (it.total || 0) <= 0) && 
-    (invoice.total_amount || 0) > 0;
-
   return (
     <>
       <SimpleModal
@@ -156,8 +161,9 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
         onClose={onClose}
         title="Booking Invoice"
         size="xl"
+        nested
         footer={
-          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
               Close
             </Button>
@@ -171,7 +177,10 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
           </div>
         }
       >
-          <div className="flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center gap-4">
+            <div className="w-full max-w-[420px]">
+              <RackPullList items={rackItems} />
+            </div>
             <div className="w-full max-w-[420px] rounded-2xl bg-white ring-1 ring-black/10 shadow-sm px-3 py-3">
               <div className="thermal-receipt-container">
                 <div className="thermal-receipt" data-testid="thermal-receipt">
@@ -193,65 +202,27 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
                   {invoice.due_date && <div className="receipt-line">Due: {bprintDate(invoice.due_date)}</div>}
                   <div className="receipt-line">Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}</div>
                   {invoice.booking_date && <div className="receipt-line">Booking: {bprintDate(invoice.booking_date)}</div>}
+                  {invoice.invoice_number && (
+                    <div className="receipt-barcode">
+                      <Barcode
+                        value={invoiceBarcodeValue(invoice.invoice_number)}
+                        format="CODE128"
+                        width={1.1}
+                        height={36}
+                        fontSize={8}
+                        margin={0}
+                        displayValue={false}
+                      />
+                    </div>
+                  )}
 
                   <div className="receipt-divider"></div>
 
                   {/* Customer - name only, same as bprint */}
                   <div className="receipt-label">CUSTOMER:</div>
                   <div className="receipt-line">{invoice.customer_name}</div>
-
-                  <div className="receipt-divider"></div>
-
-                  {/* Items - same as bprint */}
-                  <div className="receipt-label">ITEMS:</div>
-                  {invoice.items && invoice.items.length > 0 ? (
-                    <>
-                      {invoice.items.map((item, idx) => {
-                        if ((item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
-                          return (
-                            <div key={idx} className="receipt-item">
-                              <div className="receipt-line">  {item.description}</div>
-                            </div>
-                          );
-                        }
-                        return (
-                          <div key={idx} className="receipt-item">
-                            <div className="receipt-line">  {item.description}</div>
-                            <div className="receipt-line">    {item.quantity} x {formatCurrency(item.unit_price || 0)} = {formatCurrency(item.total || 0)}</div>
-                          </div>
-                        );
-                      })}
-                      {isPackagePricing && (invoice.total_amount || 0) > 0 && (
-                        <div className="receipt-line">Package: {formatCurrency(invoice.total_amount || 0)}</div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="receipt-line">{invoice.product_name || 'Booking Package'}</div>
-                  )}
-
-                  <div className="receipt-divider"></div>
-
-                  {/* Summary - same as bprint */}
-                  <div className="receipt-line">Subtotal: {formatCurrency(invoice.total_amount || 0)}</div>
-                  {(invoice.discount_amount || 0) > 0 && (
-                    <div className="receipt-line receipt-discount">Discount: ({formatCurrency(invoice.discount_amount || 0)})</div>
-                  )}
-                  <div className="receipt-total">TOTAL: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
-                  {invoice.invoice_type === 'dp' ? (
-                    <>
-                      <div className="receipt-line">DP: {formatCurrency(invoice.due_amount || 0)}</div>
-                      <div className="receipt-line">Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}</div>
-                    </>
-                  ) : (
-                    <div className="receipt-line">Due: {formatCurrency(invoice.due_amount || 0)}</div>
-                  )}
-
-                  {/* Footer - same as bprint */}
-                  <div className="receipt-divider"></div>
-                  <div className="receipt-center">
-                    <div className="receipt-line">Thank you for using SuitLabs!</div>
-                    <div className="receipt-line receipt-small">suitlabs.bali</div>
-                  </div>
+                  <div className="receipt-cut-margin" aria-hidden="true" />
+                  {/* TEMP: invoice prints only through customer name so the cutter can be tested. */}
                 </div>
               </div>
             </div>

@@ -254,7 +254,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
         <line x1="120" y1="91" x2="192" y2="91" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
         <text x="114" y="88" text-anchor="end" font-size="11" font-weight="600" fill="currentColor">Search or scan</text>
-        <text x="114" y="103" text-anchor="end" font-size="10" fill="currentColor" opacity=".6">barcode adds straight to ticket</text>
+        <text x="114" y="103" text-anchor="end" font-size="10" fill="currentColor" opacity=".6">item barcode → ticket · invoice → booking</text>
 
         <line x1="120" y1="131" x2="192" y2="131" stroke="currentColor" opacity=".6" marker-end="url(#pos-a)"/>
         <text x="114" y="128" text-anchor="end" font-size="11" font-weight="600" fill="currentColor">Set BOTH dates first</text>
@@ -298,11 +298,11 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <li><b>Pick the occasion.</b><span>Wedding, wedding guest, corporate, university, SMA/SMK, SMP, SD or TK. It starts on Wedding, so change it deliberately — Analytics reads the occasion mix straight off this, and the POS will not charge without one.</span></li>
     <li><b>Choose a package, or leave it on item total.</b><span>A package price covers every item on the ticket by default. Tap a line’s badge to flip it to <b>Add-on</b> and charge it on top of the package. The discount box disappears while a package is selected.</span></li>
     <li><b>DP or Full, then the method.</b><span>DP: type the amount, or use the <b>0</b>, <b>50%</b> and <b>100%</b> shortcuts. Full: the total fills in automatically. Then tap how they are actually paying — cash, QRIS, transfer, debit or card.</span></li>
-    <li><b>Charge booking.</b><span>The green panel confirms <i>Booking charged</i> and tells you pickup is on Rentals, with the last eight characters of the booking id. Print the DP invoice from the Bookings page and hand it over.</span></li>
+    <li><b>Charge booking.</b><span>The green panel confirms <i>Booking charged</i> after the invoice opens. Print it, then close — pickup is on Rentals, with the last eight characters of the booking id.</span></li>
   </ol>
 
   <h3>Taking a walk-in sale</h3>
-  <p class="measure">Switch to <b>Sale</b> mode. Only items marked sellable appear. There are no dates and no DP — a sale is paid in full, right now. Customer is optional for a walk-in. Selling an ex-rental suit or jacket is recorded as a clearance; socks, tumblers and the like are recorded as retail. The system does that classification for you. Switching between Rental and Sale clears the ticket.</p>
+  <p class="measure">Switch to <b>Sale</b> mode. Only items marked sellable appear. There are no dates and no DP — a sale is paid in full, right now. Customer is optional for a walk-in. Selling an ex-rental suit or jacket is recorded as a clearance; socks, tumblers and the like are recorded as retail. The system does that classification for you. Switching between Rental and Sale clears the ticket. After charge, the sale invoice opens so you can print it.</p>
 </section>
 
 <section id="pay">
@@ -361,7 +361,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <div class="cols two">
     <div class="card">
       <h4 style="margin-top:0">Taking the rest of the money later</h4>
-      <p>Open <b>Bookings</b>, find them by name, and use <b>Collect balance</b> in the row menu. Then print the <b>Full invoice</b> from the same menu. Do not create a second booking.</p>
+      <p>Open <b>Bookings</b>, find them by name, or scan the invoice barcode at the POS — that jumps you to the booking. Use <b>Collect balance</b> in the row menu. The full invoice opens as soon as the payment is recorded. Do not create a second booking.</p>
     </div>
     <div class="card">
       <h4 style="margin-top:0">A booking that is fully paid is locked</h4>
@@ -374,7 +374,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <span class="eyebrow">05 — Hand-over</span>
   <h2>Pickup</h2>
   <ol class="steps">
-    <li><b>Rentals.</b><span>Find the customer's <code>pending</code> rental — it was created the moment you charged the booking. If theirs genuinely isn't there, <b>New Rental</b> builds one from an older booking that never got one.</span></li>
+    <li><b>Rentals.</b><span>Find the customer's <code>pending</code> rental — it was created the moment you charged the booking. Fastest: scan the invoice barcode at the POS and it opens the rental. If theirs genuinely isn't there, <b>New Rental</b> builds one from an older booking that never got one.</span></li>
     <li><b>Tap Pickup, and photograph the ID.</b><span>A clear photo of the guarantee document is <b>required</b> — <i>Confirm pickup</i> stays disabled until you attach one. JPEG, PNG or WebP, under 5 MB.</span></li>
     <li><b>Check the items physically as you hand them over.</b><span>The rental becomes <code>active</code>. Print the rental invoice from the row menu if the customer wants one.</span></li>
   </ol>
@@ -601,8 +601,8 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <table>
       <thead><tr><th style="width:20%">Status</th><th style="width:40%">Means</th><th>You do</th></tr></thead>
       <tbody>
-        <tr><td><code>pending</code></td><td>Nothing paid.</td><td>Print the DP invoice, take money.</td></tr>
-        <tr><td><code>partial</code></td><td>DP taken, balance owing.</td><td>Collect the rest at pickup, then print the full invoice.</td></tr>
+        <tr><td><code>pending</code></td><td>Nothing paid.</td><td>Take money — the DP invoice opens itself.</td></tr>
+        <tr><td><code>partial</code></td><td>DP taken, balance owing.</td><td>Collect the rest; the full invoice opens itself.</td></tr>
         <tr><td><code>completed</code></td><td>Paid in full.</td><td>Nothing — and the booking is now locked from editing.</td></tr>
       </tbody>
     </table>

@@ -28,9 +28,10 @@ import { Item, ItemFilters, CreateItemRequest, Category, ItemFacets } from '@/ty
 import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import { facetOptions } from '@/lib/select-options';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, Pagination, Skeleton } from '@/components/ui/DataDisplay';
-import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck, ArrowRightLeft, MoreHorizontal } from 'lucide-react';
+import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, Skeleton, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck, ArrowRightLeft } from 'lucide-react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useAuth } from '@/contexts/AuthContext';
@@ -42,15 +43,9 @@ export default function ItemsPage() {
   const { user } = useAuth();
   const { viewingAll } = useBranch();
   const isAdmin = user?.role === 'admin';
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<ItemFilters>({});
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 400);
-  const [total, setTotal] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage] = useState(12); // Show 12 items per page
+  const [filters, setFilters] = useState<ItemFilters>({});
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -136,57 +131,57 @@ export default function ItemsPage() {
     return digitsOnly;
   };
 
-  const loadItems = useCallback(async () => {
+  const loadItemsPage = useCallback(async (page: number) => {
     try {
-      setLoading(true);
       const paginationFilters = {
         ...filters,
-        page: currentPage,
-        limit: itemsPerPage
+        page,
+        limit: LIST_PAGE_SIZE,
       };
-      let response;
-      if (rentalDate && returnDate) {
-        response = await apiClient.getAvailableItemsCombined({
-          ...paginationFilters,
-          start_date: rentalDate,
-          end_date: returnDate,
-        });
-      } else {
-        response = await apiClient.getItems(paginationFilters);
-      }
-      
+      const response =
+        rentalDate && returnDate
+          ? await apiClient.getAvailableItemsCombined({
+              ...paginationFilters,
+              start_date: rentalDate,
+              end_date: returnDate,
+            })
+          : await apiClient.getItems(paginationFilters);
+
       if (!response?.success) {
         throw new Error('API request failed');
       }
 
       const nextItems = response.data?.data?.items || [];
-      setItems(nextItems);
-      setTotal(response.data?.pagination?.total || 0);
-      setTotalPages(response.data?.pagination?.total_pages || 1);
+      const pagination = response.data?.pagination;
+      return {
+        items: nextItems,
+        hasMore: hasNextPage(pagination, nextItems.length),
+        total: pagination?.total || 0,
+      };
     } catch (err) {
       console.error('Failed to load items:', err);
       error('Failed to Load Items', 'Unable to fetch item data. Please try again.');
-      setItems([]);
-      setTotal(0);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
+      return { items: [], hasMore: false, total: 0 };
     }
-  }, [filters, currentPage, itemsPerPage, rentalDate, returnDate, error]);
+  }, [filters, rentalDate, returnDate, error]);
 
-  useEffect(() => {
-    loadItems();
-  }, [loadItems]);
+  const {
+    items,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    reload,
+    sentinelRef,
+  } = useInfiniteList(loadItemsPage);
 
   useEffect(() => {
     setFilters(prev => ({ ...prev, search: debouncedSearch || undefined }));
-    setCurrentPage(1);
   }, [debouncedSearch]);
 
   const handleBarcodeScan = (barcode: string) => {
     const cleanedBarcode = sanitizeBarcode(barcode);
     setFilters({ ...filters, barcode: cleanedBarcode });
-    setCurrentPage(1);
     setIsScannerOpen(false);
     setUseSimpleScanner(false);
     success('Barcode Scanned!', `Searching for barcode: ${cleanedBarcode}`);
@@ -197,7 +192,7 @@ export default function ItemsPage() {
       await apiClient.createItem(itemData);
       success('Item Created Successfully!', `${itemData.name} has been added to the inventory.`);
       // Reload items after successful creation
-      await loadItems();
+      await reload();
     } catch (error) {
       console.error('Failed to create item:', error);
       throw error; // Re-throw to let the modal handle the error
@@ -214,7 +209,7 @@ export default function ItemsPage() {
       const item = items.find(i => i.id === id);
       const itemName = item ? item.name : 'Item';
       success('Item Updated Successfully!', `${itemName} has been updated.`);
-      await loadItems(); // Reload items after successful update
+      await reload(); // Reload items after successful update
     } catch (error) {
       console.error('ItemsPage: Failed to update item:', error);
       throw error; // Re-throw to let the modal handle the error
@@ -232,7 +227,7 @@ export default function ItemsPage() {
     try {
       await apiClient.deleteItem(deletingItem.id);
       success('Item Deleted Successfully!', `${deletingItem.name} has been removed from the inventory.`);
-      await loadItems(); // Reload items after successful deletion
+      await reload(); // Reload items after successful deletion
       setDeletingItem(null);
     } catch (err) {
       console.error('Failed to delete item:', err);
@@ -261,73 +256,37 @@ export default function ItemsPage() {
   const itemFacts = (item: Item) =>
     [item.color, item.size?.label, `Qty ${item.quantity}`].filter(Boolean).join(' · ');
 
-  const closeItemMenu = (e: React.MouseEvent<HTMLElement>) => {
-    e.currentTarget.closest('details')?.removeAttribute('open');
-  };
-
-  const ItemActions = ({ item }: { item: Item }) => (
-    <details className="relative" onClick={(e) => e.stopPropagation()}>
-      <summary
-        className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full bg-white/95 text-slate-700 shadow-sm ring-1 ring-black/10 backdrop-blur hover:bg-white [&::-webkit-details-marker]:hidden"
-        aria-label="Item actions"
+  const ItemActions = ({ item, overlay = false }: { item: Item; overlay?: boolean }) => (
+    <OverflowMenu label="Item actions" overlay={overlay}>
+      <OverflowMenuItem
+        icon={<CalendarCheck className="h-4 w-4 text-slate-400" />}
+        onClick={() => {
+          setAvailabilityForItem(item);
+          setAvailabilityDates({ start: '', end: '' });
+          setAvailabilityResult('');
+        }}
       >
-        <MoreHorizontal className="h-4 w-4" />
-      </summary>
-      <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/10">
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-          onClick={(e) => {
-            closeItemMenu(e);
-            setAvailabilityForItem(item);
-            setAvailabilityDates({ start: '', end: '' });
-            setAvailabilityResult('');
-          }}
+        Check dates
+      </OverflowMenuItem>
+      {isAdmin && (
+        <OverflowMenuItem
+          icon={<ArrowRightLeft className="h-4 w-4 text-slate-400" />}
+          onClick={() => setTransferringItem(item)}
         >
-          <CalendarCheck className="h-4 w-4 text-slate-400" />
-          Check dates
-        </button>
-        {isAdmin && (
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-            onClick={(e) => {
-              closeItemMenu(e);
-              setTransferringItem(item);
-            }}
-          >
-            <ArrowRightLeft className="h-4 w-4 text-slate-400" />
-            Transfer
-          </button>
-        )}
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-          onClick={(e) => {
-            closeItemMenu(e);
-            handleEditItem(item);
-          }}
-        >
-          <Edit className="h-4 w-4 text-slate-400" />
-          Edit
-        </button>
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-          onClick={(e) => {
-            closeItemMenu(e);
-            handleDeleteItem(item);
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete
-        </button>
-      </div>
-    </details>
+          Transfer
+        </OverflowMenuItem>
+      )}
+      <OverflowMenuItem icon={<Edit className="h-4 w-4 text-slate-400" />} onClick={() => handleEditItem(item)}>
+        Edit
+      </OverflowMenuItem>
+      <OverflowMenuItem danger icon={<Trash2 className="h-4 w-4" />} onClick={() => handleDeleteItem(item)}>
+        Delete
+      </OverflowMenuItem>
+    </OverflowMenu>
   );
 
   const ItemCard = ({ item }: { item: Item }) => (
-    <Card padding="none" className="relative z-0 h-full overflow-hidden [&:has(details[open])]:z-30">
+    <Card padding="none" className="relative z-0 h-full overflow-hidden">
       <div className="relative flex aspect-square items-center justify-center bg-slate-100">
         <SafeImage
           src={item.thumbnail_url}
@@ -354,8 +313,8 @@ export default function ItemsPage() {
             {item.branch.name}
           </span>
         )}
-        <div className="absolute right-2 top-2">
-          <ItemActions item={item} />
+        <div className="absolute right-2 top-2 z-10">
+          <ItemActions item={item} overlay />
         </div>
       </div>
       <div className="space-y-0.5 p-2.5">
@@ -384,7 +343,7 @@ export default function ItemsPage() {
   const ItemListItem = ({ item }: { item: Item }) => (
     <Card padding="sm">
       <CardContent>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           <Link
             href={`/dashboard/items/${item.id}`}
             className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-20 sm:w-20"
@@ -400,35 +359,32 @@ export default function ItemsPage() {
           </Link>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <Link
-                  href={`/dashboard/items/${item.id}`}
-                  className="line-clamp-1 font-semibold text-slate-900 hover:text-indigo-700"
-                >
-                  {item.name}
-                </Link>
-                <p className="mt-0.5 truncate text-sm text-slate-500">
-                  {itemFacts(item)}
-                  {viewingAll && item.branch?.name ? ` · ${item.branch.name}` : ''}
-                </p>
-                {item.code && (
-                  <p className="mt-0.5 truncate font-mono text-[11px] text-slate-400">{item.code}</p>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <div className="text-right">
-                  <p className="text-sm font-semibold tabular-nums text-slate-900">
-                    {formatCurrency(item.one_day_price)}
-                    <span className="text-[11px] font-medium text-slate-400">/day</span>
-                  </p>
-                  <Badge variant={itemStatusVariant(item.status)} dot className="mt-1 capitalize">
-                    {item.status}
-                  </Badge>
-                </div>
-                <ItemActions item={item} />
-              </div>
+            <Link
+              href={`/dashboard/items/${item.id}`}
+              className="line-clamp-1 font-semibold text-slate-900 hover:text-indigo-700"
+            >
+              {item.name}
+            </Link>
+            <p className="mt-0.5 truncate text-sm text-slate-500">
+              {itemFacts(item)}
+              {viewingAll && item.branch?.name ? ` · ${item.branch.name}` : ''}
+            </p>
+            {item.code && (
+              <p className="mt-0.5 truncate font-mono text-[11px] text-slate-400">{item.code}</p>
+            )}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="text-right">
+              <p className="text-sm font-semibold tabular-nums text-slate-900">
+                {formatCurrency(item.one_day_price)}
+                <span className="text-[11px] font-medium text-slate-400">/day</span>
+              </p>
+              <Badge variant={itemStatusVariant(item.status)} dot className="mt-1 capitalize">
+                {item.status}
+              </Badge>
             </div>
+            <ItemActions item={item} />
           </div>
         </div>
       </CardContent>
@@ -472,7 +428,7 @@ export default function ItemsPage() {
               </div>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <div className="sm:hidden">
                 <Button
                   variant="ghost"
@@ -483,22 +439,22 @@ export default function ItemsPage() {
                   <Filter className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="hidden sm:flex gap-2">
-                <Button
-                  variant={viewMode === 'grid' ? 'primary' : 'ghost'}
-                  size="md"
-                  onClick={() => setViewMode('grid')}
-                >
-                  <Grid className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'list' ? 'primary' : 'ghost'}
-                  size="md"
-                  onClick={() => setViewMode('list')}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                variant={viewMode === 'grid' ? 'primary' : 'ghost'}
+                size="md"
+                onClick={() => setViewMode('grid')}
+                title="Grid view"
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'primary' : 'ghost'}
+                size="md"
+                onClick={() => setViewMode('list')}
+                title="List view"
+              >
+                <List className="h-4 w-4" />
+              </Button>
             </div>
           </FilterBar>
 
@@ -573,12 +529,6 @@ export default function ItemsPage() {
                                 onChange={(e) => {
                                   const cleaned = sanitizeBarcode(e.target.value);
                                   setFilters({ ...filters, barcode: cleaned || undefined });
-                                  setCurrentPage(1);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    setCurrentPage(1);
-                                  }
                                 }}
                               />
                               <Button
@@ -601,7 +551,7 @@ export default function ItemsPage() {
                             <Input
                               type="date"
                               value={rentalDate}
-                              onChange={(e) => { setRentalDate(e.target.value); setCurrentPage(1); }}
+                              onChange={(e) => { setRentalDate(e.target.value); }}
                             />
                           </div>
                           {/* Return Date */}
@@ -611,7 +561,7 @@ export default function ItemsPage() {
                               type="date"
                               value={returnDate}
                               min={rentalDate || undefined}
-                              onChange={(e) => { setReturnDate(e.target.value); setCurrentPage(1); }}
+                              onChange={(e) => { setReturnDate(e.target.value); }}
                             />
                           </div>
                         </div>
@@ -683,13 +633,15 @@ export default function ItemsPage() {
           </div>
         )}
 
-        <Pagination
-          page={currentPage}
-          totalPages={totalPages}
-          total={total}
-          perPage={itemsPerPage}
-          onPageChange={setCurrentPage}
-        />
+        {items.length > 0 && (
+          <InfiniteScrollSentinel
+            sentinelRef={sentinelRef}
+            loadingMore={loadingMore}
+            hasMore={hasMore}
+            loaded={items.length}
+            total={total}
+          />
+        )}
       </PageShell>
 
       {/* Add Item Modal */}

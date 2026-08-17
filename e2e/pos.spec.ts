@@ -51,6 +51,7 @@ test.describe('POS variants', () => {
     await page.getByRole('button', { name: 'Save' }).click();
     await page.getByTestId('pos-pay-full').click();
     await page.getByTestId('pos-charge').click();
+    await closeDialog(page);
     await expect(page.getByTestId('pos-done').getByText('Booking charged')).toBeVisible();
   });
 
@@ -79,6 +80,7 @@ test.describe('POS variants', () => {
     await page.getByTestId('pos-item').filter({ hasText: itemName }).click();
     await page.getByTestId('pos-pay-cash').click();
     await page.getByTestId('pos-charge').click();
+    await closeDialog(page);
     await expect(page.getByTestId('pos-done').getByText('Sale complete')).toBeVisible();
   });
 
@@ -102,6 +104,7 @@ test.describe('POS variants', () => {
     await page.getByRole('button', { name: 'Save' }).click();
     await page.getByTestId('pos-pay-full').click();
     await page.getByTestId('pos-charge').click();
+    await closeDialog(page);
     await expect(page.getByTestId('pos-done').getByText('Booking charged')).toBeVisible();
     await page.getByRole('button', { name: 'New transaction' }).click();
 

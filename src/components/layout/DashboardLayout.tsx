@@ -308,14 +308,14 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
       {/* ── Main area ─────────────────────────────────────────────── */}
       <div className={clsx(!isCashier && 'md:pl-72', isCashier && 'flex h-dvh flex-col')}>
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white px-3 sm:gap-4 sm:px-6">
+        <header className="app-topbar sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white px-3 sm:gap-3 sm:px-6 landscape:h-11 landscape:px-3">
           <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
               aria-label="Open menu"
               data-testid="open-nav"
               className={clsx(
-                '-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-indigo-50 touch-manipulation',
+                '-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-indigo-50 touch-manipulation landscape:h-9 landscape:w-9',
                 !isCashier && 'md:hidden'
               )}
             >
@@ -323,35 +323,37 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
             </button>
 
             {activePage && (
-              <span className={clsx('truncate text-sm font-semibold text-slate-800', isCashier && 'hidden sm:inline')}>
+              <span className={clsx('truncate text-sm font-semibold text-slate-800', isCashier && 'hidden sm:inline landscape:hidden xl:landscape:inline')}>
                 {activePage.name}
               </span>
             )}
           </div>
 
           {isCashier && (
-            <div className="flex rounded-full bg-white p-0.5 ring-1 ring-black/10">
+            <div className="flex shrink-0 rounded-full bg-white p-0.5 ring-1 ring-black/10">
               <button
                 type="button"
                 onClick={() => setChrome('phone')}
+                aria-label="Phone"
                 className={clsx(
-                  'flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold touch-manipulation sm:px-3',
+                  'flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-semibold touch-manipulation sm:h-9 sm:px-2.5 landscape:h-8',
                   chrome === 'phone' ? 'bg-slate-900 text-white' : 'text-slate-600'
                 )}
               >
                 <Smartphone className="h-3.5 w-3.5" />
-                Phone
+                <span className="hidden xl:inline">Phone</span>
               </button>
               <button
                 type="button"
                 onClick={() => setChrome('counter')}
+                aria-label="Counter"
                 className={clsx(
-                  'flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold touch-manipulation sm:px-3',
+                  'flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-semibold touch-manipulation sm:h-9 sm:px-2.5 landscape:h-8',
                   chrome === 'counter' ? 'bg-slate-900 text-white' : 'text-slate-600'
                 )}
               >
                 <Monitor className="h-3.5 w-3.5" />
-                Counter
+                <span className="hidden xl:inline">Counter</span>
               </button>
             </div>
           )}
@@ -372,11 +374,12 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
                         : 'bg-indigo-500'
                   )}
                 />
-                <div className="w-40 sm:w-48">
+                <div className="w-28 sm:w-36 landscape:w-32 xl:w-48">
                   <Select
                     id="branch-switcher"
                     size="sm"
-                    searchable
+                    searchable={false}
+                    clearable={false}
                     value={viewingAll ? ALL_BRANCHES_ID : (currentBranchId || '')}
                     onChange={(e) => {
                       const next = e.target.value;
@@ -403,7 +406,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
 
             <HeadlessMenu as="div" className="relative">
               <MenuButton
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-b from-indigo-500 to-indigo-600 text-xs font-bold text-white shrink-0 shadow-sm shadow-indigo-500/20 ring-1 ring-black/5 hover:shadow-md transition touch-manipulation"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-b from-indigo-500 to-indigo-600 text-xs font-bold text-white shrink-0 shadow-sm shadow-indigo-500/20 ring-1 ring-black/5 hover:shadow-md transition touch-manipulation landscape:h-8 landscape:w-8"
                 aria-label="Open user menu"
               >
                 {initials}

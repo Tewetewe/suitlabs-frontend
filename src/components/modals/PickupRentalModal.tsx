@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { FilePick } from '@/components/ui/Input';
 import SimpleModal from './SimpleModal';
 import CameraModal from './CameraModal';
+import { RackPullList } from '@/components/items/RackPullList';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { Rental } from '@/types';
@@ -113,11 +114,21 @@ export function PickupRentalModal({ isOpen, onClose, onSuccess, rental }: Pickup
       >
         <div className="space-y-4">
           {rental && (
-            <div className="rounded-2xl bg-slate-50 px-4 py-3">
-              <p className="text-sm font-medium text-slate-900">
-                {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : 'Customer'}
-              </p>
-              <p className="mt-1 text-sm text-slate-500">{formatCurrency(rental.total_cost)}</p>
+            <div className="space-y-3">
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-sm font-medium text-slate-900">
+                  {rental.customer ? `${rental.customer.first_name} ${rental.customer.last_name}` : 'Customer'}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">{formatCurrency(rental.total_cost)}</p>
+              </div>
+              <RackPullList
+                items={(rental.items || rental.booking?.items || []).map((line) => ({
+                  name: line.item?.name || 'Item',
+                  code: line.item?.code,
+                  size: line.item?.size?.label,
+                  quantity: line.quantity,
+                }))}
+              />
             </div>
           )}
 

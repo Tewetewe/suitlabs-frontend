@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { FieldGroup, Input, NumberInput, Textarea } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
+import { InvoiceSearchField } from '@/components/ui/InvoiceSearchField';
 import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/api-utils';
@@ -23,8 +24,10 @@ import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard,
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { BookingDetailsModal } from '@/components/modals/BookingDetailsModal';
+import { issueBookingInvoice } from '@/lib/issue-invoice';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, Pagination, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { useToast } from '@/contexts/ToastContext';
 
 type BookingFormItem = {
@@ -46,7 +49,8 @@ function bookingItemSummary(booking: Booking) {
   if (items.length === 0) return '';
   const names = items.slice(0, 2).map((line) => {
     const name = line.item?.name || 'Item';
-    return line.quantity > 1 ? `${name} ×${line.quantity}` : name;
+    const code = line.item?.code ? ` ${line.item.code}` : '';
+    return line.quantity > 1 ? `${name}${code} ×${line.quantity}` : `${name}${code}`;
   });
   return names.join(', ') + (items.length > 2 ? ` +${items.length - 2}` : '');
 }
@@ -84,14 +88,8 @@ function bookingRentalCaption(booking: Booking) {
 export default function BookingsPage() {
   const { user } = useAuth();
   const { warning, success, error: toastError } = useToast();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<BookingFilters>({});
   const [searchInput, setSearchInput] = useState('');
-  const [total, setTotal] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -310,7 +308,14 @@ export default function BookingsPage() {
       });
       setDiscountCode('');
       setDownPayment(0);
-      await loadBookings();
+      await reload();
+      if (created?.id && (created.paid_amount || downPayment) > 0) {
+        await openIssuedInvoice({
+          id: created.id,
+          payment_status: created.payment_status,
+          paid_amount: created.paid_amount ?? downPayment,
+        });
+      }
     } catch (e) {
       console.error('Create booking failed', e);
       setFormErrors({ submit: apiErrorMessage(e, 'Failed to create booking. Please try again.') });
@@ -406,6 +411,10 @@ export default function BookingsPage() {
       ) as unknown as import('@/types').CreateBookingRequest;
 
       await apiClient.updateBooking(activeBooking.id, payload as unknown as Partial<import('@/types').CreateBookingRequest>);
+      const previousPaid = activeBooking.paid_amount || 0;
+      const issuedId = activeBooking.id;
+      const paidNow = downPayment;
+      const issuedStatus = remainingAmount <= 0 ? 'completed' : paidNow > 0 ? 'partial' : 'pending';
       const code = discountCode.trim();
       if (activeBooking.id && code) {
         try {
@@ -419,7 +428,14 @@ export default function BookingsPage() {
       setActiveBooking(null);
       setDiscountCode('');
       setDownPayment(0);
-      await loadBookings();
+      await reload();
+      if (paidNow > previousPaid) {
+        await openIssuedInvoice({
+          id: issuedId,
+          payment_status: issuedStatus,
+          paid_amount: paidNow,
+        });
+      }
     } catch (e) {
       console.error('Update booking failed', e);
       setFormErrors({ submit: apiErrorMessage(e, 'Failed to update booking. Please try again.') });
@@ -488,28 +504,36 @@ export default function BookingsPage() {
     setSelectedPackageId(pkgId);
   };
 
-  const loadBookings = useCallback(async () => {
+  const loadBookingsPage = useCallback(async (page: number) => {
     try {
-      setLoading(true);
-      const response = await apiClient.getBookings({ ...filters, page: currentPage, limit: itemsPerPage });
+      const response = await apiClient.getBookings({ ...filters, page, limit: LIST_PAGE_SIZE });
       const list = response?.data?.data?.bookings || [];
       const pagination = response?.data?.pagination;
-      setBookings(Array.isArray(list) ? list : []);
-      setTotal(pagination?.total || 0);
-      setTotalPages(pagination?.total_pages || 1);
+      return {
+        items: Array.isArray(list) ? list : [],
+        hasMore: hasNextPage(pagination, list.length),
+        total: pagination?.total || 0,
+      };
     } catch {
       warning('Unable to load bookings', 'Backend may be offline. Please try again.');
-      setBookings([]);
-      setTotal(0);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
+      return { items: [], hasMore: false, total: 0 };
     }
-  }, [filters, currentPage, itemsPerPage, warning]);
+  }, [filters, warning]);
+
+  const {
+    items: bookings,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    reload,
+    sentinelRef,
+  } = useInfiniteList(loadBookingsPage);
 
   useEffect(() => {
-    loadBookings();
-  }, [loadBookings]);
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (q) setSearchInput(q);
+  }, []);
 
   const handleSearch = (search: string) => {
     setSearchInput(search);
@@ -519,7 +543,6 @@ export default function BookingsPage() {
   useEffect(() => {
     const t = setTimeout(() => {
       setFilters(prev => ({ ...prev, search: searchInput || undefined }));
-      setCurrentPage(1);
     }, 400);
     return () => clearTimeout(t);
   }, [searchInput]);
@@ -553,26 +576,28 @@ export default function BookingsPage() {
   const handleGenerateInvoice = async (bookingId: string, invoiceType: 'dp' | 'full') => {
     try {
       const invoice = await apiClient.generateInvoice(bookingId, invoiceType);
-      
-      // invoice data used for modal / download
-      
-      // Validate invoice data
       if (!invoice) {
         throw new Error('No invoice data received from server');
       }
-      
       if (!invoice.items || !Array.isArray(invoice.items)) {
-        console.warn('Invoice items is null or not an array:', invoice.items);
-        // Set empty array as fallback
         invoice.items = [];
       }
-      
-      // Show invoice in thermal printer modal
       setInvoiceData(invoice);
       setShowInvoiceModal(true);
     } catch (error) {
       console.error('Failed to generate invoice:', error);
       toastError('Could not generate invoice', 'Please try again.');
+    }
+  };
+
+  const openIssuedInvoice = async (booking: { id: string; payment_status: string; paid_amount?: number }) => {
+    try {
+      const invoice = await issueBookingInvoice(booking);
+      if (!invoice) return;
+      setInvoiceData(invoice);
+      setShowInvoiceModal(true);
+    } catch {
+      toastError('Payment recorded, invoice failed', 'Print it from the booking menu if the customer needs a copy.');
     }
   };
 
@@ -595,9 +620,16 @@ export default function BookingsPage() {
         payingBooking.payment_method || 'cash',
         new Date().toISOString().slice(0, 10)
       );
-      await loadBookings();
+      const paidBooking = {
+        id: payingBooking.id,
+        payment_status: 'completed' as const,
+        paid_amount: (payingBooking.paid_amount || 0) + payingRemaining,
+      };
+      await reload();
       success('Payment recorded', formatCurrency(payingRemaining));
       setPayingBooking(null);
+      setIsViewModalOpen(false);
+      await openIssuedInvoice(paidBooking);
     } catch {
       toastError('Payment failed', 'Please try again.');
     } finally {
@@ -610,7 +642,7 @@ export default function BookingsPage() {
     try {
       setCancelling(true);
       await apiClient.cancelBooking(cancellingBooking.id);
-      await loadBookings();
+      await reload();
       success('Booking cancelled', 'The linked pending rental was cancelled with it.');
       setCancellingBooking(null);
     } catch (err) {
@@ -641,22 +673,26 @@ export default function BookingsPage() {
       >
         <ClientOnly>
           <FilterBar>
-            <Input
-              placeholder="Search bookings..."
+            <InvoiceSearchField
               value={searchInput}
-              onChange={(e) => handleSearch(e.target.value)}
+              onChange={handleSearch}
+              placeholder="Search name, phone, or scan invoice…"
+              onFound={(booking) => {
+                setActiveBooking(booking);
+                setIsViewModalOpen(true);
+              }}
             />
             <Select
               searchable={false}
               options={statusOptions}
               value={filters.status || ''}
-              onChange={(e) => { setFilters(prev => ({ ...prev, status: e.target.value || undefined })); setCurrentPage(1); }}
+              onChange={(e) => { setFilters(prev => ({ ...prev, status: e.target.value || undefined })); }}
             />
             <Select
               searchable={false}
               options={paymentStatusOptions}
               value={filters.payment_status || ''}
-              onChange={(e) => { setFilters(prev => ({ ...prev, payment_status: e.target.value || undefined })); setCurrentPage(1); }}
+              onChange={(e) => { setFilters(prev => ({ ...prev, payment_status: e.target.value || undefined })); }}
             />
           </FilterBar>
         </ClientOnly>
@@ -867,12 +903,12 @@ export default function BookingsPage() {
           }
         />
 
-        <Pagination
-          page={currentPage}
-          totalPages={totalPages}
+        <InfiniteScrollSentinel
+          sentinelRef={sentinelRef}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          loaded={bookings.length}
           total={total}
-          perPage={itemsPerPage}
-          onPageChange={setCurrentPage}
         />
 
         {/* Booking Invoice Modal */}

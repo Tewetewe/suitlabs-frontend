@@ -124,7 +124,11 @@ export class ESCPOSGenerator {
   /**
    * Print barcode
    */
-  barcode(code: string, type: 'CODE128' | 'CODE39' | 'EAN13' | 'EAN8' = 'CODE128'): this {
+  barcode(
+    code: string,
+    type: 'CODE128' | 'CODE39' | 'EAN13' | 'EAN8' = 'CODE128',
+    options?: { height?: number; width?: number; hri?: boolean },
+  ): this {
     if (!code || code.length === 0) {
       console.warn('Empty barcode code provided');
       return this;
@@ -138,16 +142,18 @@ export class ESCPOSGenerator {
     };
 
     const typeCode = typeCodes[type] || 73;
+    const height = options?.height ?? 80;
+    const width = options?.width ?? 3;
+    const hri = options?.hri !== false;
 
     // Set barcode height (50-255, default 80 for better visibility)
-    this.commands.push(stringToBytes(GS + 'h' + String.fromCharCode(80)));
+    this.commands.push(stringToBytes(GS + 'h' + String.fromCharCode(height)));
 
     // Set barcode width (2-6, default 3)
-    this.commands.push(stringToBytes(GS + 'w' + String.fromCharCode(3)));
+    this.commands.push(stringToBytes(GS + 'w' + String.fromCharCode(width)));
 
     // Set HRI (Human Readable Interpretation) position (0=none, 1=above, 2=below, 3=above+below)
-    // Using 2 (below) so the barcode number appears below the barcode
-    this.commands.push(stringToBytes(GS + 'H' + String.fromCharCode(2)));
+    this.commands.push(stringToBytes(GS + 'H' + String.fromCharCode(hri ? 2 : 0)));
 
     // Print barcode
     // For CODE128: GS k n d1...dk

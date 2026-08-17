@@ -3,9 +3,9 @@
  * Handles Bluetooth and USB connection to thermal printers
  */
 
-import { ESCPOSGenerator, formatCurrencyForPrint, formatDateForPrint, formatDateTimeForPrint } from './escpos';
-import { InvoiceData } from '@/types';
-import { Rental } from '@/types';
+import { ESCPOSGenerator, formatDateForPrint, formatDateTimeForPrint } from './escpos';
+import { InvoiceData, Rental, Sale } from '@/types';
+import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -370,21 +370,16 @@ export class ThermalPrinterService {
 
     generator.lineFeed();
 
-    // Print Invoice Number as Barcode
-    generator
-      .setAlign('center')
-      .text('Invoice Barcode:')
-      .lineFeed();
-    
+    // CODE128 of the invoice number — cashier scans this to open the booking.
     try {
-      // Use invoice number for barcode (remove any non-alphanumeric characters for CODE128)
-      const barcodeData = invoice.invoice_number.replace(/[^A-Za-z0-9]/g, '');
+      const barcodeData = invoiceBarcodeValue(invoice.invoice_number);
       if (barcodeData.length > 0) {
-        generator.barcode(barcodeData, 'CODE128');
+        generator
+          .setAlign('center')
+          .barcode(barcodeData, 'CODE128', { height: 50, width: 2, hri: false });
       }
     } catch (error) {
       console.warn('Failed to print barcode:', error);
-      // Continue without barcode if it fails
     }
 
     generator.lineFeed();
@@ -397,131 +392,9 @@ export class ThermalPrinterService {
       .lineFeed()
       .setBold(false)
       .text(invoice.customer_name)
-      .lineFeed()
-      .text(`Email: ${invoice.customer_email}`)
-      .lineFeed()
-      .text(`Phone: ${invoice.customer_phone}`)
-      .lineFeed(2);
+      .lineFeed(8);
 
-    generator.separator();
-
-    // Items
-    generator
-      .setBold(true)
-      .text('ITEMS:')
-      .lineFeed()
-      .setBold(false);
-
-    if (invoice.items && invoice.items.length > 0) {
-      const isPackagePricing = invoice.items.every(
-        (item) => (item.unit_price || 0) <= 0 && (item.total || 0) <= 0
-      ) && (invoice.total_amount || 0) > 0;
-
-      invoice.items.forEach((item) => {
-        if ((item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
-          generator.text(`  ${item.description}`).lineFeed();
-        } else {
-          generator
-            .text(`  ${item.description}`)
-            .lineFeed()
-            .text(`    ${item.quantity} PCS × ${formatCurrencyForPrint(item.unit_price || 0)} = ${formatCurrencyForPrint(item.total || 0)}`)
-            .lineFeed();
-        }
-      });
-
-      if (isPackagePricing) {
-        generator
-          .setBold(true)
-          .text(`Package Total: ${formatCurrencyForPrint(invoice.total_amount || 0)}`)
-          .lineFeed()
-          .setBold(false);
-      }
-    } else {
-      generator.text(invoice.product_name || 'Booking Package').lineFeed();
-    }
-
-    generator.lineFeed();
-    generator.separator();
-
-    // Summary
-    generator
-      .text(`Subtotal: ${formatCurrencyForPrint(invoice.total_amount || 0)}`)
-      .lineFeed();
-
-    if ((invoice.discount_amount || 0) > 0) {
-      generator.text(`Discount: (${formatCurrencyForPrint(invoice.discount_amount || 0)})`).lineFeed();
-    }
-
-    generator
-      .setBold(true)
-      .setFontSize(1, 1)
-      .text(`TOTAL AMOUNT: ${formatCurrencyForPrint(invoice.final_amount || invoice.total_amount || 0)}`)
-      .lineFeed()
-      .setBold(false)
-      .setFontSize(1, 1);
-
-    generator.lineFeed();
-    generator.separator();
-
-    // Payment Info
-    if (invoice.invoice_type === 'dp') {
-      generator
-        .text(`Down Payment: ${formatCurrencyForPrint(invoice.due_amount || 0)}`)
-        .lineFeed()
-        .text(`Remaining: ${formatCurrencyForPrint((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}`)
-        .lineFeed();
-    } else {
-      generator.text(`Due Amount: ${formatCurrencyForPrint(invoice.due_amount || 0)}`).lineFeed();
-    }
-
-    generator
-      .setBold(true)
-      .text(`Payment Status: ${invoice.payment_status?.toUpperCase() || 'PENDING'}`)
-      .lineFeed()
-      .setBold(false);
-
-    if (invoice.booking_date) {
-      generator.lineFeed();
-      generator.separator();
-      generator.text(`Booking Date: ${formatDateForPrint(invoice.booking_date)}`).lineFeed();
-    }
-
-    // Footer
-    generator.lineFeed();
-    generator.separator();
-    generator
-      .setAlign('center')
-      .text('Thank you for using SuitLabs!')
-      .lineFeed()
-      .setFontSize(1, 1)
-      .text('All bookings subject to T&C')
-      .lineFeed()
-      .text('6-Month Warranty. T&C apply.')
-      .lineFeed()
-      .text('suitlabs.bali')
-      .lineFeed(2);
-
-    // Print QR Code with invoice details
-    try {
-      const qrData = JSON.stringify({
-        invoice: invoice.invoice_number,
-        booking: invoice.booking_id,
-        type: invoice.invoice_type,
-        amount: invoice.final_amount,
-      });
-      generator
-        .setAlign('center')
-        .text('Scan for details:')
-        .lineFeed();
-      generator.qrcode(qrData, 6);
-    } catch (error) {
-      console.warn('Failed to print QR code:', error);
-      // Continue without QR code if it fails
-    }
-
-    generator.lineFeed(2);
-
-    // Cut paper
+    // TEMP: stop at customer name so the cutter can be tested. Restore items/totals/footer after.
     generator.cut();
 
     // Print
@@ -533,25 +406,9 @@ export class ThermalPrinterService {
    */
   async printRentalInvoice(rental: Rental): Promise<void> {
     const generator = new ESCPOSGenerator();
-    const invoiceNumber = `INV-${rental.id.slice(-8).toUpperCase()}`;
+    const invoiceNumber = rentalInvoiceNumber(rental);
     const shopSubtitle = rental.branch?.receipt_subtitle || 'Sewa Jas Jimbaran';
     const shopAddress = rental.branch?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kab. Badung, Bali 80362';
-    const items = (rental.items || rental.booking?.items || []) as Array<{
-      item?: { name?: string; size?: { label?: string } };
-      quantity: number;
-      unit_price: number;
-      total_price: number;
-      discount_amount?: number;
-    }>;
-
-    const itemsSubtotal = items.reduce((sum, item) => {
-      const itemTotal = item.total_price || (item.unit_price || 0) * (item.quantity || 1);
-      return sum + itemTotal;
-    }, 0);
-
-    const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
-    const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
-    const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
 
     // Initialize printer
     generator.initialize();
@@ -590,179 +447,101 @@ export class ThermalPrinterService {
       .text(`Status: ${rental.status.toUpperCase()}`)
       .lineFeed();
 
-    if (rental.customer) {
-      generator
-        .text(`Customer: ${rental.customer.first_name} ${rental.customer.last_name}`)
-        .lineFeed()
-        .text(`Phone: ${rental.customer.phone}`)
-        .lineFeed();
-    }
-
-    generator.lineFeed();
-
-    // Print Invoice Number as Barcode
-    generator
-      .setAlign('center')
-      .text('Invoice Barcode:')
-      .lineFeed();
-    
     try {
-      // Use invoice number for barcode (remove any non-alphanumeric characters for CODE128)
-      const barcodeData = invoiceNumber.replace(/[^A-Za-z0-9]/g, '');
+      const barcodeData = invoiceBarcodeValue(invoiceNumber);
       if (barcodeData.length > 0) {
-        generator.barcode(barcodeData, 'CODE128');
+        generator
+          .setAlign('center')
+          .barcode(barcodeData, 'CODE128', { height: 50, width: 2, hri: false });
       }
     } catch (error) {
       console.warn('Failed to print barcode:', error);
-      // Continue without barcode if it fails
     }
 
-    generator.lineFeed();
     generator.separator();
 
-    // Items
     generator
+      .setAlign('left')
       .setBold(true)
-      .text('ITEMS:')
-      .lineFeed()
-      .setBold(false);
-
-    if (items.length > 0) {
-      items.forEach((item) => {
-        const itemName = item.item?.name || 'Item';
-        const itemSize = item.item?.size?.label || '';
-        const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
-        const quantity = item.quantity || 1;
-        const unitPrice = item.unit_price || item.total_price || 0;
-        const itemTotal = item.total_price || unitPrice * quantity;
-        const discount = item.discount_amount ?? 0;
-
-        generator.text(`  ${description}`).lineFeed();
-        generator.text(`    ${quantity} PCS × ${formatCurrencyForPrint(unitPrice)} = ${formatCurrencyForPrint(itemTotal)}`).lineFeed();
-        if (discount > 0) {
-          generator.text(`    Discount: (${formatCurrencyForPrint(discount)})`).lineFeed();
-        }
-      });
-    } else {
-      generator.text('Rental Package').lineFeed();
-    }
-
-    generator.lineFeed();
-    generator.separator();
-
-    // Summary
-    generator
-      .text(`Subtotal: ${formatCurrencyForPrint(itemsSubtotal || rental.total_cost || 0)}`)
-      .lineFeed();
-
-    if (itemsDiscount > 0) {
-      generator.text(`Discount: (${formatCurrencyForPrint(itemsDiscount)})`).lineFeed();
-    }
-
-    if (rental.late_fee > 0) {
-      generator.text(`Late Fee: ${formatCurrencyForPrint(rental.late_fee)}`).lineFeed();
-    }
-
-    if (rental.damage_charges > 0) {
-      generator.text(`Damage: ${formatCurrencyForPrint(rental.damage_charges)}`).lineFeed();
-    }
-
-    generator
-      .setBold(true)
-      .setFontSize(1, 1)
-      .text(`GRAND TOTAL: ${formatCurrencyForPrint(total)}`)
+      .text('CUSTOMER:')
       .lineFeed()
       .setBold(false)
-      .setFontSize(1, 1);
+      .text(
+        rental.customer
+          ? `${rental.customer.first_name} ${rental.customer.last_name}`.trim()
+          : '-'
+      )
+      .lineFeed(8);
 
-    // Deposit
-    if (rental.security_deposit > 0) {
-      generator.lineFeed();
-      generator.separator();
-      generator
-        .text(`Security Deposit: ${formatCurrencyForPrint(rental.security_deposit)}`)
-        .lineFeed();
-
-      if (rental.damage_charges > 0) {
-        generator.text(`Damage Deduction: (${formatCurrencyForPrint(rental.damage_charges)})`).lineFeed();
-      }
-
-      generator
-        .setBold(true)
-        .text(`Refundable: ${formatCurrencyForPrint(refundableDeposit)}`)
-        .lineFeed()
-        .setBold(false);
-    }
-
-    // Dates
-    generator.lineFeed();
-    generator.separator();
-    generator
-      .text(`Rental Date: ${formatDateForPrint(rental.rental_date)}`)
-      .lineFeed()
-      .text(`Return Date: ${formatDateForPrint(rental.return_date)}`)
-      .lineFeed();
-
-    if (rental.actual_pickup_date) {
-      generator.text(`Pickup: ${formatDateForPrint(rental.actual_pickup_date)}`).lineFeed();
-    }
-
-    if (rental.actual_return_date) {
-      generator.text(`Returned: ${formatDateForPrint(rental.actual_return_date)}`).lineFeed();
-    }
-
-    // Notes
-    if (rental.notes) {
-      generator.lineFeed();
-      generator.separator();
-      generator
-        .setBold(true)
-        .text('NOTE:')
-        .lineFeed()
-        .setBold(false)
-        .text(rental.notes)
-        .lineFeed();
-    }
-
-    // Footer
-    generator.lineFeed();
-    generator.separator();
-    generator
-      .setAlign('center')
-      .text('Thank you for using SuitLabs!')
-      .lineFeed()
-      .setFontSize(1, 1)
-      .text('All rentals subject to T&C')
-      .lineFeed()
-      .text('6-Month Warranty. T&C apply.')
-      .lineFeed()
-      .text('suitlabs.bali')
-      .lineFeed(2);
-
-    // Print QR Code with rental details
-    try {
-      const qrData = JSON.stringify({
-        invoice: invoiceNumber,
-        rental: rental.id,
-        status: rental.status,
-        total: total,
-      });
-      generator
-        .setAlign('center')
-        .text('Scan for details:')
-        .lineFeed();
-      generator.qrcode(qrData, 6);
-    } catch (error) {
-      console.warn('Failed to print QR code:', error);
-      // Continue without QR code if it fails
-    }
-
-    generator.lineFeed(2);
-
-    // Cut paper
+    // TEMP: stop at customer name so the cutter can be tested. Restore items/totals/footer after.
     generator.cut();
 
     // Print
+    await this.print(generator.getBytes());
+  }
+
+  async printSaleInvoice(sale: Sale): Promise<void> {
+    const generator = new ESCPOSGenerator();
+    const invoiceNumber = saleInvoiceNumber(sale);
+    const shopSubtitle = sale.branch?.receipt_subtitle || 'Sewa Jas Jimbaran';
+    const shopAddress = sale.branch?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kab. Badung, Bali 80362';
+    const customerName = sale.customer
+      ? `${sale.customer.first_name} ${sale.customer.last_name}`.trim() || 'Walk-in'
+      : 'Walk-in';
+
+    generator.initialize();
+    generator
+      .setAlign('center')
+      .setFontSize(2, 2)
+      .setBold(true)
+      .text('SUITLABS BALI')
+      .lineFeed()
+      .setFontSize(1, 1)
+      .setBold(false)
+      .text(shopSubtitle)
+      .lineFeed(2);
+
+    generator
+      .setFontSize(1, 1)
+      .text(shopAddress)
+      .lineFeed(2);
+
+    generator.separator();
+    generator
+      .setAlign('left')
+      .setFontSize(1, 1)
+      .text(`Invoice: ${invoiceNumber}`)
+      .lineFeed()
+      .text(`Date: ${formatDateTimeForPrint(new Date())}`)
+      .lineFeed()
+      .text(`Sale: ${invoiceNumber}`)
+      .lineFeed()
+      .text(`Status: ${(sale.status || 'completed').toUpperCase()}`)
+      .lineFeed();
+
+    try {
+      const barcodeData = invoiceBarcodeValue(invoiceNumber);
+      if (barcodeData.length > 0) {
+        generator
+          .setAlign('center')
+          .barcode(barcodeData, 'CODE128', { height: 50, width: 2, hri: false });
+      }
+    } catch (error) {
+      console.warn('Failed to print barcode:', error);
+    }
+
+    generator.separator();
+    generator
+      .setAlign('left')
+      .setBold(true)
+      .text('CUSTOMER:')
+      .lineFeed()
+      .setBold(false)
+      .text(customerName)
+      .lineFeed(8);
+
+    // TEMP: stop at customer name so the cutter can be tested. Restore items/totals/footer after.
+    generator.cut();
     await this.print(generator.getBytes());
   }
 

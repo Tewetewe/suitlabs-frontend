@@ -7,6 +7,8 @@ export function useAnchoredMenu(
   open: boolean,
   anchorRef: RefObject<HTMLElement | null>,
   maxHeight = 256,
+  align: 'start' | 'end' = 'start',
+  minWidth = 160,
 ) {
   const [style, setStyle] = useState<CSSProperties>({});
 
@@ -22,12 +24,14 @@ export function useAnchoredMenu(
       const spaceAbove = r.top - gap;
       const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
       const height = Math.max(120, Math.min(maxHeight, openUp ? spaceAbove : spaceBelow));
-      const left = Math.min(Math.max(8, r.left), window.innerWidth - r.width - 8);
+      const width = Math.max(minWidth, r.width);
+      const preferredLeft = align === 'end' ? r.right - width : r.left;
+      const left = Math.min(Math.max(8, preferredLeft), window.innerWidth - width - 8);
 
       setStyle({
         position: 'fixed',
         left,
-        width: Math.max(r.width, 160),
+        width,
         zIndex: 80,
         maxHeight: height,
         ...(openUp
@@ -43,7 +47,7 @@ export function useAnchoredMenu(
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
     };
-  }, [open, anchorRef, maxHeight]);
+  }, [open, anchorRef, maxHeight, align, minWidth]);
 
   return style;
 }

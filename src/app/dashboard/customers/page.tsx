@@ -13,21 +13,16 @@ import { Plus, Edit, Trash2, User } from 'lucide-react';
 import GenericDeleteConfirmModal from '@/components/modals/GenericDeleteConfirmModal';
 import EditCustomerModal from '@/components/modals/EditCustomerModal';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, Pagination, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useBranch } from '@/contexts/BranchContext';
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<CustomerFilters>({});
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 400);
-  const [total, setTotal] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage] = useState(10);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
 
@@ -56,49 +51,49 @@ export default function CustomersPage() {
     }
   }, [isAuthenticated, authLoading]);
 
-  const loadCustomers = useCallback(async () => {
-    if (!isAuthenticated) return;
-    
+  const loadCustomersPage = useCallback(async (page: number) => {
+    if (!isAuthenticated) return { items: [], hasMore: false, total: 0 };
+
     try {
-      setLoading(true);
-      const paginationFilters = {
+      const response = await apiClient.getCustomers({
         ...filters,
-        page: currentPage,
-        limit: itemsPerPage
-      };
-      const response = await apiClient.getCustomers(paginationFilters);
-      
+        page,
+        limit: LIST_PAGE_SIZE,
+      });
+
       if (!response?.success) {
         throw new Error('API request failed');
       }
 
       const nextCustomers = response.data?.data?.customers || [];
-      setCustomers(nextCustomers);
-      setTotal(response.data?.pagination?.total || 0);
-      setTotalPages(response.data?.pagination?.total_pages || 1);
+      const pagination = response.data?.pagination;
+      return {
+        items: nextCustomers,
+        hasMore: hasNextPage(pagination, nextCustomers.length),
+        total: pagination?.total || 0,
+      };
     } catch (err) {
       console.error('Failed to load customers:', err);
       error(
         'Failed to Load Customers',
         'Unable to fetch customer data. Please try again.'
       );
-      setCustomers([]);
-      setTotal(0);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
+      return { items: [], hasMore: false, total: 0 };
     }
-  }, [filters, currentPage, itemsPerPage, isAuthenticated, error]);
+  }, [filters, isAuthenticated, error]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadCustomers();
-    }
-  }, [loadCustomers, isAuthenticated]);
+  const {
+    items: customers,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    reload,
+    sentinelRef,
+  } = useInfiniteList(loadCustomersPage);
 
   useEffect(() => {
     setFilters(prev => ({ ...prev, search: debouncedSearch || undefined }));
-    setCurrentPage(1);
   }, [debouncedSearch]);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
@@ -120,7 +115,7 @@ export default function CustomersPage() {
       setShowCreateModal(false);
       
       // Reload customers
-      await loadCustomers();
+      await reload();
     } catch (err) {
       console.error('Failed to create customer:', err);
       error(
@@ -151,7 +146,7 @@ export default function CustomersPage() {
       );
       
       // Reload customers
-      await loadCustomers();
+      await reload();
     } catch (err) {
       console.error('Failed to update customer:', err);
       error(
@@ -183,7 +178,7 @@ export default function CustomersPage() {
       );
       
       setDeletingCustomer(null);
-      await loadCustomers();
+      await reload();
     } catch (err) {
       console.error('Failed to delete customer:', err);
       error(
@@ -245,7 +240,6 @@ export default function CustomersPage() {
             value={filters.is_active?.toString() || ''}
             onChange={(e) => {
               setFilters({ ...filters, is_active: e.target.value ? e.target.value === 'true' : undefined });
-              setCurrentPage(1);
             }}
             options={[
               { value: '', label: 'All Customers' },
@@ -307,12 +301,12 @@ export default function CustomersPage() {
           )}
         </div>
 
-        <Pagination
-          page={currentPage}
-          totalPages={totalPages}
+        <InfiniteScrollSentinel
+          sentinelRef={sentinelRef}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          loaded={customers.length}
           total={total}
-          perPage={itemsPerPage}
-          onPageChange={setCurrentPage}
         />
 
         {/* Create Customer Modal */}

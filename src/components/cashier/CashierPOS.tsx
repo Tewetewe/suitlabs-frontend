@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import {
   Banknote,
@@ -35,18 +36,24 @@ import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
+import { SaleInvoiceModal } from '@/components/modals/SaleInvoiceModal';
 import { useCashierChrome } from '@/components/cashier/CashierChromeContext';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import { BOOKING_OCCASION_OPTIONS, facetLabel } from '@/lib/select-options';
+import { issueBookingInvoice } from '@/lib/issue-invoice';
+import { looksLikeInvoiceBarcode } from '@/lib/barcode';
 import {
   BookingInstitution,
   BookingPaymentMethod,
   CreateBookingRequest,
   CreateSaleRequest,
   Customer,
+  InvoiceData,
   Item,
   PackagePricing,
+  Sale,
   SaleLineType,
   SalePaymentMethod,
 } from '@/types';
@@ -116,6 +123,7 @@ export function CashierPOS() {
   const { success, error } = useToast();
   const { user } = useAuth();
   const { chrome } = useCashierChrome();
+  const router = useRouter();
   const isPhone = chrome === 'phone';
 
   const [mode, setMode] = useState<PosMode>('rental');
@@ -158,6 +166,8 @@ export function CashierPOS() {
   const [newCustomer, setNewCustomer] = useState({ first_name: '', last_name: '', phone: '', instagram: '', tiktok: '' });
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [done, setDone] = useState<DoneReceipt | null>(null);
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  const [saleInvoice, setSaleInvoice] = useState<Sale | null>(null);
   const [flashId, setFlashId] = useState<string | null>(null);
 
   const selectedPackage = packages.find((pkg) => pkg.id === packageId);
@@ -354,11 +364,36 @@ export function CashierPOS() {
     setGuarantee('KTP');
     setCartOpen(false);
     setDone(null);
+    setInvoiceData(null);
+    setSaleInvoice(null);
+  };
+
+  const openBookingFromInvoice = async (code: string) => {
+    const booking = await apiClient.getBookingByInvoice(code);
+    const name = booking.customer
+      ? `${booking.customer.first_name} ${booking.customer.last_name}`.trim()
+      : booking.full_name || booking.invoice_number || 'Booking';
+    const q = encodeURIComponent(booking.invoice_number || code);
+    const rentalStatus = booking.rental?.status;
+    if (booking.rental_id && rentalStatus !== 'completed' && rentalStatus !== 'cancelled') {
+      router.push(`/dashboard/rentals?q=${q}`);
+    } else {
+      router.push(`/dashboard/bookings?q=${q}`);
+    }
+    success('Invoice found', name);
   };
 
   const handleBarcode = async (code: string) => {
     setScannerOpen(false);
     const cleaned = code.replace(/^\s*"|"\s*$/g, '').replace(/[^0-9A-Za-z-]/g, '');
+    if (looksLikeInvoiceBarcode(cleaned)) {
+      try {
+        await openBookingFromInvoice(cleaned);
+      } catch {
+        error('Not found', `No booking for invoice ${cleaned}`);
+      }
+      return;
+    }
     try {
       const item = await apiClient.searchByBarcode(cleaned);
       addItem(item);
@@ -435,6 +470,7 @@ export function CashierPOS() {
           subtitle: sale.sale_number,
           amount: total,
         });
+        setSaleInvoice(sale);
         success('Sale recorded', sale.sale_number);
       } else {
         const paymentStatus = paidAmount <= 0 ? 'pending' : paidAmount >= total ? 'completed' : 'partial';
@@ -472,6 +508,18 @@ export function CashierPOS() {
           amount: paidAmount || total,
         });
         success('Booking created', 'Rental is waiting for pickup');
+        if (paidAmount > 0) {
+          try {
+            const invoice = await issueBookingInvoice({
+              id: bookingId,
+              payment_status: paymentStatus,
+              paid_amount: paidAmount,
+            });
+            if (invoice) setInvoiceData(invoice);
+          } catch {
+            error('Payment recorded, invoice failed', 'Print it from Bookings if the customer needs a copy.');
+          }
+        }
       }
       setCart([]);
       setCartOpen(false);
@@ -543,7 +591,7 @@ export function CashierPOS() {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-slate-900">{line.item.name}</div>
                       <div className="text-xs text-slate-500">
-                        {line.item.size?.label ? `Size ${line.item.size.label}` : line.item.code}
+                        {[line.item.code, line.item.size?.label ? `Size ${line.item.size.label}` : null].filter(Boolean).join(' · ') || 'Item'}
                       </div>
                       {mode === 'rental' && !!packageId && (
                         <button
@@ -813,42 +861,97 @@ export function CashierPOS() {
         <div
           className={clsx(
           'shrink-0 border-b border-black/5 bg-white/40 backdrop-blur-xl',
-          isPhone ? 'space-y-2 px-3 py-2' : 'space-y-3 px-3 py-3 sm:px-4'
+          isPhone ? 'space-y-2 px-3 py-2' : 'space-y-2 px-3 py-2 landscape:py-1.5'
           )}
           suppressHydrationWarning
         >
           <div className="flex gap-2">
-            <ModeTab active={mode === 'rental'} onClick={() => { setMode('rental'); setCart([]); }} icon={Shirt} label="Rental" testId="pos-mode-rental" />
-            <ModeTab active={mode === 'sale'} onClick={() => { setMode('sale'); setCart([]); }} icon={ShoppingBag} label="Sale" testId="pos-mode-sale" />
+            <div className={clsx('flex gap-2', isPhone ? 'w-full' : 'w-52 shrink-0')}>
+              <ModeTab active={mode === 'rental'} onClick={() => { setMode('rental'); setCart([]); }} icon={Shirt} label="Rental" testId="pos-mode-rental" />
+              <ModeTab active={mode === 'sale'} onClick={() => { setMode('sale'); setCart([]); }} icon={ShoppingBag} label="Sale" testId="pos-mode-sale" />
+            </div>
+            {!isPhone && (
+              <>
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key !== 'Enter') return;
+                      const cleaned = search.replace(/^\s*"|"\s*$/g, '').replace(/[^0-9A-Za-z-]/g, '');
+                      if (!looksLikeInvoiceBarcode(cleaned)) return;
+                      e.preventDefault();
+                      try {
+                        await openBookingFromInvoice(cleaned);
+                      } catch {
+                        error('Not found', `No booking for invoice ${cleaned}`);
+                      }
+                    }}
+                    placeholder="Find suit, size, color, code…"
+                    autoComplete="off"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                    data-form-type="other"
+                    className="h-11 w-full rounded-2xl glass-control pl-10 pr-3 text-base text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/40"
+                    enterKeyHint="search"
+                    inputMode="search"
+                    suppressHydrationWarning
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen(true)}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 touch-manipulation"
+                  aria-label="Scan barcode"
+                  suppressHydrationWarning
+                >
+                  <QrCode className="h-5 w-5" />
+                </button>
+              </>
+            )}
           </div>
 
-          <div className="flex gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Find suit, size, color, code…"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-form-type="other"
-                className="h-12 w-full rounded-2xl glass-control pl-10 pr-3 text-base text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/40"
-                enterKeyHint="search"
-                inputMode="search"
+          {isPhone && (
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key !== 'Enter') return;
+                    const cleaned = search.replace(/^\s*"|"\s*$/g, '').replace(/[^0-9A-Za-z-]/g, '');
+                    if (!looksLikeInvoiceBarcode(cleaned)) return;
+                    e.preventDefault();
+                    try {
+                      await openBookingFromInvoice(cleaned);
+                    } catch {
+                      error('Not found', `No booking for invoice ${cleaned}`);
+                    }
+                  }}
+                  placeholder="Find suit, size, color, code…"
+                  autoComplete="off"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  className="h-12 w-full rounded-2xl glass-control pl-10 pr-3 text-base text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/40"
+                  enterKeyHint="search"
+                  inputMode="search"
+                  suppressHydrationWarning
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setScannerOpen(true)}
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 touch-manipulation"
+                aria-label="Scan barcode"
                 suppressHydrationWarning
-              />
+              >
+                <QrCode className="h-5 w-5" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setScannerOpen(true)}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 touch-manipulation"
-              aria-label="Scan barcode"
-              suppressHydrationWarning
-            >
-              <QrCode className="h-5 w-5" />
-            </button>
-          </div>
+          )}
 
           {mode === 'rental' && (
             isPhone && !datesOpen ? (
@@ -865,45 +968,62 @@ export function CashierPOS() {
                 <ChevronDown className="h-4 w-4 text-slate-400" />
               </button>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <label className="flex min-h-12 items-center gap-2 rounded-2xl glass-control px-3">
-                  <Calendar className="h-4 w-4 shrink-0 text-slate-400" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Rental</div>
-                    <input
-                      type="date"
-                      value={rentalDate}
-                      data-testid="pos-rental-date"
-                      onChange={(e) => setRentalDate(e.target.value)}
-                      className="w-full bg-transparent text-base text-slate-900 outline-none"
+              <div className={clsx('flex gap-2', !isPhone && 'items-stretch')}>
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+                  <label className="flex min-h-11 items-center gap-2 rounded-2xl glass-control px-3">
+                    <Calendar className="h-4 w-4 shrink-0 text-slate-400" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Rental</div>
+                      <input
+                        type="date"
+                        value={rentalDate}
+                        data-testid="pos-rental-date"
+                        onChange={(e) => setRentalDate(e.target.value)}
+                        className="w-full bg-transparent text-base text-slate-900 outline-none"
+                      />
+                    </div>
+                  </label>
+                  <label className="flex min-h-11 items-center gap-2 rounded-2xl glass-control px-3">
+                    <Calendar className="h-4 w-4 shrink-0 text-slate-400" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Return</div>
+                      <input
+                        type="date"
+                        min={rentalDate || undefined}
+                        value={returnDate}
+                        data-testid="pos-return-date"
+                        onChange={(e) => setReturnDate(e.target.value)}
+                        className="w-full bg-transparent text-base text-slate-900 outline-none"
+                      />
+                    </div>
+                  </label>
+                </div>
+                {!isPhone && (
+                  <div className="w-36 shrink-0">
+                    <Select
+                      options={typeOptions}
+                      value={type}
+                      searchable={false}
+                      onChange={(e) => setType(e.target.value)}
+                      searchPlaceholder="All types"
+                      emptyMessage="No types found"
                     />
                   </div>
-                </label>
-                <label className="flex min-h-12 items-center gap-2 rounded-2xl glass-control px-3">
-                  <Calendar className="h-4 w-4 shrink-0 text-slate-400" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Return</div>
-                    <input
-                      type="date"
-                      min={rentalDate || undefined}
-                      value={returnDate}
-                      data-testid="pos-return-date"
-                      onChange={(e) => setReturnDate(e.target.value)}
-                      className="w-full bg-transparent text-base text-slate-900 outline-none"
-                    />
-                  </div>
-                </label>
+                )}
               </div>
             )
           )}
 
-          <Select
-            options={typeOptions}
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            searchPlaceholder="All types"
-            emptyMessage="No types found"
-          />
+          {(isPhone || mode === 'sale') && (
+            <Select
+              options={typeOptions}
+              value={type}
+              searchable={false}
+              onChange={(e) => setType(e.target.value)}
+              searchPlaceholder="All types"
+              emptyMessage="No types found"
+            />
+          )}
         </div>
 
         <div
@@ -971,8 +1091,8 @@ export function CashierPOS() {
                           {item.name}
                         </div>
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-slate-500">
-                            {item.color || item.brand || item.code}
+                          <span className="truncate text-xs text-slate-500">
+                            {[item.code, item.size?.label].filter(Boolean).join(' · ') || item.color || item.brand}
                           </span>
                           <span className="text-sm font-bold tabular-nums text-slate-900">
                             {formatCurrency(catalogPrice(item, mode))}
@@ -1010,7 +1130,10 @@ export function CashierPOS() {
       {cartOpen && (
         <button
           type="button"
-          className={clsx('fixed inset-0 bg-black/40', isPhone ? 'z-40' : 'z-30 lg:hidden')}
+          className={clsx(
+            'fixed inset-0',
+            isPhone ? 'z-40 bg-white' : 'z-30 bg-black/40 lg:hidden',
+          )}
           onClick={() => setCartOpen(false)}
           aria-label="Close ticket"
         />
@@ -1035,8 +1158,14 @@ export function CashierPOS() {
         </button>
       )}
 
-      {done && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 p-6 backdrop-blur-md" data-testid="pos-done">
+      {done && !invoiceData && !saleInvoice && (
+        <div
+          className={clsx(
+            'absolute inset-0 z-50 flex items-center justify-center p-6',
+            isPhone ? 'bg-white' : 'bg-white/70 backdrop-blur-md',
+          )}
+          data-testid="pos-done"
+        >
           <div className="w-full max-w-sm text-center glass-panel-strong rounded-2xl p-8">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 text-white">
               <Check className="h-8 w-8" />
@@ -1097,6 +1226,16 @@ export function CashierPOS() {
       </SimpleModal>
 
       <BarcodeScanner isOpen={scannerOpen} onScan={handleBarcode} onClose={() => setScannerOpen(false)} />
+      <BookingInvoiceModal
+        isOpen={!!invoiceData}
+        invoice={invoiceData}
+        onClose={() => setInvoiceData(null)}
+      />
+      <SaleInvoiceModal
+        isOpen={!!saleInvoice}
+        sale={saleInvoice}
+        onClose={() => setSaleInvoice(null)}
+      />
     </div>
   );
 }

@@ -1,7 +1,11 @@
-import React from 'react';
+'use client';
+
+import React, { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { MoreHorizontal } from 'lucide-react';
+import { useAnchoredMenu } from './anchored-menu';
 
 // ---------------------------------------------------------------------------
 // Badge — consistent status pill / chip
@@ -231,6 +235,31 @@ function getPageRange(current: number, total: number): (number | '…')[] {
 }
 
 // ---------------------------------------------------------------------------
+// InfiniteScrollSentinel — load-more marker at the bottom of a list
+// ---------------------------------------------------------------------------
+
+export function InfiniteScrollSentinel({
+  sentinelRef,
+  loadingMore,
+  hasMore,
+  loaded,
+  total,
+}: {
+  sentinelRef: React.RefObject<HTMLDivElement | null>;
+  loadingMore: boolean;
+  hasMore: boolean;
+  loaded: number;
+  total?: number;
+}) {
+  if (loaded === 0 && !loadingMore) return <div ref={sentinelRef} />;
+  return (
+    <div ref={sentinelRef} className="py-3 text-center text-sm text-slate-500">
+      {loadingMore ? 'Loading more…' : hasMore ? null : total && total > loaded ? `${loaded} of ${total}` : `${loaded} shown`}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // FilterBar — a horizontal row of filter inputs / search
 // ---------------------------------------------------------------------------
 
@@ -246,10 +275,12 @@ export function FilterBar({ children, className }: FilterBarProps) {
       className={clsx(
         'flex flex-col items-stretch gap-2 rounded-2xl glass-panel px-3 py-3',
         'sm:flex-row sm:flex-wrap sm:items-end sm:gap-3 sm:px-4',
+        'landscape:py-2 landscape:sm:py-2',
         '[&>*]:w-full sm:[&>*]:w-auto',
         // Make the primary free-text control (usually first) feel “full width”
         // on tablet/desktop as well, while keeping small selects compact.
         'sm:[&>*:first-child]:w-full sm:[&>*:first-child]:flex-1 sm:[&>*:first-child]:min-w-[280px]',
+        'landscape:sm:[&>*:first-child]:min-w-0',
         'sm:[&>*:not(:first-child)]:min-w-[140px]',
         className
       )}
@@ -263,19 +294,74 @@ export function FilterBar({ children, className }: FilterBarProps) {
 // OverflowMenu — collapse secondary row actions into a ⋯ menu
 // ---------------------------------------------------------------------------
 
-export function OverflowMenu({ children, label = 'Actions' }: { children: React.ReactNode; label?: string }) {
+const OverflowMenuContext = createContext<{ close: () => void }>({ close: () => {} });
+
+export function OverflowMenu({
+  children,
+  label = 'Actions',
+  overlay = false,
+}: {
+  children: React.ReactNode;
+  label?: string;
+  overlay?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
+  const menuStyle = useAnchoredMenu(open, triggerRef, 320, 'end', 192);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      const menu = document.getElementById(menuId);
+      if (menu?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, menuId]);
+
   return (
-    <details className="relative" onClick={(e) => e.stopPropagation()}>
-      <summary
-        className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-800 [&::-webkit-details-marker]:hidden"
+    <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+      <button
+        ref={triggerRef}
+        type="button"
         aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={clsx(
+          'flex h-8 w-8 items-center justify-center rounded-full',
+          overlay
+            ? 'bg-white/95 text-slate-700 shadow-sm ring-1 ring-black/10 backdrop-blur hover:bg-white'
+            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800',
+        )}
       >
         <MoreHorizontal className="h-4 w-4" />
-      </summary>
-      <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/10">
-        {children}
-      </div>
-    </details>
+      </button>
+      {open && typeof document !== 'undefined' && createPortal(
+        <OverflowMenuContext.Provider value={{ close: () => setOpen(false) }}>
+          <div
+            id={menuId}
+            role="menu"
+            style={menuStyle}
+            className="overflow-auto rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/10"
+          >
+            {children}
+          </div>
+        </OverflowMenuContext.Provider>,
+        document.body,
+      )}
+    </div>
   );
 }
 
@@ -292,19 +378,21 @@ export function OverflowMenuItem({
   icon?: React.ReactNode;
   danger?: boolean;
 }) {
+  const { close } = useContext(OverflowMenuContext);
   const className = clsx(
     'flex w-full items-center gap-2 px-3 py-2 text-left text-sm',
     danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-slate-50',
   );
 
-  const close = (e: React.MouseEvent<HTMLElement>) => {
-    e.currentTarget.closest('details')?.removeAttribute('open');
+  const handleClick = (e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    close();
     onClick?.();
   };
 
   if (href) {
     return (
-      <Link href={href} className={className} onClick={close}>
+      <Link href={href} role="menuitem" className={className} onClick={handleClick}>
         {icon}
         {children}
       </Link>
@@ -312,7 +400,7 @@ export function OverflowMenuItem({
   }
 
   return (
-    <button type="button" className={className} onClick={close}>
+    <button type="button" role="menuitem" className={className} onClick={handleClick}>
       {icon}
       {children}
     </button>

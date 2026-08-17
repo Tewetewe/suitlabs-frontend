@@ -24,6 +24,10 @@ export const RECEIPT_STYLES = `
   color: #000;
 }
 
+.receipt-cut-margin {
+  height: 16mm;
+}
+
 .receipt-center {
   text-align: center;
   margin-bottom: 6px;
@@ -83,6 +87,16 @@ export const RECEIPT_STYLES = `
   margin-top: 4px;
   padding-top: 4px;
   border-top: 1px solid #333;
+}
+
+.receipt-barcode {
+  text-align: center;
+  margin: 6px 0 2px;
+}
+
+.receipt-barcode canvas {
+  max-width: 100%;
+  height: auto;
 }
 `;
 
