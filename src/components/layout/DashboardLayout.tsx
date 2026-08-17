@@ -113,6 +113,7 @@ function SidebarLink({
   onNavigate,
   innerRef,
   children,
+  ...rest
 }: {
   href: string;
   isActive: boolean;
@@ -120,7 +121,7 @@ function SidebarLink({
   onNavigate?: () => void;
   innerRef?: React.Ref<HTMLAnchorElement>;
   children: React.ReactNode;
-}) {
+} & React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   const router = useRouter();
   return (
     <Link
@@ -131,6 +132,7 @@ function SidebarLink({
       onMouseEnter={() => router.prefetch(href)}
       onFocus={() => router.prefetch(href)}
       className={clsx('relative', className)}
+      {...rest}
     >
       <NavPendingShade isActive={isActive} />
       {children}
@@ -249,6 +251,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
               'ml-auto text-slate-500 hover:text-slate-900 touch-manipulation min-h-11 min-w-11 flex items-center justify-center',
               !isCashier && 'md:hidden'
             )}
+            aria-label="Close menu"
             onClick={() => setSidebarOpen(false)}
           >
             <X className="h-5 w-5" />
@@ -278,6 +281,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
                       isActive={isActive}
                       innerRef={isActive ? activeNavRef : undefined}
                       onNavigate={() => setSidebarOpen(false)}
+                      data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                       className={clsx(
                         'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation',
                         isActive
@@ -308,6 +312,8 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
           <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+              data-testid="open-nav"
               className={clsx(
                 '-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-indigo-50 touch-manipulation',
                 !isCashier && 'md:hidden'

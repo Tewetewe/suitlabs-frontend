@@ -8,17 +8,22 @@ import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/api';
 import { User, Branch } from '@/types';
 import { AddUserModal } from '@/components/modals/AddUserModal';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { Plus, Edit, Trash2, UserCog, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
 
 export default function UsersPage() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading, user: currentUser } = useAuth();
+  const { success, error: toastError } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [deactivating, setDeactivating] = useState<User | null>(null);
+  const [deactivatingBusy, setDeactivatingBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
@@ -205,13 +210,15 @@ export default function UsersPage() {
                         <Edit className="h-4 w-4" />
                       </Button>
                     )}
-                    {canDeleteUsers && (
+                    {canDeleteUsers && user.is_active && (
                       <Button
                         variant="ghost"
                         size="sm"
                         disabled={currentUser?.id === user.id}
-                        title={currentUser?.id === user.id ? "Cannot delete your own account" : "Delete user"}
+                        title={currentUser?.id === user.id ? "Cannot deactivate your own account" : "Deactivate user"}
+                        aria-label={`Deactivate ${user.first_name} ${user.last_name}`.trim()}
                         className={currentUser?.id === user.id ? "opacity-50 cursor-not-allowed" : ""}
+                        onClick={() => setDeactivating(user)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -232,6 +239,29 @@ export default function UsersPage() {
             branches={branches}
           />
         )}
+        <ConfirmModal
+          isOpen={!!deactivating}
+          title="Deactivate user"
+          confirmLabel="Deactivate"
+          variant="danger"
+          loading={deactivatingBusy}
+          onClose={() => setDeactivating(null)}
+          onConfirm={async () => {
+            if (!deactivating) return;
+            try {
+              setDeactivatingBusy(true);
+              await apiClient.deactivateUser(deactivating.id);
+              success('User deactivated', `${deactivating.first_name} ${deactivating.last_name} can no longer sign in.`);
+              setDeactivating(null);
+              await loadUsers();
+            } catch {
+              toastError('Could not deactivate user', 'Please try again.');
+            } finally {
+              setDeactivatingBusy(false);
+            }
+          }}
+          description="History stays. They will not be able to sign in. Users are never deleted."
+        />
       </PageShell>
     </>
   );

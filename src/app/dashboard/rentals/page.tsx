@@ -24,6 +24,7 @@ import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { useToast } from '@/contexts/ToastContext';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 export default function RentalsPage() {
   const { user } = useAuth();
@@ -31,6 +32,7 @@ export default function RentalsPage() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebouncedValue(searchTerm, 400);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -53,16 +55,24 @@ export default function RentalsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
+
+  useEffect(() => {
     loadRentals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, itemsPerPage]);
+  }, [currentPage, itemsPerPage, debouncedSearch]);
 
   // Hydration warnings are already handled globally in `HydrationSuppressor`.
 
   const loadRentals = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.getRentals({ page: currentPage, limit: itemsPerPage });
+      const response = await apiClient.getRentals({
+        page: currentPage,
+        limit: itemsPerPage,
+        search: debouncedSearch || undefined,
+      });
       const data = response?.data?.data?.rentals || [];
       setRentals(Array.isArray(data) ? data : []);
     } catch {
@@ -138,7 +148,7 @@ export default function RentalsPage() {
       if (sendToMaintenance && Array.isArray(selectedRental.items)) {
         for (const it of selectedRental.items) {
           try {
-            await apiClient.sendToMaintenance(it.item_id, damageNotes || 'Maintenance after return');
+            await apiClient.sendToMaintenance(it.item_id, damageNotes || 'Maintenance after return', it.quantity || 1);
           } catch (e) {
             console.warn('Failed to send item to maintenance', it.item_id, e);
           }
@@ -231,10 +241,18 @@ export default function RentalsPage() {
 
   // Currency formatting uses shared IDR utility
 
-  const filteredRentals = Array.isArray(rentals) ? rentals.filter(rental => 
-    rental.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (rental.items?.some(item => item.item?.name?.toLowerCase().includes(searchTerm.toLowerCase())) || false)
-  ) : [];
+  const filteredRentals = Array.isArray(rentals) ? rentals.filter(rental => {
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return true;
+    const customerName = rental.customer
+      ? `${rental.customer.first_name} ${rental.customer.last_name}`.toLowerCase()
+      : '';
+    return (
+      rental.id.toLowerCase().includes(q) ||
+      customerName.includes(q) ||
+      (rental.items?.some(item => item.item?.name?.toLowerCase().includes(q)) || false)
+    );
+  }) : [];
 
   // Filter out cancelled rentals for statistics
   const activeRentals = filteredRentals.filter(r => r.status !== 'cancelled');
@@ -289,7 +307,7 @@ export default function RentalsPage() {
               const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
 
               return (
-                <Card key={rental.id} padding="sm" className="relative z-0 [&:has(details[open])]:z-30">
+                <Card key={rental.id} padding="sm" className="relative z-0 [&:has(details[open])]:z-30" data-testid="rental-row" data-status={rental.status}>
                   <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <button
                       type="button"
@@ -304,10 +322,10 @@ export default function RentalsPage() {
                     </button>
                     <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
                       {rental.status === 'pending' && (
-                        <Button size="sm" onClick={() => handlePickupRental(rental.id)}>Pickup</Button>
+                        <Button size="sm" data-testid="rental-pickup" onClick={() => handlePickupRental(rental.id)}>Pickup</Button>
                       )}
                       {(rental.status === 'active' || rental.status === 'overdue') && (
-                        <Button size="sm" variant="secondary" onClick={() => handleCompleteRental(rental.id)}>Complete</Button>
+                        <Button size="sm" variant="secondary" data-testid="rental-complete" onClick={() => handleCompleteRental(rental.id)}>Complete</Button>
                       )}
                       <div className="text-right">
                         <p className="text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(total)}</p>
@@ -384,6 +402,7 @@ export default function RentalsPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={rentals.length < itemsPerPage}
               >
                 Next
               </Button>
@@ -467,7 +486,7 @@ export default function RentalsPage() {
           footer={
             <>
               <Button variant="ghost" onClick={() => setShowCompleteModal(false)}>Cancel</Button>
-              <Button onClick={submitCompleteRental}>Complete</Button>
+              <Button onClick={submitCompleteRental} data-testid="confirm-complete">Complete</Button>
             </>
           }
         >

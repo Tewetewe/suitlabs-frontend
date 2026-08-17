@@ -62,7 +62,13 @@ export function ThermalPrinterButton({ className }: { className?: string }) {
   };
 
   return (
-    <Button variant="outline" onClick={handleClick} loading={busy} className={className}>
+    <Button
+      variant="outline"
+      onClick={handleClick}
+      loading={busy}
+      className={className}
+      data-testid="connect-printer"
+    >
       {connected ? <BluetoothConnected className="h-4 w-4" /> : <Bluetooth className="h-4 w-4" />}
       {connected ? 'Printer connected' : 'Connect printer'}
     </Button>

@@ -622,6 +622,7 @@ export function CashierPOS() {
             <button
               type="button"
               onClick={() => setNewCustomerOpen(true)}
+              data-testid="pos-new-customer"
               className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-indigo-700 touch-manipulation"
             >
               <UserPlus className="h-3.5 w-3.5" />
@@ -629,7 +630,7 @@ export function CashierPOS() {
             </button>
           </div>
           {customer ? (
-            <div className="flex items-center justify-between rounded-2xl glass-panel px-3 py-3">
+            <div className="flex items-center justify-between rounded-2xl glass-panel px-3 py-3" data-testid="pos-customer">
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-slate-900">
                   {customer.first_name} {customer.last_name}
@@ -690,9 +691,10 @@ export function CashierPOS() {
           <div>
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Pay</div>
             <div className="mb-2 grid grid-cols-2 gap-2">
-              <Chip selected={payCoverage === 'dp'} onClick={() => setPayCoverage('dp')} block>DP</Chip>
+              <Chip selected={payCoverage === 'dp'} onClick={() => setPayCoverage('dp')} block testId="pos-pay-dp">DP</Chip>
               <Chip
                 selected={payCoverage === 'full'}
+                testId="pos-pay-full"
                 onClick={() => {
                   setPayCoverage('full');
                   setPaidInput(String(total));
@@ -712,6 +714,7 @@ export function CashierPOS() {
               <button
                 key={value}
                 type="button"
+                data-testid={`pos-pay-${value}`}
                 onClick={() => setPayChannel(value)}
                 className={clsx(
                   'flex min-h-14 flex-col items-center justify-center rounded-xl text-[11px] font-semibold touch-manipulation',
@@ -796,6 +799,7 @@ export function CashierPOS() {
           onClick={handleCharge}
           disabled={submitting || cart.length === 0}
           loading={submitting}
+          data-testid="pos-charge"
         >
           {mode === 'rental' ? 'Charge booking' : 'Complete sale'}
         </Button>
@@ -814,8 +818,8 @@ export function CashierPOS() {
           suppressHydrationWarning
         >
           <div className="flex gap-2">
-            <ModeTab active={mode === 'rental'} onClick={() => { setMode('rental'); setCart([]); }} icon={Shirt} label="Rental" />
-            <ModeTab active={mode === 'sale'} onClick={() => { setMode('sale'); setCart([]); }} icon={ShoppingBag} label="Sale" />
+            <ModeTab active={mode === 'rental'} onClick={() => { setMode('rental'); setCart([]); }} icon={Shirt} label="Rental" testId="pos-mode-rental" />
+            <ModeTab active={mode === 'sale'} onClick={() => { setMode('sale'); setCart([]); }} icon={ShoppingBag} label="Sale" testId="pos-mode-sale" />
           </div>
 
           <div className="flex gap-2">
@@ -869,6 +873,7 @@ export function CashierPOS() {
                     <input
                       type="date"
                       value={rentalDate}
+                      data-testid="pos-rental-date"
                       onChange={(e) => setRentalDate(e.target.value)}
                       className="w-full bg-transparent text-base text-slate-900 outline-none"
                     />
@@ -882,6 +887,7 @@ export function CashierPOS() {
                       type="date"
                       min={rentalDate || undefined}
                       value={returnDate}
+                      data-testid="pos-return-date"
                       onChange={(e) => setReturnDate(e.target.value)}
                       className="w-full bg-transparent text-base text-slate-900 outline-none"
                     />
@@ -928,6 +934,8 @@ export function CashierPOS() {
                     <button
                       key={item.id}
                       type="button"
+                      data-testid="pos-item"
+                      data-item-id={item.id}
                       onClick={() => addItem(item)}
                       className={clsx(
                         'group relative overflow-hidden rounded-2xl glass-panel text-left transition touch-manipulation active:scale-[0.98]',
@@ -1028,13 +1036,13 @@ export function CashierPOS() {
       )}
 
       {done && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 p-6 backdrop-blur-md">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 p-6 backdrop-blur-md" data-testid="pos-done">
           <div className="w-full max-w-sm text-center glass-panel-strong rounded-2xl p-8">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 text-white">
               <Check className="h-8 w-8" />
             </div>
             <h2 className="text-2xl font-semibold text-slate-900">{done.title}</h2>
-            <p className="mt-1 text-sm text-slate-500">{done.subtitle}</p>
+            <p className="mt-1 text-sm text-slate-500" data-testid="pos-done-subtitle">{done.subtitle}</p>
             <p className="mt-3 text-3xl font-bold tabular-nums text-slate-900">{formatCurrency(done.amount)}</p>
             <Button size="xl" className="mt-8 w-full min-h-14" onClick={resetTicket}>
               New transaction
@@ -1098,16 +1106,19 @@ function ModeTab({
   onClick,
   icon: Icon,
   label,
+  testId,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  testId?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-testid={testId}
       className={clsx(
         'flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-semibold touch-manipulation',
         active ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20' : 'glass-control text-slate-600'
@@ -1124,16 +1135,19 @@ function Chip({
   onClick,
   children,
   block,
+  testId,
 }: {
   selected?: boolean;
   onClick: () => void;
   children: React.ReactNode;
   block?: boolean;
+  testId?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-testid={testId}
       className={clsx(
         'min-h-11 shrink-0 rounded-full px-3.5 text-sm font-semibold touch-manipulation',
         block && 'w-full',

@@ -68,6 +68,7 @@ export default function SimpleModal({ isOpen, title, onClose, children, size = '
           <h3 className="text-base font-semibold text-slate-900 truncate tracking-tight">{title}</h3>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-white/50 hover:text-slate-800 transition-colors"
           >
             <X className="h-4 w-4" />

@@ -57,8 +57,8 @@ export function TransferItemModal({ isOpen, item, onClose, onTransferred }: Tran
       size="sm"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={submit} disabled={saving || !canTransfer || !toBranchId}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button type="button" onClick={submit} disabled={saving || !canTransfer || !toBranchId}>
             {saving ? 'Transferring…' : 'Transfer'}
           </Button>
         </>
@@ -73,6 +73,7 @@ export function TransferItemModal({ isOpen, item, onClose, onTransferred }: Tran
           <p className="text-sm text-amber-700">This item is not available to transfer.</p>
         )}
         <Select
+          searchable={false}
           label="Destination"
           value={toBranchId}
           onChange={(e) => setToBranchId(e.target.value)}

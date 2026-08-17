@@ -19,7 +19,7 @@ import { Booking, BookingFilters, BookingInstitution, InvoiceData, Customer, Ite
 import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
-import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard } from 'lucide-react';
+import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard, Ban } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { BookingDetailsModal } from '@/components/modals/BookingDetailsModal';
@@ -106,6 +106,8 @@ export default function BookingsPage() {
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [payingBooking, setPayingBooking] = useState<Booking | null>(null);
   const [paying, setPaying] = useState(false);
+  const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   // Previous static options states no longer used; keeping for future caching if needed
   const [bookingForm, setBookingForm] = useState<{
     customer_id: string;
@@ -603,6 +605,21 @@ export default function BookingsPage() {
     }
   };
 
+  const submitCancelBooking = async () => {
+    if (!cancellingBooking) return;
+    try {
+      setCancelling(true);
+      await apiClient.cancelBooking(cancellingBooking.id);
+      await loadBookings();
+      success('Booking cancelled', 'The linked pending rental was cancelled with it.');
+      setCancellingBooking(null);
+    } catch (err) {
+      toastError('Could not cancel booking', apiErrorMessage(err, 'Please try again.'));
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   // Rental creation is handled exclusively from the Rentals menu for UI simplicity
 
   return (
@@ -666,7 +683,7 @@ export default function BookingsPage() {
               const notes = booking.notes?.trim();
 
               return (
-                <Card key={booking.id} padding="sm" className="relative z-0 [&:has(details[open])]:z-30">
+                <Card key={booking.id} padding="sm" className="relative z-0 [&:has(details[open])]:z-30" data-testid="booking-row">
                   <CardContent className="flex items-start gap-3">
                     <button
                       type="button"
@@ -722,6 +739,15 @@ export default function BookingsPage() {
                             href={`/dashboard/sales?booking_id=${booking.id}&customer_id=${booking.customer_id}`}
                           >
                             Add-on sale
+                          </OverflowMenuItem>
+                        )}
+                        {booking.status !== 'cancelled' && (
+                          <OverflowMenuItem
+                            danger
+                            icon={<Ban className="h-4 w-4" />}
+                            onClick={() => setCancellingBooking(booking)}
+                          >
+                            Cancel booking
                           </OverflowMenuItem>
                         )}
                       </OverflowMenu>
@@ -857,6 +883,17 @@ export default function BookingsPage() {
             setInvoiceData(null);
           }}
           invoice={invoiceData}
+        />
+        <ConfirmModal
+          isOpen={!!cancellingBooking}
+          title="Cancel booking"
+          confirmLabel="Cancel booking"
+          cancelLabel="Keep booking"
+          variant="danger"
+          loading={cancelling}
+          onClose={() => setCancellingBooking(null)}
+          onConfirm={submitCancelBooking}
+          description="The linked pending rental will cancel with it. This cannot be undone."
         />
         <ConfirmModal
           isOpen={!!payingBooking}

@@ -5,15 +5,14 @@ import clsx from 'clsx';
 // Card — white surface with ring border and subtle shadow
 // ---------------------------------------------------------------------------
 
-interface CardProps {
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   className?: string;
   padding?: 'none' | 'sm' | 'md' | 'lg';
   clickable?: boolean;
-  onClick?: () => void;
 }
 
-export function Card({ children, className, padding = 'sm', clickable = false, onClick }: CardProps) {
+export function Card({ children, className, padding = 'sm', clickable = false, ...rest }: CardProps) {
   const paddingClasses = {
     none: '',
     sm:   'p-3 sm:p-4',
@@ -21,20 +20,18 @@ export function Card({ children, className, padding = 'sm', clickable = false, o
     lg:   'p-6 sm:p-8',
   };
 
-  const Component = clickable ? 'button' : 'div';
-
   return (
-    <Component
+    <div
       className={clsx(
         'glass-panel min-w-0 overflow-hidden rounded-2xl flex flex-col',
         paddingClasses[padding],
         clickable && 'hover:shadow-md active:shadow-sm transition-all duration-150 touch-manipulation w-full text-left',
         className
       )}
-      onClick={onClick}
+      {...rest}
     >
       {children}
-    </Component>
+    </div>
   );
 }
 

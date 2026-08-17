@@ -105,11 +105,13 @@ export function launchPrintUrl(url: string, androidPackage?: string): void {
     return;
   }
   const isAndroid = /android/i.test(navigator.userAgent);
-  if (isAndroid && androidPackage) {
-    window.location.href = toAndroidIntentUrl(url, androidPackage);
-    return;
+  const launched = isAndroid && androidPackage ? toAndroidIntentUrl(url, androidPackage) : url;
+  // Playwright records launches here; Chromium will not navigate to intent:/bprint: schemes.
+  const sink = (window as Window & { __e2ePrintHrefs?: string[] }).__e2ePrintHrefs;
+  if (Array.isArray(sink)) {
+    sink.push(launched);
   }
-  window.location.href = url;
+  window.location.href = launched;
 }
 
 /** Open Thermer / Bluetooth Print without replacing the SuitLabs page on Android. */
@@ -120,7 +122,7 @@ export function openBprint(iosUrl: string, androidUrl: string): boolean {
     return true;
   }
   if (isIOSDevice()) {
-    window.location.href = iosUrl;
+    launchPrintUrl(iosUrl);
     return true;
   }
   return false;

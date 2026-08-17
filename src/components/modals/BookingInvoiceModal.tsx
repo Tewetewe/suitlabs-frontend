@@ -165,7 +165,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
             <Button variant="outline" onClick={downloadInvoice} className="w-full sm:w-auto">
               Download
             </Button>
-            <Button onClick={handlePrint} className="w-full sm:w-auto">
+            <Button onClick={handlePrint} className="w-full sm:w-auto" data-testid="print-invoice">
               Print
             </Button>
           </div>
@@ -174,7 +174,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
           <div className="flex items-center justify-center">
             <div className="w-full max-w-[420px] rounded-2xl bg-white ring-1 ring-black/10 shadow-sm px-3 py-3">
               <div className="thermal-receipt-container">
-                <div className="thermal-receipt">
+                <div className="thermal-receipt" data-testid="thermal-receipt">
                   {/* Company Header - same as bprint */}
                   <div className="receipt-center">
                     <div className="receipt-title">SUITLABS BALI</div>

@@ -54,7 +54,8 @@ function conditionVariant(condition: string): 'success' | 'warning' | 'danger' |
   }
 }
 
-function typeLabel(type: string) {
+function typeLabel(type?: string) {
+  if (!type) return '';
   if (type === 'shirts') return 'Shirt';
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
@@ -248,22 +249,26 @@ export default function ItemDetailPage() {
     openImageModal(index >= 0 ? index : 0);
   };
 
-  const closeImageModal = () => {
+  const closeImageModal = useCallback(() => {
     setSelectedImageIndex(null);
     setIsZoomed(false);
-  };
+  }, []);
 
-  const nextImage = () => {
-    if (viewerImages.length === 0 || selectedImageIndex === null) return;
-    setSelectedImageIndex((selectedImageIndex + 1) % viewerImages.length);
+  const nextImage = useCallback(() => {
+    setSelectedImageIndex((current) => {
+      if (viewerImages.length === 0 || current === null) return current;
+      return (current + 1) % viewerImages.length;
+    });
     setIsZoomed(false);
-  };
+  }, [viewerImages.length]);
 
-  const prevImage = () => {
-    if (viewerImages.length === 0 || selectedImageIndex === null) return;
-    setSelectedImageIndex(selectedImageIndex === 0 ? viewerImages.length - 1 : selectedImageIndex - 1);
+  const prevImage = useCallback(() => {
+    setSelectedImageIndex((current) => {
+      if (viewerImages.length === 0 || current === null) return current;
+      return current === 0 ? viewerImages.length - 1 : current - 1;
+    });
     setIsZoomed(false);
-  };
+  }, [viewerImages.length]);
 
   useEffect(() => {
     if (selectedImageIndex === null) return;
@@ -278,7 +283,7 @@ export default function ItemDetailPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedImageIndex, viewerImages.length]);
+  }, [selectedImageIndex, nextImage, prevImage, closeImageModal]);
 
   return (
     <>
@@ -297,6 +302,25 @@ export default function ItemDetailPage() {
                 <ArrowRightLeft className="h-4 w-4" />
                 Transfer
               </Button>
+              {item.status === 'maintenance' && (
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    try {
+                      const updated = await apiClient.returnFromMaintenance(item.id, item.maintenance_qty || 1);
+                      setItem(updated);
+                      success('Back on the rack', 'Item is available again.');
+                    } catch (err) {
+                      toastError(
+                        'Could not return from maintenance',
+                        err instanceof Error ? err.message : 'Please try again.',
+                      );
+                    }
+                  }}
+                >
+                  Return to available
+                </Button>
+              )}
               <Button variant="secondary" onClick={() => setEditing(true)}>
                 <Edit className="h-4 w-4" />
                 Edit
@@ -459,6 +483,7 @@ export default function ItemDetailPage() {
                       <Button
                         size="sm"
                         variant="secondary"
+                        data-testid="print-label"
                         onClick={async () => {
                           try {
                             await printProductLabel(

@@ -85,7 +85,7 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
     
     setLoading(true);
     try {
-      const updatedItem = await apiClient.sendToMaintenance(item.id, maintenanceReason);
+      const updatedItem = await apiClient.sendToMaintenance(item.id, maintenanceReason, 1);
       onUpdate(updatedItem);
       setMaintenanceReason('');
     } catch (error) {
@@ -98,7 +98,7 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
   const handleReturnFromMaintenance = async () => {
     setLoading(true);
     try {
-      const updatedItem = await apiClient.returnFromMaintenance(item.id);
+      const updatedItem = await apiClient.returnFromMaintenance(item.id, item.maintenance_qty || 1);
       onUpdate(updatedItem);
     } catch (error) {
       console.error('Return from maintenance failed:', error);

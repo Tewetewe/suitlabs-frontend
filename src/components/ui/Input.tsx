@@ -247,6 +247,7 @@ export function FilePick({
           accept={accept}
           disabled={disabled}
           className="sr-only"
+          data-testid={id}
           onChange={(e) => onChange(e.target.files?.[0] || null)}
         />
         {buttonLabel}

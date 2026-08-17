@@ -100,7 +100,12 @@ export function PickupRentalModal({ isOpen, onClose, onSuccess, rental }: Pickup
         footer={
           <>
             <Button variant="ghost" onClick={handleClose} disabled={uploading}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={uploading || !identityCardFile} loading={uploading}>
+            <Button
+              onClick={handleSubmit}
+              disabled={uploading || !identityCardFile}
+              loading={uploading}
+              data-testid="confirm-pickup"
+            >
               Confirm pickup
             </Button>
           </>

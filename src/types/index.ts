@@ -373,6 +373,8 @@ export interface Item {
   status: 'available' | 'rented' | 'maintenance' | 'retired' | 'damaged' | 'lost';
   quantity: number;
   available_qty?: number;
+  rented_qty?: number;
+  maintenance_qty?: number;
   standard_price: number;
   one_day_price: number;
   four_hour_price: number;

@@ -57,7 +57,6 @@ import {
   MaintenanceItem,
   FinancialGroupBy,
   FinancialReportRow,
-  RentalItemAnalytics,
   OwnerAnalytics,
   GoogleSheetsStatus,
   GoogleSyncJobType,
@@ -188,6 +187,10 @@ class APIClient {
     }
     
     throw new Error('Invalid response format');
+  }
+
+  private unwrapItem(payload: Item | { item: Item }): Item {
+    return payload && typeof payload === 'object' && 'item' in payload ? payload.item : payload;
   }
 
   // Helper method to handle paginated responses
@@ -363,14 +366,14 @@ class APIClient {
     return this.handleResponse<Item>(response);
   }
 
-  async sendToMaintenance(id: string, reason?: string): Promise<Item> {
-    const response = await this.client.put<APIResponse<Item>>(`/api/v1/items/${id}/maintenance`, { reason });
-    return this.handleResponse<Item>(response);
+  async sendToMaintenance(id: string, reason?: string, quantity = 1): Promise<Item> {
+    const response = await this.client.put<APIResponse<Item | { item: Item }>>(`/api/v1/items/${id}/maintenance`, { reason, quantity });
+    return this.unwrapItem(this.handleResponse<Item | { item: Item }>(response));
   }
 
-  async returnFromMaintenance(id: string): Promise<Item> {
-    const response = await this.client.put<APIResponse<Item>>(`/api/v1/items/${id}/maintenance/return`);
-    return this.handleResponse<Item>(response);
+  async returnFromMaintenance(id: string, quantity = 1): Promise<Item> {
+    const response = await this.client.put<APIResponse<Item | { item: Item }>>(`/api/v1/items/${id}/maintenance/return`, { quantity });
+    return this.unwrapItem(this.handleResponse<Item | { item: Item }>(response));
   }
 
   async addItemDiscount(id: string, discountPercentage: number): Promise<Item> {
@@ -644,7 +647,7 @@ class APIClient {
   }
 
   // Rentals
-  async getRentals(params?: { page?: number; limit?: number; status?: string; user_id?: string }): Promise<RentalPaginatedResponse> {
+  async getRentals(params?: { page?: number; limit?: number; status?: string; user_id?: string; search?: string }): Promise<RentalPaginatedResponse> {
     const search = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
