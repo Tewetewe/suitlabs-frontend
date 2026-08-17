@@ -5,7 +5,7 @@
 
 import { ESCPOSGenerator, formatCurrencyForPrint, formatDateForPrint, formatDateTimeForPrint } from './escpos';
 import { InvoiceData, Rental, Sale } from '@/types';
-import { rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
+import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -32,6 +32,20 @@ export interface ThermalPrinterDevice {
   device: BluetoothDevice;
   server?: BluetoothRemoteGATTServer;
   characteristic?: BluetoothRemoteGATTCharacteristic;
+}
+
+function appendInvoiceBarcode(generator: ESCPOSGenerator, invoiceNumber: string): void {
+  const barcodeData = invoiceBarcodeValue(invoiceNumber);
+  if (!barcodeData) {
+    return;
+  }
+  try {
+    generator
+      .setAlign('center')
+      .barcode(barcodeData, 'CODE128', { height: 120, width: 2, hri: false });
+  } catch (error) {
+    console.warn('Failed to print invoice barcode:', error);
+  }
 }
 
 export class ThermalPrinterService {
@@ -445,7 +459,9 @@ export class ThermalPrinterService {
       .text('Thank you for using SuitLabs!')
       .lineFeed()
       .text('suitlabs.bali')
-      .lineFeed(3);
+      .lineFeed();
+    appendInvoiceBarcode(generator, invoice.invoice_number);
+    generator.lineFeed(3);
 
     generator.cut();
     await this.print(generator.getBytes());
@@ -597,7 +613,9 @@ export class ThermalPrinterService {
       .text('Thank you for using SuitLabs!')
       .lineFeed()
       .text('suitlabs.bali')
-      .lineFeed(3);
+      .lineFeed();
+    appendInvoiceBarcode(generator, invoiceNumber);
+    generator.lineFeed(3);
 
     generator.cut();
     await this.print(generator.getBytes());
@@ -685,7 +703,9 @@ export class ThermalPrinterService {
       .text('Thank you for using SuitLabs!')
       .lineFeed()
       .text('suitlabs.bali')
-      .lineFeed(3);
+      .lineFeed();
+    appendInvoiceBarcode(generator, invoiceNumber);
+    generator.lineFeed(3);
 
     generator.cut();
     await this.print(generator.getBytes());
@@ -716,42 +736,35 @@ export class ThermalPrinterService {
       .lineFeed()
       .setBold(false);
 
-    // Item Code
-    generator
-      .setFontSize(1, 1)
-      .text(`#${item.code}`)
-      .lineFeed();
+    if (item.size?.label) {
+      generator
+        .setBold(true)
+        .setFontSize(2, 2)
+        .text(item.size.label)
+        .lineFeed()
+        .setFontSize(1, 1)
+        .setBold(false);
+    }
 
-    // Item Details (if available) - optional, smaller
-    if (item.brand || item.color || item.size?.label) {
-      const details: string[] = [];
-      if (item.brand) details.push(item.brand);
-      if (item.color) details.push(item.color);
-      if (item.size?.label) details.push(`Size: ${item.size.label}`);
-      
-      if (details.length > 0) {
-        generator
-          .setFontSize(1, 1)
-          .text(details.join(' • '))
-          .lineFeed();
-      }
+    generator.text(`#${item.code}`).lineFeed();
+
+    const extras: string[] = [];
+    if (item.brand) extras.push(item.brand);
+    if (item.color) extras.push(item.color);
+    if (extras.length > 0) {
+      generator.text(extras.join(' • ')).lineFeed();
     }
 
     generator.lineFeed();
 
-    // Print Barcode (centered, no label text)
     try {
-      // Clean barcode value (remove non-alphanumeric for CODE128)
       const barcodeData = item.barcode.replace(/[^A-Za-z0-9]/g, '');
       if (barcodeData.length > 0) {
         generator
           .setAlign('center')
-          .barcode(barcodeData, 'CODE128');
+          .barcode(barcodeData, 'CODE128', { height: 120, width: 3, hri: true });
       } else {
-        generator
-          .setAlign('center')
-          .text('Invalid barcode')
-          .lineFeed();
+        generator.setAlign('center').text('Invalid barcode').lineFeed();
       }
     } catch (error) {
       console.warn('Failed to print barcode:', error);

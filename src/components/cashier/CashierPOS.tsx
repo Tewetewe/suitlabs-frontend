@@ -43,7 +43,7 @@ import { BranchBadge } from '@/components/branch/BranchBadge';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import { BOOKING_OCCASION_OPTIONS, facetLabel } from '@/lib/select-options';
 import { issueBookingInvoice } from '@/lib/issue-invoice';
-import { looksLikeInvoiceBarcode } from '@/lib/barcode';
+import { cleanScannedCode, looksLikeInvoiceBarcode } from '@/lib/barcode';
 import {
   BookingInstitution,
   BookingPaymentMethod,
@@ -385,7 +385,7 @@ export function CashierPOS() {
 
   const handleBarcode = async (code: string) => {
     setScannerOpen(false);
-    const cleaned = code.replace(/^\s*"|"\s*$/g, '').replace(/[^0-9A-Za-z-]/g, '');
+    const cleaned = cleanScannedCode(code);
     if (looksLikeInvoiceBarcode(cleaned)) {
       try {
         await openBookingFromInvoice(cleaned);
@@ -879,7 +879,7 @@ export function CashierPOS() {
                     onChange={(e) => setSearch(e.target.value)}
                     onKeyDown={async (e) => {
                       if (e.key !== 'Enter') return;
-                      const cleaned = search.replace(/^\s*"|"\s*$/g, '').replace(/[^0-9A-Za-z-]/g, '');
+                      const cleaned = cleanScannedCode(search);
                       if (!looksLikeInvoiceBarcode(cleaned)) return;
                       e.preventDefault();
                       try {
@@ -921,7 +921,7 @@ export function CashierPOS() {
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={async (e) => {
                     if (e.key !== 'Enter') return;
-                    const cleaned = search.replace(/^\s*"|"\s*$/g, '').replace(/[^0-9A-Za-z-]/g, '');
+                    const cleaned = cleanScannedCode(search);
                     if (!looksLikeInvoiceBarcode(cleaned)) return;
                     e.preventDefault();
                     try {

@@ -9,6 +9,7 @@ import BarcodeScanner from '@/components/ui/BarcodeScanner';
 import { apiClient } from '@/lib/api';
 import { Item } from '@/types';
 import { formatCurrency } from '@/lib/currency';
+import { cleanScannedCode } from '@/lib/barcode';
 import { 
   Search, 
   QrCode, 
@@ -40,7 +41,7 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
     
     setLoading(true);
     try {
-      const foundItem = await apiClient.searchByBarcode(barcodeSearch);
+      const foundItem = await apiClient.searchByBarcode(cleanScannedCode(barcodeSearch));
       onUpdate(foundItem);
     } catch (error) {
       console.error('Barcode search failed:', error);
@@ -50,13 +51,14 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
   };
 
   const handleBarcodeScan = async (barcode: string) => {
-    setBarcodeSearch(barcode);
+    const cleaned = cleanScannedCode(barcode);
+    setBarcodeSearch(cleaned);
     setIsScannerOpen(false);
     
     // Automatically search for the scanned barcode
     setLoading(true);
     try {
-      const foundItem = await apiClient.searchByBarcode(barcode);
+      const foundItem = await apiClient.searchByBarcode(cleaned);
       onUpdate(foundItem);
     } catch (error) {
       console.error('Barcode search failed:', error);

@@ -7,6 +7,7 @@ interface BarcodeLabelProps {
   value: string;
   itemName: string;
   itemCode: string;
+  sizeLabel?: string;
   format?: 'EAN13' | 'CODE128' | 'CODE39';
   width?: number;
   height?: number;
@@ -20,11 +21,12 @@ export function BarcodeLabel({
   value,
   itemName,
   itemCode,
+  sizeLabel,
   format = 'CODE128',
-  width = 2,
-  height = 80,
-  fontSize = 12,
-  margin = 20,
+  width = 3,
+  height = 120,
+  fontSize = 14,
+  margin = 8,
   className = '',
   onImageGenerated
 }: BarcodeLabelProps) {
@@ -50,12 +52,13 @@ export function BarcodeLabel({
 
         // Set canvas size for the label
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) return;
+        ctx.imageSmoothingEnabled = false;
 
         // Calculate dimensions
-        const labelWidth = 400;
-        const labelHeight = 200;
+        const labelWidth = 384;
+        const labelHeight = 320;
         
         canvas.width = labelWidth;
         canvas.height = labelHeight;
@@ -71,16 +74,23 @@ export function BarcodeLabel({
 
         // Draw item name
         ctx.fillStyle = '#111827';
-        ctx.font = 'bold 16px Arial';
+        ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(itemName, labelWidth / 2, 40);
+        ctx.fillText(itemName, labelWidth / 2, 28);
 
-        // Draw item code
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '12px Arial';
-        ctx.fillText(`#${itemCode}`, labelWidth / 2, 60);
+        let barcodeY = 48;
+        if (sizeLabel) {
+          ctx.fillStyle = '#000000';
+          ctx.font = 'bold 42px Arial';
+          ctx.fillText(sizeLabel, labelWidth / 2, 78);
+          barcodeY = 96;
+        }
 
-        // Create barcode on a separate canvas
+        ctx.fillStyle = '#374151';
+        ctx.font = '14px Arial';
+        ctx.fillText(`#${itemCode}`, labelWidth / 2, barcodeY);
+        barcodeY += 12;
+
         const barcodeCanvas = document.createElement('canvas');
         JsBarcode(barcodeCanvas, cleanedValue, {
           format: format,
@@ -88,17 +98,37 @@ export function BarcodeLabel({
           height: height,
           displayValue: true,
           fontSize: fontSize,
-          margin: 10,
+          margin: 8,
           background: '#ffffff',
           lineColor: '#000000',
           textAlign: 'center',
           textPosition: 'bottom',
-          textMargin: 2
+          textMargin: 4
         });
 
-        // Draw barcode in the center
-        const barcodeX = (labelWidth - barcodeCanvas.width) / 2;
-        const barcodeY = 80;
+        const maxBarcodeW = 360;
+        let drawW = barcodeCanvas.width;
+        let drawH = barcodeCanvas.height;
+        if (drawW > maxBarcodeW) {
+          const module = Math.max(1, Math.floor(maxBarcodeW / Math.max(1, cleanedValue.length * 11 + 35)));
+          JsBarcode(barcodeCanvas, cleanedValue, {
+            format: format,
+            width: module,
+            height: height,
+            displayValue: true,
+            fontSize: fontSize,
+            margin: 8,
+            background: '#ffffff',
+            lineColor: '#000000',
+            textAlign: 'center',
+            textPosition: 'bottom',
+            textMargin: 4,
+          });
+          drawW = barcodeCanvas.width;
+          drawH = barcodeCanvas.height;
+        }
+        const barcodeX = Math.floor((labelWidth - drawW) / 2);
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(barcodeCanvas, barcodeX, barcodeY);
 
         // Call callback with image data
@@ -122,7 +152,7 @@ export function BarcodeLabel({
         }
       }
     }
-  }, [value, itemName, itemCode, format, width, height, fontSize, margin, onImageGenerated, isClient]);
+  }, [value, itemName, itemCode, sizeLabel, format, width, height, fontSize, margin, onImageGenerated, isClient]);
 
   if (!isClient) {
     return (

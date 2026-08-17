@@ -43,6 +43,7 @@
     "node_modules",
     ".next",
     ".next-dev",
-    "e2e"
+    "e2e",
+    "src/**/*.test.ts"
   ]
 }

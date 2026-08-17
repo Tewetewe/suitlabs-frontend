@@ -19,7 +19,7 @@ export const RECEIPT_STYLES = `
   padding: 8px 6px;
   background: white;
   font-family: 'Courier New', monospace;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.4;
   color: #000;
 }
@@ -47,15 +47,15 @@ export const RECEIPT_STYLES = `
 }
 
 .receipt-line {
-  font-size: 9px;
-  line-height: 1.4;
+  font-size: 11px;
+  line-height: 1.45;
   margin-bottom: 2px;
   word-wrap: break-word;
 }
 
 .receipt-label {
   font-weight: bold;
-  font-size: 9px;
+  font-size: 11px;
   margin-bottom: 3px;
 }
 
@@ -83,7 +83,7 @@ export const RECEIPT_STYLES = `
 
 .receipt-total {
   font-weight: bold;
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 4px;
   padding-top: 4px;
   border-top: 1px solid #333;
@@ -91,12 +91,12 @@ export const RECEIPT_STYLES = `
 
 .receipt-barcode {
   text-align: center;
-  margin: 6px 0 2px;
+  margin: 8px 0 4px;
 }
 
 .receipt-barcode canvas {
-  max-width: 100%;
-  height: auto;
+  width: 100%;
+  height: 120px;
 }
 `;
 

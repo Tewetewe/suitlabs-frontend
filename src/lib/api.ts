@@ -340,8 +340,11 @@ class APIClient {
 
 
   async searchByBarcode(barcode: string): Promise<Item> {
-    const response = await this.client.get<APIResponse<Item>>(`/api/v1/items/barcode?barcode=${barcode}`);
-    return response.data.data!;
+    const encoded = encodeURIComponent(barcode);
+    const response = await this.client.get<APIResponse<Item | { item: Item }>>(
+      `/api/v1/items/barcode?barcode=${encoded}`,
+    );
+    return this.unwrapItem(this.handleResponse<Item | { item: Item }>(response));
   }
 
   async getItemByCode(code: string): Promise<Item> {

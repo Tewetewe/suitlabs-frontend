@@ -6,7 +6,7 @@ import { QrCode } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
-import { looksLikeInvoiceBarcode } from '@/lib/barcode';
+import { cleanScannedCode, looksLikeInvoiceBarcode } from '@/lib/barcode';
 import { useToast } from '@/contexts/ToastContext';
 import { Booking } from '@/types';
 
@@ -20,7 +20,7 @@ function customerName(booking: Booking) {
 }
 
 function cleanCode(raw: string) {
-  return raw.replace(/^\s*"|"\s*$/g, '').replace(/[^0-9A-Za-z-]/g, '');
+  return cleanScannedCode(raw);
 }
 
 interface InvoiceSearchFieldProps {

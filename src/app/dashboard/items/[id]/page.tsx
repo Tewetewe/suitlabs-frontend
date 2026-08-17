@@ -467,10 +467,11 @@ export default function ItemDetailPage() {
                       value={item.barcode}
                       itemName={item.name}
                       itemCode={item.code}
+                      sizeLabel={item.size?.label}
                       format="CODE128"
-                      width={2}
-                      height={60}
-                      fontSize={10}
+                      width={3}
+                      height={120}
+                      fontSize={14}
                       onImageGenerated={setLabelImageUrl}
                       className="max-w-full"
                     />
