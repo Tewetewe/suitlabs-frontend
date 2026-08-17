@@ -43,7 +43,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
     ? [rental.customer.first_name, rental.customer.last_name].filter(Boolean).join(' ').trim() || '-'
     : '-';
   const items = (rental.items || rental.booking?.items || []) as Array<{
-    item?: { name?: string; size?: { label?: string } };
+    item?: { name?: string; code?: string; size?: { label?: string } };
     quantity: number;
     unit_price: number;
     total_price: number;
