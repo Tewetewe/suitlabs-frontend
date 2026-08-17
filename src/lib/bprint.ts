@@ -62,6 +62,13 @@ export function getAndroidBridgeSaleInvoiceUrl(saleId: string): string {
   );
 }
 
+export function getAndroidBridgeProductLabelUrl(itemId: string): string {
+  return buildAndroidBridgeUrl(
+    '/api/v1/bprint/product-label',
+    `?item_id=${encodeURIComponent(itemId)}`,
+  );
+}
+
 export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
   const fmt = format ? `&format=${format}` : '';
   return buildIosUrl('/api/v1/bprint/booking-invoice', `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`);

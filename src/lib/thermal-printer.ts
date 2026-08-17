@@ -5,7 +5,7 @@
 
 import { ESCPOSGenerator, formatCurrencyForPrint, formatDateForPrint, formatDateTimeForPrint } from './escpos';
 import { InvoiceData, Rental, Sale } from '@/types';
-import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
+import { rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -369,20 +369,6 @@ export class ThermalPrinterService {
     }
 
     generator.lineFeed();
-
-    // CODE128 of the invoice number — cashier scans this to open the booking.
-    try {
-      const barcodeData = invoiceBarcodeValue(invoice.invoice_number);
-      if (barcodeData.length > 0) {
-        generator
-          .setAlign('center')
-          .barcode(barcodeData, 'CODE128', { height: 50, width: 2, hri: false });
-      }
-    } catch (error) {
-      console.warn('Failed to print barcode:', error);
-    }
-
-    generator.lineFeed();
     generator.separator();
 
     // Customer Info
@@ -510,17 +496,6 @@ export class ThermalPrinterService {
       .lineFeed()
       .text(`Status: ${rental.status.toUpperCase()}`)
       .lineFeed();
-
-    try {
-      const barcodeData = invoiceBarcodeValue(invoiceNumber);
-      if (barcodeData.length > 0) {
-        generator
-          .setAlign('center')
-          .barcode(barcodeData, 'CODE128', { height: 50, width: 2, hri: false });
-      }
-    } catch (error) {
-      console.warn('Failed to print barcode:', error);
-    }
 
     generator.separator();
 
@@ -666,17 +641,6 @@ export class ThermalPrinterService {
       .lineFeed()
       .text(`Status: ${(sale.status || 'completed').toUpperCase()}`)
       .lineFeed();
-
-    try {
-      const barcodeData = invoiceBarcodeValue(invoiceNumber);
-      if (barcodeData.length > 0) {
-        generator
-          .setAlign('center')
-          .barcode(barcodeData, 'CODE128', { height: 50, width: 2, hri: false });
-      }
-    } catch (error) {
-      console.warn('Failed to print barcode:', error);
-    }
 
     generator.separator();
     generator

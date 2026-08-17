@@ -143,8 +143,16 @@ export class ESCPOSGenerator {
 
     const typeCode = typeCodes[type] || 73;
     const height = options?.height ?? 80;
-    const width = options?.width ?? 3;
     const hri = options?.hri !== false;
+    const modules = 11 * code.length + 35;
+    let width = options?.width ?? 3;
+    while (width > 1 && modules * width > 384) {
+      width--;
+    }
+    if (modules * width > 384) {
+      console.warn(`Barcode too wide for 58mm paper (${code.length} chars)`);
+      return this;
+    }
 
     // Set barcode height (50-255, default 80 for better visibility)
     this.commands.push(stringToBytes(GS + 'h' + String.fromCharCode(height)));

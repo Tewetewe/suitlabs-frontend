@@ -18,6 +18,7 @@ import type { InvoiceData, Rental, Sale } from '@/types';
 import {
   getAndroidBluetoothProductLabelUrl,
   getAndroidBridgeBookingInvoiceUrl,
+  getAndroidBridgeProductLabelUrl,
   getAndroidBridgeRentalInvoiceUrl,
   getAndroidBridgeSaleInvoiceUrl,
   getBprintBookingInvoiceUrl,
@@ -181,17 +182,16 @@ export type LabelItem = {
 /**
  * Barcode labels never open the drawer on any route — they are stock labels,
  * not a sale, and the counter drawer should not pop while someone re-labels a
- * rack. On a phone they go to Bluetooth Print rather than the bridge for
- * exactly that reason; on a laptop a paired thermal printer gets real ESC/POS
- * and anything else gets the rendered label image through the print dialog.
+ * rack. Android uses the Print Bridge without a drawer kick; iPhone still uses
+ * Bluetooth Print.
  */
 export async function printProductLabel(
   item: LabelItem,
   labelImageDataUrl?: string,
 ): Promise<PrintOutcome> {
   if (isAndroidDevice()) {
-    openBprint(getBprintProductLabelUrl(item.id), getAndroidBluetoothProductLabelUrl(item.id));
-    return { route: 'bprint', drawer: false };
+    openPrintBridge(getAndroidBridgeProductLabelUrl(item.id));
+    return { route: 'bridge', drawer: false };
   }
   if (isIOSDevice()) {
     openBprint(getBprintProductLabelUrl(item.id), getAndroidBluetoothProductLabelUrl(item.id));

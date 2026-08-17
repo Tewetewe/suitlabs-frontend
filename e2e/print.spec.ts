@@ -124,7 +124,7 @@ test.describe('Print', () => {
     await closeDialog(page);
   });
 
-  test('product labels never launch the Print Bridge', async ({ browser, page }) => {
+  test('product labels print through the Print Bridge on Android without opening the drawer', async ({ browser, page }) => {
     await goTo(page, 'items');
     const itemLink = page.locator('a[href^="/dashboard/items/"]').filter({ hasText: /./ }).first();
     await expect(itemLink).toBeVisible();
@@ -148,9 +148,10 @@ test.describe('Print', () => {
       await android.getByTestId('print-label').click();
       await expect.poll(async () => (await readPrintHooks(android)).hrefs.length).toBeGreaterThan(0);
       const launched = (await readPrintHooks(android)).hrefs.join('\n');
-      expect(launched).toMatch(/mate\.bluetoothprint/);
+      expect(launched).toMatch(/com\.suitlabs\.printbridge/);
+      expect(launched).toMatch(/suitlabs-print/);
       expect(launched).toMatch(/product-label/);
-      expect(launched).not.toMatch(/com\.suitlabs\.printbridge/);
+      expect(launched).not.toMatch(/mate\.bluetoothprint/);
     } finally {
       await context.close();
     }
