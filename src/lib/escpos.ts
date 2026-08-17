@@ -31,6 +31,76 @@ function stringToBytes(str: string): Uint8Array {
   return new TextEncoder().encode(str);
 }
 
+const PRINTER_SYMBOLS: Array<[RegExp, string]> = [
+  [/[•·●◦–—−‑]/g, '-'],
+  [/[‘’‚‛]/g, "'"],
+  [/[“”„‟]/g, '"'],
+  [/…/g, '...'],
+  [/×/g, 'x'],
+  [/[\u00a0\u202f]/g, ' '],
+];
+
+/** Map Unicode onto the ASCII a 58 mm ESC/POS printer can actually print. */
+export function toPrinterText(text: string): string {
+  let out = text.normalize('NFKD');
+  for (const [pattern, replacement] of PRINTER_SYMBOLS) {
+    out = out.replace(pattern, replacement);
+  }
+  return out.replace(/[^\n\r\t\x20-\x7e]/g, '').replace(/\t/g, ' ');
+}
+
+export function wrapPrinterText(
+  text: string,
+  width: number,
+  hangingIndent: boolean,
+): string[] {
+  const cols = Math.max(8, width);
+  const parts = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const lines: string[] = [];
+  for (const part of parts) {
+    lines.push(...wrapPrinterParagraph(part, cols, hangingIndent));
+  }
+  return lines.length > 0 ? lines : [''];
+}
+
+function wrapPrinterParagraph(para: string, width: number, hangingIndent: boolean): string[] {
+  if (para.length <= width) {
+    return [para];
+  }
+  const leading = para.match(/^ */)?.[0].length ?? 0;
+  const prefix = para.slice(0, leading);
+  let remaining = para.slice(leading);
+  const contPrefix =
+    hangingIndent && leading > 0 && leading + 2 <= width - 8
+      ? ' '.repeat(leading + 2)
+      : prefix;
+  const lines: string[] = [];
+  let first = true;
+  while (remaining) {
+    const pfx = first ? prefix : contPrefix;
+    first = false;
+    const avail = Math.max(1, width - pfx.length);
+    if (remaining.length <= avail) {
+      lines.push(pfx + remaining);
+      break;
+    }
+    const chunk = remaining.slice(0, avail);
+    const sp = chunk.lastIndexOf(' ');
+    if (sp > 0) {
+      lines.push(pfx + remaining.slice(0, sp).trimEnd());
+      remaining = remaining.slice(sp).trimStart();
+      continue;
+    }
+    lines.push(pfx + chunk);
+    remaining = remaining.slice(avail);
+  }
+  return lines;
+}
+
+function printerColumnsForFont(width: number): number {
+  return width >= 2 ? 16 : 32;
+}
+
 /**
  * Combine multiple Uint8Arrays into one
  */
@@ -50,12 +120,17 @@ function combineBytes(...arrays: Uint8Array[]): Uint8Array {
  */
 export class ESCPOSGenerator {
   private commands: Uint8Array[] = [];
+  private charWidth = 32;
+  private hangingIndent = true;
 
   /**
    * Initialize printer
    */
   initialize(): this {
     this.commands.push(stringToBytes(ESC + '@'));
+    this.commands.push(stringToBytes(ESC + 't' + String.fromCharCode(0)));
+    this.charWidth = 32;
+    this.hangingIndent = true;
     return this;
   }
 
@@ -65,6 +140,7 @@ export class ESCPOSGenerator {
    */
   setAlign(align: 'left' | 'center' | 'right'): this {
     const alignCodes = { left: 0, center: 1, right: 2 };
+    this.hangingIndent = align === 'left';
     this.commands.push(stringToBytes(ESC + 'a' + String.fromCharCode(alignCodes[align])));
     return this;
   }
@@ -75,6 +151,7 @@ export class ESCPOSGenerator {
   setFontSize(width: number = 1, height: number = 1): this {
     const w = Math.max(1, Math.min(8, width));
     const h = Math.max(1, Math.min(8, height));
+    this.charWidth = printerColumnsForFont(w);
     this.commands.push(stringToBytes(ESC + '!' + String.fromCharCode((w - 1) | ((h - 1) << 4))));
     return this;
   }
@@ -96,10 +173,11 @@ export class ESCPOSGenerator {
   }
 
   /**
-   * Add text
+   * Add text. Long lines wrap on word boundaries for 58 mm paper.
    */
   text(text: string): this {
-    this.commands.push(stringToBytes(text));
+    const lines = wrapPrinterText(toPrinterText(text), this.charWidth, this.hangingIndent);
+    this.commands.push(stringToBytes(lines.join(LF)));
     return this;
   }
 
@@ -237,6 +315,8 @@ export class ESCPOSGenerator {
    */
   reset(): this {
     this.commands = [];
+    this.charWidth = 32;
+    this.hangingIndent = true;
     return this;
   }
 }

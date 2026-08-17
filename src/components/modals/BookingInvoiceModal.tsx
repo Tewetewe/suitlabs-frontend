@@ -29,7 +29,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
   const rackItems = (invoice.items || [])
     .filter((item) => item.item_code || (item.description && !item.description.toUpperCase().includes('PACKAGE')))
     .map((item) => ({
-      name: item.description.replace(/^\s*•\s*/, '').replace(/^Add-on:\s*/i, ''),
+      name: item.description.replace(/^\s*[•\-]\s*/, '').replace(/^Add-on:\s*/i, ''),
       code: item.item_code,
       quantity: item.quantity,
     }));

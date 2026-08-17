@@ -752,7 +752,7 @@ export class ThermalPrinterService {
     if (item.brand) extras.push(item.brand);
     if (item.color) extras.push(item.color);
     if (extras.length > 0) {
-      generator.text(extras.join(' • ')).lineFeed();
+      generator.text(extras.join(' / ')).lineFeed();
     }
 
     generator.lineFeed();
