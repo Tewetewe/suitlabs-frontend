@@ -5,6 +5,20 @@
  * It lives here so a laptop print and the preview it was launched from can
  * never drift apart — the print window is handed this exact stylesheet.
  */
+
+/**
+ * Blank paper printed after the receipt or the label, in millimetres.
+ *
+ * The print head sits about 15 mm behind the tear bar. Without this gap the
+ * last lines stop inside the printer and the operator holds the feed button on
+ * the device to pull the paper out. 20 mm clears the tear bar and matches the
+ * 12 blank lines the ESC/POS routes feed before the cut.
+ */
+export const CUT_MARGIN_MM = 20;
+
+/** The spacer node that carries `CUT_MARGIN_MM` into a print document. */
+export const CUT_MARGIN_HTML = '<div class="receipt-cut-margin"></div>';
+
 export const RECEIPT_STYLES = `
 .thermal-receipt-container {
   width: 100%;
@@ -25,7 +39,7 @@ export const RECEIPT_STYLES = `
 }
 
 .receipt-cut-margin {
-  height: 16mm;
+  height: ${CUT_MARGIN_MM}mm;
 }
 
 .receipt-center {

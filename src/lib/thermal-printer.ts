@@ -3,7 +3,13 @@
  * Handles Bluetooth and USB connection to thermal printers
  */
 
-import { ESCPOSGenerator, formatCurrencyForPrint, formatDateForPrint, formatDateTimeForPrint } from './escpos';
+import {
+  CUT_MARGIN_LINES,
+  ESCPOSGenerator,
+  formatCurrencyForPrint,
+  formatDateForPrint,
+  formatDateTimeForPrint,
+} from './escpos';
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 
@@ -204,7 +210,7 @@ export class ThermalPrinterService {
       .text('If you can see this,')
       .lineFeed()
       .text('your printer is working!')
-      .lineFeed(3)
+      .lineFeed(CUT_MARGIN_LINES)
       .cut();
 
     await this.print(generator.getBytes());
@@ -461,7 +467,7 @@ export class ThermalPrinterService {
       .text('suitlabs.bali')
       .lineFeed();
     appendInvoiceBarcode(generator, invoice.invoice_number);
-    generator.lineFeed(3);
+    generator.lineFeed(CUT_MARGIN_LINES);
 
     generator.cut();
     await this.print(generator.getBytes());
@@ -615,7 +621,7 @@ export class ThermalPrinterService {
       .text('suitlabs.bali')
       .lineFeed();
     appendInvoiceBarcode(generator, invoiceNumber);
-    generator.lineFeed(3);
+    generator.lineFeed(CUT_MARGIN_LINES);
 
     generator.cut();
     await this.print(generator.getBytes());
@@ -705,7 +711,7 @@ export class ThermalPrinterService {
       .text('suitlabs.bali')
       .lineFeed();
     appendInvoiceBarcode(generator, invoiceNumber);
-    generator.lineFeed(3);
+    generator.lineFeed(CUT_MARGIN_LINES);
 
     generator.cut();
     await this.print(generator.getBytes());
@@ -760,9 +766,14 @@ export class ThermalPrinterService {
     try {
       const barcodeData = item.barcode.replace(/[^A-Za-z0-9]/g, '');
       if (barcodeData.length > 0) {
+        // The number below the bars is a text line, not the printer's own HRI
+        // font. The HRI font is about 8 dots tall and unreadable on a worn
+        // ribbon, so `hri` is off and the value prints in the normal font.
         generator
           .setAlign('center')
-          .barcode(barcodeData, 'CODE128', { height: 120, width: 3, hri: true });
+          .barcode(barcodeData, 'CODE128', { height: 120, width: 3, hri: false })
+          .text(barcodeData)
+          .lineFeed();
       } else {
         generator.setAlign('center').text('Invalid barcode').lineFeed();
       }
@@ -774,7 +785,7 @@ export class ThermalPrinterService {
         .lineFeed();
     }
 
-    generator.lineFeed(2);
+    generator.lineFeed(CUT_MARGIN_LINES);
 
     // Cut paper
     generator.cut();

@@ -10,6 +10,18 @@ const ESC = '\x1B';
 const GS = '\x1D';
 const LF = '\x0A';
 
+/**
+ * Blank lines to feed after the last printed line, before the cut command.
+ *
+ * The print head sits about 15 mm behind the tear bar, so the last lines stay
+ * inside the printer when the paper stops. Without this gap the operator holds
+ * the feed button on the device to pull the receipt out. 12 lines is about
+ * 45 mm at 203 dpi, which clears the tear bar on every 58 mm printer in the
+ * shop. The backend sends the same 12 blank lines on the bprint route, so all
+ * routes tear at the same place.
+ */
+export const CUT_MARGIN_LINES = 12;
+
 export interface ESCPOSCommands {
   initialize(): Uint8Array;
   setAlign(align: 'left' | 'center' | 'right'): Uint8Array;

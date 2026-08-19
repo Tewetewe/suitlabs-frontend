@@ -11,7 +11,7 @@
  * sticky header leaks onto the paper. The iframe starts empty, so only what we
  * put in it can print.
  */
-import { RECEIPT_PRINT_STYLES, RECEIPT_STYLES } from './receipt-styles';
+import { CUT_MARGIN_HTML, CUT_MARGIN_MM, RECEIPT_PRINT_STYLES, RECEIPT_STYLES } from './receipt-styles';
 
 /** Chrome needs a moment between `load` and `print()` or it prints a blank page. */
 const RENDER_SETTLE_MS = 150;
@@ -28,7 +28,7 @@ function buildDocument(bodyHTML: string, title: string): string {
 <style>${RECEIPT_STYLES}</style>
 <style>${RECEIPT_PRINT_STYLES}</style>
 </head>
-<body>${bodyHTML}</body>
+<body>${bodyHTML}${CUT_MARGIN_HTML}</body>
 </html>`;
 }
 
@@ -138,9 +138,11 @@ export function printImageDataUrl(dataUrl: string, title = 'Label'): boolean {
   @page { size: auto; margin: 4mm; }
   html, body { margin: 0; padding: 0; background: #fff; }
   img { display: block; width: 58mm; max-width: 100%; image-rendering: crisp-edges; }
+  /* Blank paper so the label clears the tear bar without a manual feed. */
+  .label-cut-margin { height: ${CUT_MARGIN_MM}mm; }
 </style>
 </head>
-<body><img id="label" alt="${title}" src="${dataUrl}"></body>
+<body><img id="label" alt="${title}" src="${dataUrl}"><div class="label-cut-margin"></div></body>
 </html>`);
   frameDocument.close();
 
