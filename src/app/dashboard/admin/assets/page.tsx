@@ -1,8 +1,8 @@
 'use client';
 
-import React, { FormEvent, useCallback, useEffect, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Landmark, Plus } from 'lucide-react';
+import { Landmark, Plus, RotateCcw, Trash2, PackageX, Pencil } from 'lucide-react';
 
 import { MetricTile, PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -10,13 +10,23 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
-import { Badge, EmptyState } from '@/components/ui/DataDisplay';
+import {
+  Badge,
+  EmptyState,
+  GroupedList,
+  ListGroup,
+  ListRow,
+  OverflowMenu,
+  OverflowMenuItem,
+  SkeletonRow,
+} from '@/components/ui/DataDisplay';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { apiClient } from '@/lib/api';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
+import { groupRows } from '@/lib/group-rows';
 import type {
   AssetReport,
   CreateFixedAssetRequest,
@@ -59,6 +69,24 @@ function categoryLabel(value?: string) {
 function dateLabel(value?: string) {
   if (!value) return '—';
   return value.slice(0, 10);
+}
+
+/** Track which groups are open, keyed by group. */
+function useOpenGroups(keys: string[]) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  return {
+    open,
+    toggle,
+    expandAll: () => setOpen(new Set(keys)),
+    collapseAll: () => setOpen(new Set()),
+  };
 }
 
 export default function AssetsPage() {
@@ -180,8 +208,29 @@ export default function AssetsPage() {
 
   const inventory = report?.inventory;
   const fixed = report?.fixed;
-  const fixedItems = fixed?.items || [];
-  const inventoryItems = inventory?.items || [];
+  const fixedItems = useMemo(() => fixed?.items || [], [fixed]);
+  const inventoryItems = useMemo(() => inventory?.items || [], [inventory]);
+
+  const fixedGroups = useMemo(
+    () => groupRows(fixedItems, {
+      keyOf: (asset) => asset.category,
+      titleOf: categoryLabel,
+      unitsOf: (asset) => asset.quantity,
+      valueOf: (asset) => asset.value,
+    }),
+    [fixedItems],
+  );
+  const inventoryGroups = useMemo(
+    () => groupRows(inventoryItems, {
+      keyOf: (item) => item.type,
+      titleOf: (key) => key.charAt(0).toUpperCase() + key.slice(1),
+      unitsOf: (item) => item.quantity,
+      valueOf: (item) => item.value,
+    }),
+    [inventoryItems],
+  );
+  const fixedOpen = useOpenGroups(fixedGroups.map((g) => g.key));
+  const inventoryOpen = useOpenGroups(inventoryGroups.map((g) => g.key));
 
   return (
     <>
@@ -240,125 +289,141 @@ export default function AssetsPage() {
                     Add fixed asset
                   </Button>
                 </div>
-                {(fixed?.by_category || []).length > 0 && (
-                  <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {(fixed?.by_category || []).map((row) => (
-                      <div key={row.category} className="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm">
-                        <span className="min-w-0 truncate text-slate-600">{categoryLabel(row.category)} · {row.quantity} units</span>
-                        <span className="shrink-0 font-medium tabular-nums text-slate-900" title={formatCurrency(row.value)}>
-                          {formatCurrencyCompact(row.value)}
-                        </span>
-                      </div>
-                    ))}
+                {loading ? (
+                  <div className="overflow-hidden rounded-2xl border border-black/5 bg-white/40">
+                    {Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} />)}
                   </div>
-                )}
-                {(fixed?.items || []).length === 0 ? (
+                ) : fixedItems.length === 0 ? (
                   <div className="rounded-xl border border-black/5 bg-white/40 px-4 py-3 text-sm text-slate-600">
                     No fixed assets yet. Add chairs, racks, and other shop equipment.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto rounded-2xl border border-black/5">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-white/60">
-                        <tr className="text-left text-slate-600">
-                          <th className="px-4 py-3 font-semibold">Name</th>
-                          <th className="px-4 py-3 font-semibold">Category</th>
-                          <th className="px-4 py-3 font-semibold text-right">Qty</th>
-                          <th className="px-4 py-3 font-semibold text-right">Buying price</th>
-                          <th className="px-4 py-3 font-semibold text-right">Value</th>
-                          <th className="px-4 py-3 font-semibold">Status</th>
-                          <th className="px-4 py-3 font-semibold text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-black/5 bg-white/30">
-                        {fixedItems.map((asset) => (
-                          <tr key={asset.id} className={asset.status === 'disposed' ? 'text-slate-400' : 'text-slate-800'}>
-                            <td className="px-4 py-3 font-medium">
-                              {asset.name}
-                              {asset.vendor ? <div className="text-xs font-normal text-slate-500">{asset.vendor}</div> : null}
-                            </td>
-                            <td className="px-4 py-3">{categoryLabel(asset.category)}</td>
-                            <td className="px-4 py-3 text-right">{asset.quantity}</td>
-                            <td className="px-4 py-3 text-right">{formatCurrency(asset.purchase_price)}</td>
-                            <td className="px-4 py-3 text-right font-medium">{formatCurrency(asset.value)}</td>
-                            <td className="px-4 py-3">
-                              <Badge variant={asset.status === 'in_use' ? 'success' : 'default'}>
-                                {asset.status === 'in_use' ? 'In use' : 'Disposed'}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex justify-end gap-1">
-                                <Button variant="ghost" size="sm" onClick={() => openEdit(asset)}>Edit</Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDispose(asset)}>
+                  <GroupedList
+                    label="Fixed assets by category"
+                    groupCount={fixedGroups.length}
+                    openCount={fixedOpen.open.size}
+                    onExpandAll={fixedOpen.expandAll}
+                    onCollapseAll={fixedOpen.collapseAll}
+                  >
+                    {fixedGroups.map((group) => (
+                      <ListGroup
+                        key={group.key}
+                        title={group.title}
+                        meta={`${group.rows.length} asset${group.rows.length === 1 ? '' : 's'} · ${group.units.toLocaleString()} units`}
+                        value={formatCurrencyCompact(group.value)}
+                        valueTitle={formatCurrency(group.value)}
+                        open={fixedOpen.open.has(group.key)}
+                        onToggle={() => fixedOpen.toggle(group.key)}
+                      >
+                        {group.rows.map((asset) => (
+                          <ListRow
+                            key={asset.id}
+                            muted={asset.status === 'disposed'}
+                            title={asset.name}
+                            subtitle={asset.vendor || undefined}
+                            meta={
+                              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span>{asset.quantity.toLocaleString()} units</span>
+                                <span aria-hidden>·</span>
+                                <span>{formatCurrency(asset.purchase_price)} each</span>
+                                {asset.purchase_date && (
+                                  <>
+                                    <span aria-hidden>·</span>
+                                    <span>{dateLabel(asset.purchase_date)}</span>
+                                  </>
+                                )}
+                                <Badge variant={asset.status === 'in_use' ? 'success' : 'default'}>
+                                  {asset.status === 'in_use' ? 'In use' : 'Disposed'}
+                                </Badge>
+                              </span>
+                            }
+                            value={formatCurrency(asset.value)}
+                            actions={
+                              <OverflowMenu>
+                                <OverflowMenuItem
+                                  icon={<Pencil className="h-4 w-4 text-slate-400" />}
+                                  onClick={() => openEdit(asset)}
+                                >
+                                  Edit
+                                </OverflowMenuItem>
+                                <OverflowMenuItem
+                                  icon={
+                                    asset.status === 'in_use'
+                                      ? <PackageX className="h-4 w-4 text-slate-400" />
+                                      : <RotateCcw className="h-4 w-4 text-slate-400" />
+                                  }
+                                  onClick={() => handleDispose(asset)}
+                                >
                                   {asset.status === 'in_use' ? 'Dispose' : 'Restore'}
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => setDeletingAsset(asset)}>Delete</Button>
-                              </div>
-                            </td>
-                          </tr>
+                                </OverflowMenuItem>
+                                <OverflowMenuItem
+                                  danger
+                                  icon={<Trash2 className="h-4 w-4" />}
+                                  onClick={() => setDeletingAsset(asset)}
+                                >
+                                  Delete
+                                </OverflowMenuItem>
+                              </OverflowMenu>
+                            }
+                          />
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      </ListGroup>
+                    ))}
+                  </GroupedList>
                 )}
               </CardContent>
             </Card>
 
             <Card>
               <CardContent>
-                <div className="mb-3 text-sm font-semibold text-slate-800">Inventory by product type</div>
-                {(inventory?.by_type || []).length === 0 ? (
-                  <div className="text-sm text-slate-500">No inventory value recorded yet. Add buying price on each item.</div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {(inventory?.by_type || []).map((row) => (
-                      <div key={row.type} className="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm">
-                        <span className="min-w-0 truncate capitalize text-slate-600">{row.type} · {row.quantity} units</span>
-                        <span className="shrink-0 font-medium tabular-nums text-slate-900" title={formatCurrency(row.value)}>
-                          {formatCurrencyCompact(row.value)}
-                        </span>
-                      </div>
-                    ))}
+                <div className="mb-3">
+                  <div className="text-sm font-semibold text-slate-800">Inventory products</div>
+                  <div className="text-xs text-slate-500">
+                    Rental stock at buying price, grouped by product type. Open a type to see its products.
                   </div>
+                </div>
+                {loading ? (
+                  <div className="overflow-hidden rounded-2xl border border-black/5 bg-white/40">
+                    {Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} />)}
+                  </div>
+                ) : inventoryItems.length === 0 ? (
+                  <div className="rounded-xl border border-black/5 bg-white/40 px-4 py-3 text-sm text-slate-600">
+                    No inventory value recorded yet. Add buying price on each item.
+                  </div>
+                ) : (
+                  <GroupedList
+                    label="Inventory products by type"
+                    groupCount={inventoryGroups.length}
+                    openCount={inventoryOpen.open.size}
+                    onExpandAll={inventoryOpen.expandAll}
+                    onCollapseAll={inventoryOpen.collapseAll}
+                  >
+                    {inventoryGroups.map((group) => (
+                      <ListGroup
+                        key={group.key}
+                        title={group.title}
+                        meta={`${group.rows.length} product${group.rows.length === 1 ? '' : 's'} · ${group.units.toLocaleString()} units`}
+                        value={formatCurrencyCompact(group.value)}
+                        valueTitle={formatCurrency(group.value)}
+                        open={inventoryOpen.open.has(group.key)}
+                        onToggle={() => inventoryOpen.toggle(group.key)}
+                      >
+                        {group.rows.map((item) => (
+                          <ListRow
+                            key={item.id}
+                            title={item.name}
+                            subtitle={item.code}
+                            meta={`${item.quantity.toLocaleString()} units · ${formatCurrency(item.purchase_price)} each`}
+                            value={formatCurrency(item.value)}
+                          />
+                        ))}
+                      </ListGroup>
+                    ))}
+                  </GroupedList>
                 )}
               </CardContent>
             </Card>
 
-            <div>
-              <div className="mb-2 text-sm font-semibold text-slate-800">Inventory products</div>
-              {inventoryItems.length === 0 ? (
-                <div className="rounded-xl border border-black/5 bg-white/40 px-4 py-3 text-sm text-slate-600">
-                  No inventory value recorded yet. Add buying price on each item.
-                </div>
-              ) : (
-              <div className="overflow-x-auto rounded-2xl border border-black/5">
-              <table className="min-w-full text-sm">
-                <thead className="bg-white/60">
-                  <tr className="text-left text-slate-600">
-                    <th className="px-4 py-3 font-semibold">Code</th>
-                    <th className="px-4 py-3 font-semibold">Product</th>
-                    <th className="px-4 py-3 font-semibold">Type</th>
-                    <th className="px-4 py-3 font-semibold text-right">Qty</th>
-                    <th className="px-4 py-3 font-semibold text-right">Buying price</th>
-                    <th className="px-4 py-3 font-semibold text-right">Asset value</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-black/5 bg-white/30">
-                  {inventoryItems.map((item) => (
-                    <tr key={item.id} className="text-slate-800">
-                      <td className="px-4 py-3 font-medium">{item.code}</td>
-                      <td className="px-4 py-3">{item.name}</td>
-                      <td className="px-4 py-3 capitalize">{item.type}</td>
-                      <td className="px-4 py-3 text-right">{item.quantity}</td>
-                      <td className="px-4 py-3 text-right">{formatCurrency(item.purchase_price)}</td>
-                      <td className="px-4 py-3 text-right font-medium">{formatCurrency(item.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-              )}
-            </div>
           </>
         )}
       </PageShell>

@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useId, useRef, useState } 
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { MoreHorizontal } from 'lucide-react';
+import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { useAnchoredMenu } from './anchored-menu';
 
 // ---------------------------------------------------------------------------
@@ -404,5 +404,258 @@ export function OverflowMenuItem({
       {icon}
       {children}
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// GroupedList — a two layer list: roll-up rows that open onto their own rows
+//
+// The top layer answers "how much and how many" for each group. The rows
+// underneath answer "which ones", and only for the group the reader opens. It
+// replaces a summary block sitting above a long flat table, where the reader has
+// to match a number in one place against rows in another.
+//
+// Usage:
+//   <GroupedList
+//     label="Fixed assets by category"
+//     openCount={openGroups.size}
+//     groupCount={groups.length}
+//     onExpandAll={expandAll}
+//     onCollapseAll={collapseAll}
+//   >
+//     {groups.map((g) => (
+//       <ListGroup
+//         key={g.key}
+//         title={g.title}
+//         meta={`${g.rows.length} assets · ${g.units} units`}
+//         value={formatCurrencyCompact(g.value)}
+//         valueTitle={formatCurrency(g.value)}
+//         open={openGroups.has(g.key)}
+//         onToggle={() => toggleGroup(g.key)}
+//       >
+//         {g.rows.map((row) => <ListRow key={row.id} … />)}
+//       </ListGroup>
+//     ))}
+//   </GroupedList>
+// ---------------------------------------------------------------------------
+
+export function GroupedList({
+  label,
+  openCount,
+  groupCount,
+  onExpandAll,
+  onCollapseAll,
+  children,
+  className,
+}: {
+  /** Names the list for screen readers, e.g. "Fixed assets by category". */
+  label: string;
+  /** How many groups are open now, so the control offers the useful direction. */
+  openCount?: number;
+  groupCount?: number;
+  onExpandAll?: () => void;
+  onCollapseAll?: () => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const showControl = Boolean(onExpandAll && onCollapseAll && (groupCount ?? 0) > 1);
+  const allOpen = (openCount ?? 0) >= (groupCount ?? 0);
+
+  return (
+    <div className={clsx('space-y-2', className)}>
+      {showControl && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={allOpen ? onCollapseAll : onExpandAll}
+            className="rounded-lg px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white/60 hover:text-slate-900"
+          >
+            {allOpen ? 'Collapse all' : 'Expand all'}
+          </button>
+        </div>
+      )}
+      <div role="group" aria-label={label} className="divide-y divide-black/5 overflow-hidden rounded-2xl border border-black/5 bg-white/40">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function ListGroup({
+  title,
+  meta,
+  value,
+  valueTitle,
+  badge,
+  open,
+  onToggle,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  /** The count line under the title, e.g. "4 assets · 12 units". */
+  meta?: string;
+  /** The roll-up shown on the right, usually money. */
+  value?: React.ReactNode;
+  valueTitle?: string;
+  badge?: React.ReactNode;
+  /** Leave `open` and `onToggle` out to let the group hold its own state. */
+  open?: boolean;
+  onToggle?: () => void;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [selfOpen, setSelfOpen] = useState(defaultOpen);
+  const controlled = open !== undefined;
+  const isOpen = controlled ? open : selfOpen;
+  const bodyId = useId();
+
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-controls={bodyId}
+        onClick={() => (controlled ? onToggle?.() : setSelfOpen((prev) => !prev))}
+        className="flex min-h-11 w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-white/70 sm:px-4"
+      >
+        <ChevronRight
+          aria-hidden
+          className={clsx('h-4 w-4 shrink-0 text-slate-400 transition-transform', isOpen && 'rotate-90')}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-sm font-semibold text-slate-900">{title}</span>
+            {badge}
+          </span>
+          {meta && <span className="mt-0.5 block truncate text-xs text-slate-500">{meta}</span>}
+        </span>
+        {value != null && (
+          <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900" title={valueTitle}>
+            {value}
+          </span>
+        )}
+      </button>
+      {isOpen && (
+        <div id={bodyId} className="divide-y divide-black/5 border-t border-black/5 bg-white/60">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ListRow({
+  title,
+  subtitle,
+  meta,
+  value,
+  valueTitle,
+  actions,
+  muted = false,
+}: {
+  title: React.ReactNode;
+  /** Second line, e.g. the vendor or the product name. */
+  subtitle?: React.ReactNode;
+  /** Third line for the numbers that do not deserve a column. */
+  meta?: React.ReactNode;
+  value?: React.ReactNode;
+  valueTitle?: string;
+  actions?: React.ReactNode;
+  /** Dims a row that no longer counts, such as a disposed asset. */
+  muted?: boolean;
+}) {
+  return (
+    <div className={clsx('flex items-start gap-3 px-3 py-2.5 sm:px-4', muted ? 'text-slate-400' : 'text-slate-800')}>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{title}</div>
+        {subtitle && <div className="truncate text-xs text-slate-500">{subtitle}</div>}
+        {meta && <div className="mt-0.5 text-xs text-slate-500">{meta}</div>}
+      </div>
+      {value != null && (
+        <div className="shrink-0 text-sm font-medium tabular-nums" title={valueTitle}>
+          {value}
+        </div>
+      )}
+      {actions}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CollapsibleCard — a page section that folds down to its headline
+//
+// A report page that stacks ten tables makes the reader scroll past nine of them
+// to reach the tenth. Folded sections turn the page into an index: the header
+// keeps the title, the one-line explanation and the number that matters, and the
+// body opens when the reader asks for it.
+//
+// Usage:
+//   <CollapsibleCard
+//     title="Monthly Google Sheets export"
+//     subtitle="Runs on the 1st, per shop."
+//     summary={<Badge variant="success">3 completed</Badge>}
+//     defaultOpen={false}
+//   >
+//     …
+//   </CollapsibleCard>
+// ---------------------------------------------------------------------------
+
+export function CollapsibleCard({
+  title,
+  subtitle,
+  summary,
+  actions,
+  open,
+  onToggle,
+  defaultOpen = true,
+  children,
+  className,
+}: {
+  title: string;
+  subtitle?: React.ReactNode;
+  /** The headline the reader sees while the section is folded. */
+  summary?: React.ReactNode;
+  /** Buttons that belong to the section, kept out of the toggle. */
+  actions?: React.ReactNode;
+  open?: boolean;
+  onToggle?: () => void;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const [selfOpen, setSelfOpen] = useState(defaultOpen);
+  const controlled = open !== undefined;
+  const isOpen = controlled ? open : selfOpen;
+  const bodyId = useId();
+
+  return (
+    <div className={clsx('glass-panel min-w-0 overflow-hidden rounded-2xl', className)}>
+      <div className="flex items-start gap-3 p-3 sm:p-4">
+        <button
+          type="button"
+          aria-expanded={isOpen}
+          aria-controls={bodyId}
+          onClick={() => (controlled ? onToggle?.() : setSelfOpen((prev) => !prev))}
+          className="flex min-h-11 min-w-0 flex-1 items-start gap-3 rounded-xl text-left hover:bg-white/50"
+        >
+          <ChevronRight
+            aria-hidden
+            className={clsx('mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform', isOpen && 'rotate-90')}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-slate-900">{title}</span>
+            {subtitle && <span className="mt-0.5 block text-sm text-slate-600">{subtitle}</span>}
+          </span>
+          {summary != null && <span className="ml-auto shrink-0 pl-2 text-right">{summary}</span>}
+        </button>
+        {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
+      </div>
+      {isOpen && (
+        <div id={bodyId} className="border-t border-black/5 p-3 sm:p-4">
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
