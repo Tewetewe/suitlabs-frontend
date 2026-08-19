@@ -13,10 +13,11 @@ import { apiClient } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/api-utils';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { formatCurrency } from '@/lib/currency';
+import { discountAmountFor, discountOptionLabel } from '@/lib/discount';
 import { formatDateShort } from '@/lib/date';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
 import { BOOKING_OCCASION_OPTIONS } from '@/lib/select-options';
-import { Booking, BookingFilters, BookingInstitution, InvoiceData, Customer, Item, PackagePricing } from '@/types';
+import { Booking, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
@@ -98,7 +99,12 @@ export default function BookingsPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [packageOptions, setPackageOptions] = useState<Array<{ value: string; label: string; price: number }>>([]);
   const [selectedPackageId, setSelectedPackageId] = useState('');
+  /** The discount the operator picked, applied to the booking on save. */
+  const [discountId, setDiscountId] = useState('');
+  /** A code the customer quoted. It unlocks the discount that needs it. */
   const [discountCode, setDiscountCode] = useState('');
+  const [eligibleDiscounts, setEligibleDiscounts] = useState<Discount[]>([]);
+  const [loadingDiscounts, setLoadingDiscounts] = useState(false);
   const [downPayment, setDownPayment] = useState(0);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
@@ -220,6 +226,65 @@ export default function BookingsPage() {
     fillItemsAndPairTrousers();
   }, [itemIdsKey]);
 
+  /**
+   * Keep the discount picker in step with the form.
+   *
+   * Eligibility depends on the Customer, the total and the Items, and all three
+   * change while the operator works. The backend decides — the form never guesses — so this
+   * re-asks on every change, 400 ms after the typing stops. A stale reply is
+   * dropped so a slow request cannot overwrite a newer list.
+   */
+  const discountPickerOpen = isCreateModalOpen || isEditModalOpen;
+  useEffect(() => {
+    if (!discountPickerOpen) return;
+    let live = true;
+    setLoadingDiscounts(true);
+    const timer = setTimeout(async () => {
+      try {
+        const list = await apiClient.getEligibleBookingDiscounts(
+          bookingForm.customer_id,
+          bookingTotal,
+          itemIdsKey ? itemIdsKey.split(',') : [],
+        );
+        if (!live) return;
+        setEligibleDiscounts(list);
+        // A discount that no longer fits must not stay picked, or the save
+        // silently drops it after the booking is already written.
+        setDiscountId((current) => (current && !list.some((d) => d.id === current) ? '' : current));
+      } catch (err) {
+        if (!live) return;
+        console.error('Failed to load eligible discounts', err);
+        setEligibleDiscounts([]);
+      } finally {
+        if (live) setLoadingDiscounts(false);
+      }
+    }, 400);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [discountPickerOpen, bookingForm.customer_id, bookingTotal, itemIdsKey]);
+
+  /**
+   * A quoted code picks its own discount, and clearing the code drops it again.
+   *
+   * The operator types what the customer shows and the discount lands in the
+   * picker already selected. Nothing else is touched, so a code cannot override
+   * a discount the operator chose by hand.
+   */
+  useEffect(() => {
+    const typed = discountCode.trim().toUpperCase();
+    if (!typed) {
+      setDiscountId((current) => {
+        const held = eligibleDiscounts.find((discount) => discount.id === current);
+        return held?.requires_code ? '' : current;
+      });
+      return;
+    }
+    const match = eligibleDiscounts.find((discount) => (discount.code || '').toUpperCase() === typed);
+    if (match) setDiscountId(match.id);
+  }, [discountCode, eligibleDiscounts]);
+
   const addItemLine = (catalogue: 'any' | 'trousers' = 'any', isAddon = false) => {
     setBookingForm(prev => ({ ...prev, items: [...prev.items, { item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue, is_addon: isAddon }] }));
   };
@@ -286,11 +351,9 @@ export default function BookingsPage() {
       } as unknown as import('@/types').CreateBookingRequest;
 
       const created = await apiClient.createBooking(payload as unknown as import('@/types').CreateBookingRequest);
-      const code = discountCode.trim();
-      if (created?.id && code) {
+      if (created?.id && discountId) {
         try {
-          const discount = await apiClient.validateDiscountCode(code, created.id);
-          await apiClient.applyDiscountToBooking(discount.id, created.id);
+          await apiClient.applyDiscountToBooking(discountId, created.id);
         } catch (err) {
           warning('Discount not applied', apiErrorMessage(err, 'This discount is not available for this customer.'));
         }
@@ -306,6 +369,7 @@ export default function BookingsPage() {
         payment_method: 'dp_transfer',
         items: [{ item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue: 'any', is_addon: false }],
       });
+      setDiscountId('');
       setDiscountCode('');
       setDownPayment(0);
       await reload();
@@ -350,6 +414,8 @@ export default function BookingsPage() {
     });
     setSelectedPackageId(booking.package_pricing_id || '');
     setDownPayment(booking.paid_amount || 0);
+    setDiscountId('');
+    setDiscountCode('');
     setIsEditModalOpen(true);
   };
 
@@ -415,17 +481,16 @@ export default function BookingsPage() {
       const issuedId = activeBooking.id;
       const paidNow = downPayment;
       const issuedStatus = remainingAmount <= 0 ? 'completed' : paidNow > 0 ? 'partial' : 'pending';
-      const code = discountCode.trim();
-      if (activeBooking.id && code) {
+      if (activeBooking.id && discountId) {
         try {
-          const discount = await apiClient.validateDiscountCode(code, activeBooking.id);
-          await apiClient.applyDiscountToBooking(discount.id, activeBooking.id);
+          await apiClient.applyDiscountToBooking(discountId, activeBooking.id);
         } catch (err) {
           warning('Discount not applied', apiErrorMessage(err, 'This discount is not available for this customer.'));
         }
       }
       setIsEditModalOpen(false);
       setActiveBooking(null);
+      setDiscountId('');
       setDiscountCode('');
       setDownPayment(0);
       await reload();
@@ -664,7 +729,7 @@ export default function BookingsPage() {
             <Link href="/dashboard/cashier">
               <Button size="md" variant="secondary">Cashier POS</Button>
             </Link>
-            <Button size="md" onClick={() => setIsCreateModalOpen(true)}>
+            <Button size="md" onClick={() => { setDiscountId(''); setDiscountCode(''); setIsCreateModalOpen(true); }}>
               <Plus className="h-4 w-4" />
               New Booking
             </Button>
@@ -706,7 +771,7 @@ export default function BookingsPage() {
               icon={<Calendar className="h-10 w-10" />}
               title="No bookings found"
               description={Object.values(filters).some(v => v) ? 'Try adjusting your filters' : 'Get started by creating your first booking'}
-              action={<Button onClick={() => setIsCreateModalOpen(true)}><Plus className="h-4 w-4" /> New Booking</Button>}
+              action={<Button onClick={() => { setDiscountId(''); setDiscountCode(''); setIsCreateModalOpen(true); }}><Plus className="h-4 w-4" /> New Booking</Button>}
             />
           ) : (
             (Array.isArray(bookings) ? bookings : []).map((booking) => {
@@ -806,7 +871,11 @@ export default function BookingsPage() {
             formErrors={formErrors}
             selectedPackageId={selectedPackageId}
             packageOptions={packageOptions}
+            discountId={discountId}
             discountCode={discountCode}
+            eligibleDiscounts={eligibleDiscounts}
+            loadingDiscounts={loadingDiscounts}
+            bookingTotal={bookingTotal}
             downPayment={downPayment}
             locked={false}
             fetchCustomerOptions={fetchCustomerOptions}
@@ -817,6 +886,7 @@ export default function BookingsPage() {
             addItemLine={addItemLine}
             removeItemLine={removeItemLine}
             handleSelectPackage={handleSelectPackage}
+            setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
             setDownPayment={setDownPayment}
           />
@@ -848,7 +918,11 @@ export default function BookingsPage() {
             formErrors={formErrors}
             selectedPackageId={selectedPackageId}
             packageOptions={packageOptions}
+            discountId={discountId}
             discountCode={discountCode}
+            eligibleDiscounts={eligibleDiscounts}
+            loadingDiscounts={loadingDiscounts}
+            bookingTotal={bookingTotal}
             downPayment={downPayment}
             locked={activeBooking?.payment_status === 'completed'}
             fetchCustomerOptions={fetchCustomerOptions}
@@ -859,6 +933,7 @@ export default function BookingsPage() {
             addItemLine={addItemLine}
             removeItemLine={removeItemLine}
             handleSelectPackage={handleSelectPackage}
+            setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
             setDownPayment={setDownPayment}
           />
@@ -974,7 +1049,11 @@ function BookingFormFields({
   formErrors,
   selectedPackageId,
   packageOptions,
+  discountId,
   discountCode,
+  eligibleDiscounts,
+  loadingDiscounts,
+  bookingTotal,
   downPayment,
   locked,
   fetchCustomerOptions,
@@ -985,6 +1064,7 @@ function BookingFormFields({
   addItemLine,
   removeItemLine,
   handleSelectPackage,
+  setDiscountId,
   setDiscountCode,
   setDownPayment,
 }: {
@@ -992,7 +1072,11 @@ function BookingFormFields({
   formErrors: Record<string, string>;
   selectedPackageId: string;
   packageOptions: Array<{ value: string; label: string; price: number }>;
+  discountId: string;
   discountCode: string;
+  eligibleDiscounts: Discount[];
+  loadingDiscounts: boolean;
+  bookingTotal: number;
   downPayment: number;
   locked?: boolean;
   fetchCustomerOptions: (query: string) => Promise<{ value: string; label: string }[]>;
@@ -1003,9 +1087,41 @@ function BookingFormFields({
   addItemLine: (catalogue?: 'any' | 'trousers', isAddon?: boolean) => void;
   removeItemLine: (index: number) => void;
   handleSelectPackage: (pkgId: string) => void;
+  setDiscountId: (id: string) => void;
   setDiscountCode: (code: string) => void;
   setDownPayment: (n: number) => void;
 }) {
+  // A discount that needs a code belongs to the customer who quotes it, so the
+  // picker only offers the ones that apply on their own. Typing the code adds
+  // that one discount to the list.
+  const typedCode = discountCode.trim().toUpperCase();
+  const codeMatch = typedCode
+    ? eligibleDiscounts.find((discount) => (discount.code || '').toUpperCase() === typedCode)
+    : undefined;
+  const offeredDiscounts = eligibleDiscounts.filter(
+    (discount) => !discount.requires_code || discount.id === codeMatch?.id,
+  );
+  const picked = offeredDiscounts.find((discount) => discount.id === discountId);
+  const codeOnlyCount = eligibleDiscounts.length - offeredDiscounts.length;
+
+  const discountHelperText = loadingDiscounts
+    ? 'Checking which discounts fit…'
+    : picked
+      ? `Takes ${formatCurrency(discountAmountFor(picked, bookingTotal))} off when you save.`
+      : offeredDiscounts.length > 0
+        ? `${offeredDiscounts.length} discount${offeredDiscounts.length === 1 ? '' : 's'} fit this booking.`
+        : bookingForm.customer_id
+          ? 'No discount fits this customer and total yet.'
+          : 'Pick the customer first to see their discounts.';
+
+  const codeHelperText = !typedCode
+    ? codeOnlyCount > 0
+      ? `${codeOnlyCount} more discount${codeOnlyCount === 1 ? '' : 's'} unlock${codeOnlyCount === 1 ? 's' : ''} with a code.`
+      : 'Type a code the customer quotes.'
+    : codeMatch
+      ? `${codeMatch.name} is now in the Discount list.`
+      : 'No discount here matches that code.';
+
   return (
     <div className="space-y-6">
       <FieldGroup title="Customer">
@@ -1124,19 +1240,41 @@ function BookingFormFields({
             onChange={setDownPayment}
             disabled={locked}
           />
-          <Input
-            label="Discount code"
-            value={discountCode}
-            onChange={(e) => setDiscountCode(e.target.value)}
-            placeholder="Optional"
-            disabled={locked}
-          />
           <Select
             label="Package"
             value={selectedPackageId}
             onChange={(e) => handleSelectPackage(e.target.value)}
             options={packageOptions.map((o) => ({ value: o.value, label: o.label }))}
             disabled={locked}
+          />
+        </div>
+
+        {/* Only discounts this customer, this total and these items qualify
+            for. The list comes from the backend, so anything offered here is
+            accepted on save. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Select
+            searchable={false}
+            label="Discount"
+            value={discountId}
+            onChange={(e) => setDiscountId(e.target.value)}
+            disabled={locked || offeredDiscounts.length === 0}
+            options={[
+              { value: '', label: 'No discount' },
+              ...offeredDiscounts.map((discount) => ({
+                value: discount.id,
+                label: discountOptionLabel(discount, bookingTotal),
+              })),
+            ]}
+            helperText={discountHelperText}
+          />
+          <Input
+            label="Discount code"
+            value={discountCode}
+            onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
+            placeholder="Only if the customer has one"
+            disabled={locked}
+            helperText={codeHelperText}
           />
         </div>
       </FieldGroup>

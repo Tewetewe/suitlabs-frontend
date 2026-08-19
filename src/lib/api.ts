@@ -974,6 +974,24 @@ class APIClient {
     return response.data.data!;
   }
 
+  /**
+   * The discounts a booking would accept before it is saved.
+   *
+   * The create-booking form has no booking ID yet, so the customer, the running
+   * total and the picked items go up as query values. The backend runs the same
+   * eligibility rules it runs on save, so nothing in this list can be refused
+   * later.
+   */
+  async getEligibleBookingDiscounts(customerId: string, amount: number, itemIds: string[] = []): Promise<Discount[]> {
+    const params = new URLSearchParams({ amount: String(Math.max(0, Math.round(amount))) });
+    if (customerId) params.set('customer_id', customerId);
+    // The category, item-type and specific-item rules read the items, so the
+    // form sends the ones it has picked so far.
+    if (itemIds.length > 0) params.set('item_ids', itemIds.join(','));
+    const response = await this.client.get<APIResponse<Discount[]>>(`/api/v1/discounts/eligible?${params.toString()}`);
+    return response.data.data ?? [];
+  }
+
   async getBookingDiscountApplications(bookingId: string): Promise<DiscountApplication[]> {
     const response = await this.client.get<APIResponse<DiscountApplication[]>>(`/api/v1/discounts/booking/${bookingId}/applications`);
     return response.data.data!;
