@@ -33,6 +33,39 @@ function sourceLabel(source: SaleSource) {
   }
 }
 
+/** How many units this sale took out of stock as lost. */
+function lostUnits(sale: Sale): number {
+  return (sale.items || [])
+    .filter((line) => line.line_type === 'replacement')
+    .reduce((sum, line) => sum + line.quantity, 0);
+}
+
+function customerName(rental: Rental): string {
+  if (!rental.customer) return 'Customer';
+  return `${rental.customer.first_name} ${rental.customer.last_name}`.trim();
+}
+
+/**
+ * The lines of a sale in one phrase.
+ *
+ * A lost item is counted apart from the rest: it is the line that took stock out
+ * of the shop, and the one a manager looks for when reading the day's sales.
+ */
+function lineSummary(sale: Sale): string {
+  const lines = sale.items || [];
+  const lost = lines.filter((line) => line.line_type === 'replacement');
+  const sold = lines.filter((line) => line.line_type !== 'replacement');
+  const parts: string[] = [];
+  if (sold.length > 0) {
+    parts.push(sold.map((line) => line.item?.name || 'Item').join(', '));
+  }
+  if (lost.length > 0) {
+    const names = lost.map((line) => line.replacement_for_item?.name || line.item?.name || 'Item').join(', ');
+    parts.push(`lost: ${names}`);
+  }
+  return parts.join(' · ');
+}
+
 function SalesPageInner() {
   const searchParams = useSearchParams();
   const { success, error } = useToast();
@@ -45,6 +78,8 @@ function SalesPageInner() {
   const [cancellingSale, setCancellingSale] = useState<Sale | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [saleInvoice, setSaleInvoice] = useState<Sale | null>(null);
+  /** Bumped after a sale so the composer remounts empty. */
+  const [composerKey, setComposerKey] = useState(0);
   const bookingId = searchParams?.get('booking_id') || undefined;
   const rentalId = searchParams?.get('rental_id') || undefined;
   const customerId = searchParams?.get('customer_id') || undefined;
@@ -98,6 +133,7 @@ function SalesPageInner() {
       const sale = await apiClient.createSale(payload);
       success('Sale recorded', sale.sale_number);
       setSaleInvoice(sale);
+      setComposerKey((key) => key + 1);
       await reload();
     } catch (e) {
       error('Sale failed', e instanceof Error ? e.message : 'Please check stock and try again.');
@@ -133,19 +169,31 @@ function SalesPageInner() {
         </Link>
       }
     >
+      {/* Three jobs share this screen. The header says which one is running and
+          against what, so nobody records a return fee on the wrong rental. */}
       {(bookingId || rentalId) && (
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
-          {rentalId
-            ? 'Recording add-ons / lost items for this rental. Do this before marking the rental complete.'
-            : 'Recording a booking add-on sale.'}
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+          <div className="font-semibold">
+            {rentalId ? 'Rental return: add-ons and lost items' : 'Booking add-on'}
+          </div>
+          <p className="mt-0.5 text-indigo-800">
+            {rentalId
+              ? linkedRental
+                ? `${customerName(linkedRental)} · rental ${linkedRental.id.slice(-8).toUpperCase()} · ${linkedRental.status}. Record this before the rental is completed.`
+                : 'Loading the rental…'
+              : 'Charged on top of the booking, on its own sale invoice.'}
+          </p>
         </div>
       )}
 
       <SaleComposer
+        key={composerKey}
         bookingId={bookingId}
         rentalId={rentalId}
         customerId={customerId || linkedRental?.user_id}
         rentalItems={linkedRental?.items || []}
+        rentalStatus={linkedRental?.status}
+        submitLabel={rentalId ? 'Charge and record' : 'Complete sale'}
         submitting={submitting}
         onSubmit={handleCreate}
       />
@@ -172,7 +220,9 @@ function SalesPageInner() {
         </FilterBar>
 
         {loading ? (
-          <SkeletonRow />
+          <div className="overflow-hidden rounded-2xl border border-black/5 bg-white/40">
+            {Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} />)}
+          </div>
         ) : sales.length === 0 ? (
           <EmptyState
             icon={<ShoppingBag className="h-10 w-10" />}
@@ -188,6 +238,9 @@ function SalesPageInner() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-slate-900">{sale.sale_number}</span>
                       <Badge variant={sale.status === 'completed' ? 'success' : 'danger'} dot className="capitalize">{sale.status}</Badge>
+                      {lostUnits(sale) > 0 && (
+                        <Badge variant="warning">{lostUnits(sale)} lost</Badge>
+                      )}
                     </div>
                     <p className="mt-0.5 truncate text-sm text-slate-500">
                       {[
@@ -200,7 +253,7 @@ function SalesPageInner() {
                     </p>
                     {(sale.items || []).length > 0 && (
                       <p className="mt-0.5 truncate text-xs text-slate-400">
-                        {(sale.items || []).map((line) => line.item?.name || 'Item').join(', ')}
+                        {lineSummary(sale)}
                       </p>
                     )}
                   </div>
