@@ -50,8 +50,20 @@ const PAYMENT_OPTIONS: { value: ExpensePaymentMethod; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+function localISODate(d = new Date()) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function defaultDayOfMonth(d = new Date()) {
+  return Math.min(28, d.getDate());
+}
+
 const emptyForm = (): CreateExpenseRequest => ({
-  expense_date: new Date().toISOString().slice(0, 10),
+  expense_date: localISODate(),
   category: 'other',
   description: '',
   amount: 0,
@@ -59,10 +71,6 @@ const emptyForm = (): CreateExpenseRequest => ({
   vendor: '',
   notes: '',
 });
-
-function pad2(n: number) {
-  return String(n).padStart(2, '0');
-}
 
 function monthBounds(year: number, month: number) {
   const start = `${year}-${pad2(month)}-01`;
@@ -112,8 +120,8 @@ export default function ExpensesPage() {
     amount: 0,
     payment_method: 'transfer' as ExpensePaymentMethod,
     vendor: '',
-    day_of_month: 1,
-    start_date: new Date().toISOString().slice(0, 10),
+    day_of_month: defaultDayOfMonth(),
+    start_date: localISODate(),
   });
 
   const range = useMemo(() => monthBounds(selectedYear, selectedMonth), [selectedYear, selectedMonth]);
@@ -182,7 +190,7 @@ export default function ExpensesPage() {
 
   const openCreate = () => {
     setEditing(null);
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localISODate();
     const expenseDate = todayStr >= range.start && todayStr <= range.end ? todayStr : range.start;
     setForm({ ...emptyForm(), expense_date: expenseDate });
     setModalOpen(true);
