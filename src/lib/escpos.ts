@@ -33,6 +33,29 @@ export const CUT_MARGIN_LINES = 12;
  */
 export const LABEL_CUT_MARGIN_LINES = 5;
 
+/**
+ * The widest module width that fits a CODE128 of `chars` on 58 mm paper, or 0
+ * when even the narrowest bars overflow.
+ *
+ * 58 mm at 203 dpi is 384 dots. CODE128-B spends 11 modules a character plus
+ * start, checksum and stop. A symbol wider than the paper makes the printer
+ * report an error instead of printing the rest of the job, so the caller checks
+ * first and prints the number as text instead.
+ */
+export function barcodeModuleWidth(chars: number, preferred = 3): number {
+  if (chars < 1) return 0;
+  const modules = 11 * chars + 35;
+  for (let width = Math.max(1, preferred); width >= 1; width--) {
+    if (modules * width <= 384) return width;
+  }
+  return 0;
+}
+
+/** Can this code be drawn as bars on 58 mm paper at all? */
+export function canPrintBarcode(code: string, preferred = 3): boolean {
+  return barcodeModuleWidth(code.length, preferred) > 0;
+}
+
 export interface ESCPOSCommands {
   initialize(): Uint8Array;
   setAlign(align: 'left' | 'center' | 'right'): Uint8Array;
@@ -245,12 +268,8 @@ export class ESCPOSGenerator {
     const typeCode = typeCodes[type] || 73;
     const height = options?.height ?? 80;
     const hri = options?.hri !== false;
-    const modules = 11 * code.length + 35;
-    let width = options?.width ?? 3;
-    while (width > 1 && modules * width > 384) {
-      width--;
-    }
-    if (modules * width > 384) {
+    const width = barcodeModuleWidth(code.length, options?.width ?? 3);
+    if (width < 1) {
       console.warn(`Barcode too wide for 58mm paper (${code.length} chars)`);
       return this;
     }

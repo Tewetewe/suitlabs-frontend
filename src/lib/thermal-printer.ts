@@ -4,6 +4,7 @@
  */
 
 import {
+  canPrintBarcode,
   CUT_MARGIN_LINES,
   ESCPOSGenerator,
   LABEL_CUT_MARGIN_LINES,
@@ -41,18 +42,46 @@ export interface ThermalPrinterDevice {
   characteristic?: BluetoothRemoteGATTCharacteristic;
 }
 
+/**
+ * Blank lines printed directly under the invoice barcode.
+ *
+ * A scanner needs clear paper under the symbol, and the bars must never be the
+ * last ink before a tear. This is separate from the tear-off gap that follows,
+ * so trimming one never eats the other.
+ */
+const BARCODE_BOTTOM_MARGIN_LINES = 2;
+
+/**
+ * Put the invoice number on the paper, as bars where they fit and as text where
+ * they do not.
+ *
+ * Every branch used to be able to print nothing: an empty number, a symbol too
+ * wide for 58 mm paper, or a thrown error. The slip then carried no number at
+ * all, so nobody could scan it or type it in.
+ */
 function appendInvoiceBarcode(generator: ESCPOSGenerator, invoiceNumber: string): void {
   const barcodeData = invoiceBarcodeValue(invoiceNumber);
   if (!barcodeData) {
     return;
   }
-  try {
-    generator
-      .setAlign('center')
-      .barcode(barcodeData, 'CODE128', { height: 120, width: 2, hri: false });
-  } catch (error) {
-    console.warn('Failed to print invoice barcode:', error);
+
+  let printedBars = false;
+  if (canPrintBarcode(barcodeData, 2)) {
+    try {
+      generator
+        .setAlign('center')
+        .barcode(barcodeData, 'CODE128', { height: 120, width: 2, hri: false });
+      printedBars = true;
+    } catch (error) {
+      console.warn('Failed to print invoice barcode:', error);
+    }
   }
+
+  if (!printedBars) {
+    generator.setAlign('center').setBold(true).text(barcodeData).lineFeed().setBold(false);
+  }
+
+  generator.lineFeed(BARCODE_BOTTOM_MARGIN_LINES);
 }
 
 export class ThermalPrinterService {

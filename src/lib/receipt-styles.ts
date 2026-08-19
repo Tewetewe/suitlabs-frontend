@@ -113,7 +113,9 @@ export const RECEIPT_STYLES = `
 
 .receipt-barcode {
   text-align: center;
-  margin: 8px 0 4px;
+  /* 4 mm of clear paper under the bars. A scanner needs it, and the bars must
+     never be the last ink before a tear. The tear-off gap is separate. */
+  margin: 8px 0 4mm;
 }
 
 .receipt-barcode canvas {
