@@ -19,6 +19,14 @@ export const CUT_MARGIN_MM = 20;
 /** The spacer node that carries `CUT_MARGIN_MM` into a print document. */
 export const CUT_MARGIN_HTML = '<div class="receipt-cut-margin"></div>';
 
+/**
+ * The same blank paper for a barcode label, which needs far less of it.
+ *
+ * A label is printed a rack at a time, so it gets the tear-bar clearance and
+ * nothing more.
+ */
+export const LABEL_CUT_MARGIN_MM = 8;
+
 export const RECEIPT_STYLES = `
 .thermal-receipt-container {
   width: 100%;

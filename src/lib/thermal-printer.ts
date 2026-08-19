@@ -6,6 +6,7 @@
 import {
   CUT_MARGIN_LINES,
   ESCPOSGenerator,
+  LABEL_CUT_MARGIN_LINES,
   formatCurrencyForPrint,
   formatDateForPrint,
   formatDateTimeForPrint,
@@ -785,7 +786,7 @@ export class ThermalPrinterService {
         .lineFeed();
     }
 
-    generator.lineFeed(CUT_MARGIN_LINES);
+    generator.lineFeed(LABEL_CUT_MARGIN_LINES);
 
     // Cut paper
     generator.cut();

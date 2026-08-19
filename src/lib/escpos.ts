@@ -22,6 +22,16 @@ const LF = '\x0A';
  */
 export const CUT_MARGIN_LINES = 12;
 
+/**
+ * The same gap for a barcode label, which needs far less of it.
+ *
+ * An invoice is torn off once per sale. A label is printed a rack at a time, so
+ * 12 blank lines spend about 45 mm of roll on every one of them. 4 lines is
+ * about 16 mm, which still clears the tear bar. The backend sends the same 4 on
+ * the bprint route.
+ */
+export const LABEL_CUT_MARGIN_LINES = 4;
+
 export interface ESCPOSCommands {
   initialize(): Uint8Array;
   setAlign(align: 'left' | 'center' | 'right'): Uint8Array;
