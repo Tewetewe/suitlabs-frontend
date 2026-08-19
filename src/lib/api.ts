@@ -301,6 +301,20 @@ class APIClient {
     return payload as Sale;
   }
 
+  /**
+   * A Sale from the barcode printed on its receipt.
+   *
+   * The receipt encodes the Sale number without its hyphens, and the backend
+   * strips the stored number the same way, so the scanner does not have to
+   * reproduce punctuation.
+   */
+  async getSaleByBarcode(code: string): Promise<Sale> {
+    const response = await this.client.get<APIResponse<{ sale: Sale }>>(
+      `/api/v1/sales/barcode/${encodeURIComponent(code)}`,
+    );
+    return response.data.data!.sale;
+  }
+
   async cancelSale(id: string): Promise<Sale> {
     const response = await this.client.put<APIResponse<{ sale: Sale } | Sale>>(`/api/v1/sales/${id}/cancel`);
     const payload = response.data.data as { sale?: Sale } | Sale;

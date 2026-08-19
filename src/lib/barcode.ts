@@ -13,6 +13,23 @@ export function looksLikeInvoiceBarcode(code: string): boolean {
   return value.startsWith('INV') && value.length >= 8;
 }
 
+/**
+ * Is this the barcode printed on a Sale receipt?
+ *
+ * A Sale number is `SL-20260819-0001`, printed with the hyphens stripped, so a
+ * scan reads back as `SL202608190001`. Booking invoices start with INV, so the
+ * two never collide and a scan can be routed without asking.
+ */
+export function looksLikeSaleBarcode(code: string): boolean {
+  const value = code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return value.startsWith('SL') && value.length >= 8;
+}
+
+/** Any barcode printed on a receipt: a booking invoice or a Sale. */
+export function looksLikeReceiptBarcode(code: string): boolean {
+  return looksLikeInvoiceBarcode(code) || looksLikeSaleBarcode(code);
+}
+
 /** Camera/keyboard scans often wrap the value in quotes or keep hyphens from the HRI text. */
 export function cleanScannedCode(raw: string): string {
   return raw.replace(/^\s*["']+|["']+\s*$/g, '').replace(/[^0-9A-Za-z]/g, '').toUpperCase();

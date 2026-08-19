@@ -19,8 +19,12 @@ import { useToast } from '@/contexts/ToastContext';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { SaleInvoiceModal } from '@/components/modals/SaleInvoiceModal';
 import { useAuth } from '@/contexts/AuthContext';
-import { ShoppingBag } from 'lucide-react';
+import { QrCode, ShoppingBag } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
+
+const BarcodeScanner = dynamic(() => import('@/components/ui/BarcodeScanner'), { ssr: false });
 
 function sourceLabel(source: SaleSource) {
   switch (source) {
@@ -80,6 +84,8 @@ function SalesPageInner() {
   const [saleInvoice, setSaleInvoice] = useState<Sale | null>(null);
   /** Bumped after a sale so the composer remounts empty. */
   const [composerKey, setComposerKey] = useState(0);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
   const bookingId = searchParams?.get('booking_id') || undefined;
   const rentalId = searchParams?.get('rental_id') || undefined;
   const customerId = searchParams?.get('customer_id') || undefined;
@@ -143,6 +149,38 @@ function SalesPageInner() {
     }
   };
 
+  /**
+   * Open the Sale behind a scanned or typed receipt code.
+   *
+   * A Sale receipt has carried a barcode for a while with nothing able to read it
+   * back, so staff retyped the number to reprint a slip. A booking invoice starts
+   * with INV and belongs to another screen, so say so rather than fail.
+   */
+  const resolveReceiptCode = async (raw: string) => {
+    const cleaned = cleanScannedCode(raw);
+    if (!cleaned) return;
+    if (looksLikeInvoiceBarcode(cleaned)) {
+      error('That is a booking invoice', 'Scan it on Bookings or in Cashier.');
+      return;
+    }
+    if (!looksLikeSaleBarcode(cleaned)) {
+      setSearch(cleaned);
+      error('Not a receipt barcode', 'Scan the barcode on a sale receipt.');
+      return;
+    }
+    setLookingUp(true);
+    try {
+      const sale = await apiClient.getSaleByBarcode(cleaned);
+      setSaleInvoice(sale);
+      success('Sale found', sale.sale_number);
+    } catch {
+      setSearch(cleaned);
+      error('Not found', `No sale for ${cleaned}`);
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
   const handleCancel = async () => {
     if (!cancellingSale) return;
     try {
@@ -202,10 +240,26 @@ function SalesPageInner() {
         <h2 className="text-base font-semibold text-slate-800">Recent sales</h2>
         <FilterBar>
           <Input
-            placeholder="Search sale number"
+            placeholder="Search or scan sale number"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || lookingUp) return;
+              if (!looksLikeSaleBarcode(search)) return;
+              e.preventDefault();
+              void resolveReceiptCode(search);
+            }}
           />
+          <Button
+            type="button"
+            aria-label="Scan a sale receipt"
+            title="Scan a sale receipt"
+            className="h-11 w-11 shrink-0 px-0"
+            loading={lookingUp}
+            onClick={() => setScannerOpen(true)}
+          >
+            <QrCode className="h-5 w-5" />
+          </Button>
           <Select
             searchable={false}
             value={source}
@@ -295,6 +349,14 @@ function SalesPageInner() {
       loading={cancelling}
       onClose={() => setCancellingSale(null)}
       onConfirm={handleCancel}
+    />
+    <BarcodeScanner
+      isOpen={scannerOpen}
+      onClose={() => setScannerOpen(false)}
+      onScan={(code) => {
+        setScannerOpen(false);
+        void resolveReceiptCode(code);
+      }}
     />
     <SaleInvoiceModal
       isOpen={!!saleInvoice}

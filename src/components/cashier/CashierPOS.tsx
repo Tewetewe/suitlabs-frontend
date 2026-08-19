@@ -43,7 +43,7 @@ import { BranchBadge } from '@/components/branch/BranchBadge';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import { BOOKING_OCCASION_OPTIONS, facetLabel } from '@/lib/select-options';
 import { issueBookingInvoice } from '@/lib/issue-invoice';
-import { cleanScannedCode, looksLikeInvoiceBarcode } from '@/lib/barcode';
+import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
 import {
   BookingInstitution,
   BookingPaymentMethod,
@@ -391,6 +391,17 @@ export function CashierPOS() {
         await openBookingFromInvoice(cleaned);
       } catch {
         error('Not found', `No booking for invoice ${cleaned}`);
+      }
+      return;
+    }
+    // A sale receipt is not an item tag. Saying so beats "no item found", which
+    // reads as a broken scanner.
+    if (looksLikeSaleBarcode(cleaned)) {
+      try {
+        const sale = await apiClient.getSaleByBarcode(cleaned);
+        error(`Sale ${sale.sale_number}`, 'That is a sale receipt. Open it on the Sales page to reprint.');
+      } catch {
+        error('Sale receipt', `No sale found for ${cleaned}.`);
       }
       return;
     }

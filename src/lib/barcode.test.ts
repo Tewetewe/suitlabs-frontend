@@ -5,6 +5,8 @@ import {
   confirmedScan,
   invoiceBarcodeValue,
   looksLikeInvoiceBarcode,
+  looksLikeReceiptBarcode,
+  looksLikeSaleBarcode,
 } from './barcode.ts';
 
 describe('cleanScannedCode', () => {
@@ -44,5 +46,28 @@ describe('confirmedScan', () => {
       confirmedScan(['INVXX', 'INVABC12345', 'INVABC12345', 'INVABC12345']),
       'INVABC12345',
     );
+  });
+});
+
+describe('looksLikeSaleBarcode', () => {
+  it('accepts a sale receipt scan with or without its hyphens', () => {
+    assert.equal(looksLikeSaleBarcode('SL-20260819-0001'), true);
+    assert.equal(looksLikeSaleBarcode('SL202608190001'), true);
+  });
+
+  it('refuses a booking invoice, which belongs to another screen', () => {
+    assert.equal(looksLikeSaleBarcode('INV-20260819-ABC12345'), false);
+  });
+
+  it('refuses an item tag', () => {
+    assert.equal(looksLikeSaleBarcode('JKT-001'), false);
+  });
+});
+
+describe('looksLikeReceiptBarcode', () => {
+  it('covers both kinds of receipt and nothing else', () => {
+    assert.equal(looksLikeReceiptBarcode('INV-20260819-ABC12345'), true);
+    assert.equal(looksLikeReceiptBarcode('SL-20260819-0001'), true);
+    assert.equal(looksLikeReceiptBarcode('JKT-001'), false);
   });
 });
