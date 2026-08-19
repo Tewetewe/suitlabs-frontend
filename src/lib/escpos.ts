@@ -25,12 +25,13 @@ export const CUT_MARGIN_LINES = 12;
 /**
  * The same gap for a barcode label, which needs far less of it.
  *
- * An invoice is torn off once per sale. A label is printed a rack at a time, so
- * 12 blank lines spend about 45 mm of roll on every one of them. 4 lines is
- * about 16 mm, which still clears the tear bar. The backend sends the same 4 on
- * the bprint route.
+ * An invoice is torn off once per sale, so its 12 lines cost nothing. A label is
+ * printed a rack at a time, and 5 lines is about 19 mm — enough to tear, and no
+ * more. The backend sends 2 on the bprint route because the Android print bridge
+ * feeds 3 of its own before the cut; this route has no such top-up, so the
+ * number here is the whole gap.
  */
-export const LABEL_CUT_MARGIN_LINES = 4;
+export const LABEL_CUT_MARGIN_LINES = 5;
 
 export interface ESCPOSCommands {
   initialize(): Uint8Array;
