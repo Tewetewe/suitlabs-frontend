@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Input, Textarea } from '@/components/ui/Input';
+import { FieldGroup, Input, Textarea } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { Card, CardContent } from '@/components/ui/Card';
+import { Switch } from '@/components/ui/Switch';
+import { useToast } from '@/contexts/ToastContext';
 import { apiClient } from '@/lib/api';
 import { Customer, Discount } from '@/types';
 import { formatCurrency } from '@/lib/currency';
@@ -80,8 +82,20 @@ export function DiscountManagement() {
   });
   const [customerLabels, setCustomerLabels] = useState<Record<string, string>>({});
   const [customerPickerValue, setCustomerPickerValue] = useState('');
-  const [formError, setFormError] = useState('');
+  /** One message per field, keyed by the field name, plus `submit` for the API. */
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
   const customerLabelCache = React.useRef<Record<string, string>>({});
+  const { success: toastSuccess, error: toastError } = useToast();
+
+  /** Named apart from the DOM `FormData` global on purpose. */
+  type DiscountForm = typeof formData;
+
+  /** Write one field and drop the message that field was showing. */
+  const updateField = <K extends keyof DiscountForm>(field: K, value: DiscountForm[K]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormErrors((prev) => (prev[field] || prev.submit ? { ...prev, [field]: '', submit: '' } : prev));
+  };
 
   const toRFC3339 = (dateStr: string) => {
     try {
@@ -139,15 +153,59 @@ export function DiscountManagement() {
     loadDiscounts();
   }, [activeTab, loadDiscounts]);
 
+  /**
+   * Every field the form can complain about, in the order the form shows them.
+   * `handleSubmit` focuses the first one that carries a message, so a fault far
+   * down a long form does not hide below the fold.
+   */
+  const FIELD_IDS: Array<[string, string]> = [
+    ['name', 'discount-name'],
+    ['discount_value', 'discount-value'],
+    ['max_discount_amount', 'discount-max'],
+    ['end_date', 'discount-end-date'],
+    ['usage_limit', 'discount-usage-limit'],
+    ['target_value', 'discount-customers'],
+  ];
+
+  const validateForm = (): Record<string, string> => {
+    const errors: Record<string, string> = {};
+    if (!formData.name.trim()) {
+      errors.name = 'Enter a name staff will recognise.';
+    }
+    const value = parseFloat(formData.discount_value);
+    if (!Number.isFinite(value) || value <= 0) {
+      errors.discount_value = 'Enter an amount above 0.';
+    } else if (formData.discount_type === 'percentage' && value > 100) {
+      errors.discount_value = 'A percentage cannot go over 100.';
+    }
+    if (formData.start_date && formData.end_date && formData.end_date < formData.start_date) {
+      errors.end_date = 'The end date falls before the start date.';
+    }
+    if (formData.usage_limit && parseInt(formData.usage_limit) < 1) {
+      errors.usage_limit = 'Enter 1 or more, or leave it empty for unlimited.';
+    }
+    if (formData.target_type === 'specific_customers' && formData.target_value.length === 0) {
+      errors.target_value = 'Add at least one customer.';
+    }
+    return errors;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.target_type === 'specific_customers' && formData.target_value.length === 0) {
-      setFormError('Select at least one customer for this discount.');
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      const first = FIELD_IDS.find(([field]) => errors[field]);
+      if (first) {
+        const el = document.getElementById(first[1]);
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el?.focus({ preventScroll: true });
+      }
       return;
     }
-    setFormError('');
-    setLoading(true);
-    
+    setFormErrors({});
+    setSaving(true);
+
     try {
       const discountData = {
         ...formData,
@@ -167,12 +225,19 @@ export function DiscountManagement() {
         await apiClient.createDiscount(discountData);
       }
       
+      toastSuccess(editingDiscount ? 'Discount updated' : 'Discount created', formData.name);
       resetForm();
       loadDiscounts();
     } catch (error) {
+      // The modal stays open on a failure so nobody retypes 15 fields. The
+      // banner keeps the reason next to the Save button; the toast covers the
+      // case where the form is scrolled away from the banner.
       console.error('Failed to save discount:', error);
+      const reason = error instanceof Error ? error.message : 'Please try again.';
+      setFormErrors({ submit: reason });
+      toastError('Could not save the discount', reason);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -268,7 +333,7 @@ export function DiscountManagement() {
     setShowCreateForm(false);
     setEditingDiscount(null);
     setCustomerPickerValue('');
-    setFormError('');
+    setFormErrors({});
   };
 
   const loadCustomerLabels = async (ids: string[]) => {
@@ -321,13 +386,12 @@ export function DiscountManagement() {
     } else {
       void loadCustomerLabels([id]);
     }
-    setFormData({ ...formData, target_value: [...formData.target_value, id] });
+    updateField('target_value', [...formData.target_value, id]);
     setCustomerPickerValue('');
-    setFormError('');
   };
 
   const removeTargetCustomer = (id: string) => {
-    setFormData({ ...formData, target_value: formData.target_value.filter((customerId) => customerId !== id) });
+    updateField('target_value', formData.target_value.filter((customerId) => customerId !== id));
   };
 
   const startEdit = (discount: Discount) => {
@@ -351,9 +415,51 @@ export function DiscountManagement() {
     });
     setEditingDiscount(discount);
     setShowCreateForm(true);
-    setFormError('');
+    setFormErrors({});
     void loadCustomerLabels(normalizeTargetValue(discount.target_value));
   };
+
+  /**
+   * The form read back as one sentence. A 15-field form is easy to fill in and
+   * hard to check, so the sentence carries every number that changes what the
+   * customer pays.
+   */
+  const discountSummary = React.useMemo(() => {
+    const value = parseFloat(formData.discount_value);
+    if (!Number.isFinite(value) || value <= 0) {
+      return 'Fill in the amount to see how this discount reads.';
+    }
+    const off = formData.discount_type === 'percentage' ? `${value}% off` : `${safeCurrency(value)} off`;
+    const scope =
+      formData.applicable_to === 'booking' ? 'bookings' :
+      formData.applicable_to === 'item' ? 'items' : 'bookings and items';
+    const parts = [`${off} ${scope}`];
+    if (formData.target_type === 'specific_customers') {
+      const count = formData.target_value.length;
+      parts.push(`for ${count} chosen customer${count === 1 ? '' : 's'}`);
+    }
+    if (formData.min_amount && parseFloat(formData.min_amount) > 0) {
+      parts.push(`on bills from ${safeCurrency(formData.min_amount)}`);
+    }
+    if (formData.discount_type === 'percentage' && formData.max_discount_amount) {
+      parts.push(`up to ${safeCurrency(formData.max_discount_amount)}`);
+    }
+    if (formData.code) {
+      parts.push(`with code ${formData.code}`);
+    }
+    if (formData.usage_limit) {
+      parts.push(`${formData.usage_limit} use${formData.usage_limit === '1' ? '' : 's'} in total`);
+    }
+    if (formData.start_date && formData.end_date) {
+      parts.push(`from ${formData.start_date} to ${formData.end_date}`);
+    } else if (formData.end_date) {
+      parts.push(`until ${formData.end_date}`);
+    } else if (formData.start_date) {
+      parts.push(`from ${formData.start_date}`);
+    }
+    const sentence = `${parts.join(', ')}.`;
+    return formData.is_active ? sentence : `${sentence} Switched off, so nobody can use it yet.`;
+  }, [formData]);
 
   const getDiscountStatus = (discount: Discount) => {
     if (!discount.is_active) return { status: 'inactive', variant: 'default' as const };
@@ -410,211 +516,261 @@ export function DiscountManagement() {
         isOpen={showCreateForm}
         title={editingDiscount ? 'Edit Discount' : 'Create Discount'}
         onClose={resetForm}
-        size="xl"
-        overflowVisible
+        size="lg"
         footer={
           <>
             <Button type="button" variant="ghost" onClick={resetForm}>Cancel</Button>
-            <Button type="submit" form="discount-form" loading={loading}>
+            <Button type="submit" form="discount-form" loading={saving}>
               {editingDiscount ? 'Update' : 'Create'} Discount
             </Button>
           </>
         }
       >
-        <form id="discount-form" onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form id="discount-form" onSubmit={handleSubmit} className="space-y-6">
+          {/* The plain-language read-back of the numbers below. Staff check this
+              line instead of re-reading 15 fields before they save. */}
+          <p className="rounded-xl bg-indigo-50 px-3 py-2 text-sm text-indigo-900 ring-1 ring-indigo-100">
+            {discountSummary}
+          </p>
+
+          <FieldGroup title="Basics">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                id="discount-name"
+                label="Discount name"
+                value={formData.name}
+                onChange={(e) => updateField('name', e.target.value)}
+                error={formErrors.name}
+                placeholder="e.g. Wedding season 15%"
+                required
+              />
+              <Input
+                id="discount-code"
+                label="Discount code (optional)"
+                value={formData.code}
+                onChange={(e) => updateField('code', e.target.value.toUpperCase())}
+                placeholder="e.g. WEDDING2026"
+                helperText="Staff type this at checkout."
+              />
+              <Select
+                label="Applies to"
+                searchable={false}
+                value={formData.applicable_to}
+                onChange={(e) => updateField('applicable_to', e.target.value as DiscountForm['applicable_to'])}
+                options={[
+                  { value: 'booking', label: 'Bookings only' },
+                  { value: 'item', label: 'Items only' },
+                  { value: 'both', label: 'Bookings and items' },
+                ]}
+              />
+            </div>
+            <Textarea
+              label="Description (optional)"
+              value={formData.description}
+              onChange={(e) => updateField('description', e.target.value)}
+              rows={2}
+              helperText="Why this discount exists. Staff see it in the list."
+            />
+          </FieldGroup>
+
+          <FieldGroup title="Amount">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Select
+                label="Type"
+                searchable={false}
+                value={formData.discount_type}
+                onChange={(e) => updateField('discount_type', e.target.value as DiscountForm['discount_type'])}
+                options={[
+                  { value: 'percentage', label: 'Percentage off' },
+                  { value: 'amount', label: 'Fixed amount off' },
+                ]}
+              />
+              {formData.discount_type === 'percentage' ? (
                 <Input
-                  label="Discount Name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  id="discount-value"
+                  label="Percentage off"
+                  type="number"
+                  value={formData.discount_value}
+                  onChange={(e) => updateField('discount_value', e.target.value)}
+                  error={formErrors.discount_value}
+                  helperText="Between 1 and 100."
+                  required
+                  min="0"
+                  max="100"
+                  step="0.01"
+                />
+              ) : (
+                <CurrencyInput
+                  id="discount-value"
+                  label="Amount off"
+                  value={formData.discount_value}
+                  onChange={(n) => updateField('discount_value', n ? String(n) : '')}
+                  error={formErrors.discount_value}
                   required
                 />
-                
-                <Input
-                  label="Discount Code (Optional)"
-                  value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  placeholder="e.g., SUMMER2024"
-                />
-                
-                <Select
-                  label="Discount Type"
-                  searchable={false}
-                  value={formData.discount_type}
-                  onChange={(e) => setFormData({ ...formData, discount_type: e.target.value as 'percentage' | 'amount' })}
-                  options={[
-                    { value: 'percentage', label: 'Percentage' },
-                    { value: 'amount', label: 'Fixed Amount' },
-                  ]}
-                />
-                <Select
-                  label="Applicable To"
-                  searchable={false}
-                  value={formData.applicable_to}
-                  onChange={(e) => setFormData({ ...formData, applicable_to: e.target.value as 'booking' | 'item' | 'both' })}
-                  options={[
-                    { value: 'booking', label: 'Booking Only' },
-                    { value: 'item', label: 'Item Only' },
-                    { value: 'both', label: 'Both Booking & Item' },
-                  ]}
-                />
-                
-                {formData.discount_type === 'percentage' ? (
-                  <Input
-                    label="Discount Value (%)"
-                    type="number"
-                    value={formData.discount_value}
-                    onChange={(e) => setFormData({ ...formData, discount_value: e.target.value })}
-                    required
-                    min="0"
-                    step="0.01"
-                  />
-                ) : (
-                  <CurrencyInput
-                    label="Discount Value"
-                    value={formData.discount_value}
-                    onChange={(n) => setFormData({ ...formData, discount_value: n ? String(n) : '' })}
-                    required
-                  />
-                )}
-                
-                <CurrencyInput
-                  label="Minimum Amount"
-                  value={formData.min_amount}
-                  onChange={(n) => setFormData({ ...formData, min_amount: n ? String(n) : '' })}
-                />
-                
-                <CurrencyInput
-                  label="Maximum Discount Amount"
-                  value={formData.max_discount_amount}
-                  onChange={(n) => setFormData({ ...formData, max_discount_amount: n ? String(n) : '' })}
-                />
-                
-                <Input
-                  label="Start Date"
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                />
-                
-                <Input
-                  label="End Date"
-                  type="date"
-                  value={formData.end_date}
-                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                />
-                
-                <Input
-                  label="Usage Limit"
-                  type="number"
-                  value={formData.usage_limit}
-                  onChange={(e) => setFormData({ ...formData, usage_limit: e.target.value })}
-                  min="1"
-                />
-
-                <Select
-                  label="Target Type"
-                  searchable={false}
-                  value={formData.target_type}
-                  onChange={(e) => {
-                    const target_type = e.target.value as DiscountTargetType;
-                    setFormData({
-                      ...formData,
-                      target_type,
-                      target_value: target_type === formData.target_type ? formData.target_value : [],
-                    });
-                    setFormError('');
-                  }}
-                  options={[
-                    { value: 'all', label: 'All customers & items' },
-                    { value: 'specific_customers', label: 'Specific customers' },
-                    { value: 'category', label: 'Specific Category' },
-                    { value: 'item_type', label: 'Item Type' },
-                    { value: 'customer_tier', label: 'Customer Tier' },
-                    { value: 'specific_items', label: 'Specific Items' },
-                  ]}
-                />
-
-                <Input
-                  label="Priority (Higher = Applied First)"
-                  type="number"
-                  value={formData.priority}
-                  onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                  min="0"
-                />
-              </div>
-
-              {formData.target_type === 'specific_customers' && (
-                <div className="space-y-2">
-                  <AutoCompleteSelect
-                    label="Customers"
-                    value={customerPickerValue}
-                    onChange={(id) => addTargetCustomer(id)}
-                    fetchOptions={fetchCustomerOptions}
-                    placeholder="Search customers to include"
-                    minQueryLength={2}
-                    emptyMessage="No matching customers"
-                  />
-                  {formData.target_value.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {formData.target_value.map((id) => (
-                        <span
-                          key={id}
-                          className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800 ring-1 ring-indigo-200"
-                        >
-                          {customerLabels[id] || id}
-                          <button
-                            type="button"
-                            aria-label="Remove customer"
-                            className="rounded-full p-0.5 text-indigo-500 hover:bg-indigo-100 hover:text-indigo-800"
-                            onClick={() => removeTargetCustomer(id)}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <p className="text-xs text-slate-500">
-                    This discount can only be applied to bookings for the selected customers.
-                  </p>
-                </div>
               )}
-
-              {formError && (
-                <p className="text-sm text-red-600">{formError}</p>
-              )}
-
-              <Textarea
-                label="Description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
+              <CurrencyInput
+                label="Minimum bill"
+                value={formData.min_amount}
+                onChange={(n) => updateField('min_amount', n ? String(n) : '')}
+                helperText="The discount waits until the bill reaches this. Empty means no minimum."
               />
+              {/* A cap only means something for a percentage. A fixed amount is
+                  already its own cap, so the field stays hidden. */}
+              {formData.discount_type === 'percentage' && (
+                <CurrencyInput
+                  id="discount-max"
+                  label="Most it can take off"
+                  value={formData.max_discount_amount}
+                  onChange={(n) => updateField('max_discount_amount', n ? String(n) : '')}
+                  error={formErrors.max_discount_amount}
+                  helperText="Caps a big bill. Empty means no cap."
+                />
+              )}
+            </div>
+          </FieldGroup>
 
-              <div className="flex flex-wrap items-center gap-4 text-sm text-slate-700">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={formData.requires_code}
-                    onChange={(e) => setFormData({ ...formData, requires_code: e.target.checked })}
-                    className="mr-2 h-4 w-4 accent-indigo-600"
-                    style={{ appearance: 'auto' }}
-                  />
-                  Requires discount code
-                </label>
-                
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="mr-2 h-4 w-4 accent-indigo-600"
-                    style={{ appearance: 'auto' }}
-                  />
-                  Active
-                </label>
+          <FieldGroup title="When it runs">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                id="discount-start-date"
+                label="Start date"
+                type="date"
+                value={formData.start_date}
+                onChange={(e) => updateField('start_date', e.target.value)}
+                helperText="Empty means it starts now."
+              />
+              <Input
+                id="discount-end-date"
+                label="End date"
+                type="date"
+                value={formData.end_date}
+                min={formData.start_date || undefined}
+                onChange={(e) => updateField('end_date', e.target.value)}
+                error={formErrors.end_date}
+                helperText="Empty means it runs until you switch it off."
+              />
+            </div>
+          </FieldGroup>
+
+          <FieldGroup title="Who gets it">
+            <Select
+              label="Target"
+              searchable={false}
+              value={formData.target_type}
+              onChange={(e) => {
+                const target_type = e.target.value as DiscountTargetType;
+                setFormData((prev) => ({
+                  ...prev,
+                  target_type,
+                  target_value: target_type === prev.target_type ? prev.target_value : [],
+                }));
+                setFormErrors((prev) => ({ ...prev, target_value: '', submit: '' }));
+              }}
+              options={[
+                { value: 'all', label: 'All customers and items' },
+                { value: 'specific_customers', label: 'Specific customers' },
+                { value: 'category', label: 'Specific category' },
+                { value: 'item_type', label: 'Item type' },
+                { value: 'specific_items', label: 'Specific items' },
+                // A Customer carries no tier, so the backend refuses this
+                // target. The option stays only while an old discount still
+                // holds it, or the form would show an empty box.
+                ...(formData.target_type === 'customer_tier'
+                  ? [{ value: 'customer_tier', label: 'Customer tier (not supported — pick another)' }]
+                  : []),
+              ]}
+              helperText="Category, item type and specific items match the items on the booking."
+            />
+
+            {formData.target_type === 'specific_customers' && (
+              <div className="space-y-2">
+                <AutoCompleteSelect
+                  id="discount-customers"
+                  label="Customers"
+                  value={customerPickerValue}
+                  onChange={(id) => addTargetCustomer(id)}
+                  fetchOptions={fetchCustomerOptions}
+                  placeholder="Search customers to include"
+                  minQueryLength={2}
+                  emptyMessage="No matching customers"
+                  error={formErrors.target_value}
+                />
+                {formData.target_value.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {formData.target_value.map((id) => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800 ring-1 ring-indigo-200"
+                      >
+                        {customerLabels[id] || id}
+                        <button
+                          type="button"
+                          aria-label="Remove customer"
+                          className="rounded-full p-0.5 text-indigo-500 hover:bg-indigo-100 hover:text-indigo-800"
+                          onClick={() => removeTargetCustomer(id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-slate-500">
+                  {formData.target_value.length === 0
+                    ? 'Only bookings for the customers you add here get this discount.'
+                    : `${formData.target_value.length} customer${formData.target_value.length === 1 ? '' : 's'} added.`}
+                </p>
               </div>
+            )}
+          </FieldGroup>
+
+          <FieldGroup title="Limits">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                id="discount-usage-limit"
+                label="Times it can be used"
+                type="number"
+                value={formData.usage_limit}
+                onChange={(e) => updateField('usage_limit', e.target.value)}
+                error={formErrors.usage_limit}
+                helperText="Empty means unlimited."
+                min="1"
+              />
+              <Input
+                id="discount-priority"
+                label="Priority"
+                type="number"
+                value={formData.priority}
+                onChange={(e) => updateField('priority', e.target.value)}
+                helperText="The higher number wins when two discounts fit the same bill."
+                min="0"
+              />
+            </div>
+          </FieldGroup>
+
+          <FieldGroup title="Switches">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Switch
+                label="Needs a code"
+                description="Staff type the code at checkout. Off means it applies on its own."
+                checked={formData.requires_code}
+                onChange={(checked) => updateField('requires_code', checked)}
+              />
+              <Switch
+                label="Active"
+                description="Off keeps the discount on file without offering it."
+                checked={formData.is_active}
+                onChange={(checked) => updateField('is_active', checked)}
+              />
+            </div>
+          </FieldGroup>
+
+          {formErrors.submit && (
+            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-100">
+              {formErrors.submit}
+            </p>
+          )}
         </form>
       </SimpleModal>
 
