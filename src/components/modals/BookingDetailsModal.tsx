@@ -16,10 +16,11 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/DataDisplay';
 import { BranchBadge } from '@/components/branch/BranchBadge';
+import { ProofList } from '@/components/payments/ProofList';
 import { formatCurrency } from '@/lib/currency';
 import { formatDateShort } from '@/lib/date';
 import { formatPaymentMethod } from '@/lib/payment-methods';
-import { occasionLabel } from '@/lib/select-options';
+import { occasionLabel, customerLanguageLabel } from '@/lib/select-options';
 import { Booking } from '@/types';
 import { CreditCard, FileText, Printer, ShoppingBag } from 'lucide-react';
 
@@ -151,6 +152,11 @@ export function BookingDetailsModal({
           email={booking.customer?.email}
           instagram={booking.customer?.instagram}
           tiktok={booking.customer?.tiktok}
+          extra={
+            booking.customer ? (
+              <span className="text-slate-400">{customerLanguageLabel(booking.customer.language)}</span>
+            ) : null
+          }
         />
 
         <DetailSection label="Items">
@@ -196,6 +202,10 @@ export function BookingDetailsModal({
               tone={remaining > 0 ? 'danger' : 'success'}
             />
           </div>
+        </DetailSection>
+
+        <DetailSection label="Payment proofs">
+          <ProofList owner="booking" ownerId={booking.id} title="Payment receipts" />
         </DetailSection>
 
         <DetailMeta

@@ -41,12 +41,28 @@ export function headerBranchId(method?: string): string | undefined {
   return stored;
 }
 
+/**
+ * The shop block printed on every receipt and invoice. The subtitle and the
+ * address fall back to the Jimbaran shop, because a receipt with a blank
+ * address is worse than a receipt with the wrong one. The phone stays empty
+ * when the branch has none, so no receipt prints a number nobody answers.
+ * These mirror entity.Branch.ReceiptInfo on the backend — change both together.
+ */
+export const RECEIPT_BRAND_NAME = 'SUITLABS BALI';
+export const RECEIPT_FALLBACK_SUBTITLE = 'Sewa Jas Jimbaran';
+export const RECEIPT_FALLBACK_ADDRESS =
+  'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362';
+
 export function receiptSubtitle(subtitle?: string | null): string {
-  return subtitle?.trim() || 'Sewa Jas Jimbaran';
+  return subtitle?.trim() || RECEIPT_FALLBACK_SUBTITLE;
 }
 
 export function receiptAddress(address?: string | null): string {
-  return address?.trim() || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362';
+  return address?.trim() || RECEIPT_FALLBACK_ADDRESS;
+}
+
+export function receiptPhone(phone?: string | null): string {
+  return phone?.trim() || '';
 }
 
 export function customerOriginName(customer?: { branch?: { name?: string } | null } | null): string {

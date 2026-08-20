@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Customer, CreateCustomerRequest } from '@/types';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { CUSTOMER_LANGUAGE_OPTIONS } from '@/lib/select-options';
 
 interface EditCustomerModalProps {
   isOpen: boolean;
@@ -22,7 +24,9 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
     instagram: '',
     tiktok: '',
     address: '',
-    notes: ''
+    notes: '',
+    language: 'id',
+    wa_opt_out: false,
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -39,7 +43,9 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
         instagram: customer.instagram || '',
         tiktok: customer.tiktok || '',
         address: customer.address || '',
-        notes: customer.notes || ''
+        notes: customer.notes || '',
+        language: customer.language === 'en' ? 'en' : 'id',
+        wa_opt_out: Boolean(customer.wa_opt_out),
       });
     }
   }, [customer]);
@@ -87,6 +93,12 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
       }
       if ((formData.tiktok || '') !== (customer.tiktok || '')) {
         updateData.tiktok = formData.tiktok;
+      }
+      if ((formData.language || 'id') !== (customer.language || 'id')) {
+        updateData.language = formData.language;
+      }
+      if (Boolean(formData.wa_opt_out) !== Boolean(customer.wa_opt_out)) {
+        updateData.wa_opt_out = Boolean(formData.wa_opt_out);
       }
       
       // Always include address and notes if they have values
@@ -169,6 +181,31 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
             placeholder="08xx-xxxx-xxxx"
             error={errors.phone}
           />
+
+          <Select
+            searchable={false}
+            label="Language"
+            value={formData.language || 'id'}
+            onChange={(e) => handleInputChange('language', e.target.value)}
+            options={CUSTOMER_LANGUAGE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+          />
+
+          <label className="flex min-h-11 items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4"
+              checked={Boolean(formData.wa_opt_out)}
+              onChange={(e) => setFormData((prev) => ({ ...prev, wa_opt_out: e.target.checked }))}
+              data-testid="customer-wa-opt-out"
+            />
+            <span>
+              <span className="font-medium text-slate-900">No WhatsApp</span>
+              <span className="mt-0.5 block text-xs text-slate-500">
+                Tick this when the customer asks to stop. It blocks every reminder and the deposit
+                agreement. Ignoring an opt-out is what gets the shop&apos;s number restricted.
+              </span>
+            </span>
+          </label>
 
           <div className="grid grid-cols-2 gap-4">
             <Input

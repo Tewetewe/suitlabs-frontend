@@ -12,16 +12,18 @@ import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/api-utils';
 import SimpleModal from '@/components/modals/SimpleModal';
+import NewCustomerModal from '@/components/modals/NewCustomerModal';
+import { ProofPick } from '@/components/payments/ProofPick';
 import { formatCurrency } from '@/lib/currency';
 import { discountAmountFor, discountOptionLabel } from '@/lib/discount';
 import { formatDateShort } from '@/lib/date';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
-import { BOOKING_OCCASION_OPTIONS } from '@/lib/select-options';
+import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS } from '@/lib/select-options';
 import { Booking, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
-import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard, Ban } from 'lucide-react';
+import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { BookingDetailsModal } from '@/components/modals/BookingDetailsModal';
@@ -110,6 +112,7 @@ export default function BookingsPage() {
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [payingBooking, setPayingBooking] = useState<Booking | null>(null);
   const [paying, setPaying] = useState(false);
+  const [payProofFile, setPayProofFile] = useState<File | null>(null);
   const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
   const [cancelling, setCancelling] = useState(false);
   // Previous static options states no longer used; keeping for future caching if needed
@@ -389,7 +392,7 @@ export default function BookingsPage() {
   };
 
   const openEdit = (booking: Booking) => {
-    const standardGuarantees = ['KTP', 'Passport', 'Student ID'];
+    const standardGuarantees: string[] = BOOKING_GUARANTEE_OPTIONS.map((option) => option.value);
     const isStandardGuarantee = standardGuarantees.includes(booking.booking_guarantee);
     setActiveBooking(booking);
     setBookingForm({
@@ -679,11 +682,20 @@ export default function BookingsPage() {
     }
     try {
       setPaying(true);
+      let proofUrl: string | undefined;
+      if (payProofFile) {
+        try {
+          proofUrl = await apiClient.uploadProofFile(payProofFile, 'booking_payment', payingBooking.id);
+        } catch {
+          toastError('Proof upload failed', 'Record the payment now and attach the proof from the booking menu.');
+        }
+      }
       await apiClient.addPayment(
         payingBooking.id,
         payingRemaining,
         payingBooking.payment_method || 'cash',
-        new Date().toISOString().slice(0, 10)
+        new Date().toISOString().slice(0, 10),
+        proofUrl,
       );
       const paidBooking = {
         id: payingBooking.id,
@@ -693,6 +705,7 @@ export default function BookingsPage() {
       await reload();
       success('Payment recorded', formatCurrency(payingRemaining));
       setPayingBooking(null);
+      setPayProofFile(null);
       setIsViewModalOpen(false);
       await openIssuedInvoice(paidBooking);
     } catch {
@@ -1011,16 +1024,23 @@ export default function BookingsPage() {
           title="Record full payment"
           confirmLabel="Take payment"
           loading={paying}
-          onClose={() => setPayingBooking(null)}
+          onClose={() => { setPayingBooking(null); setPayProofFile(null); }}
           onConfirm={submitFullPayment}
           description={
             payingBooking ? (
-              <div className="space-y-2 text-sm text-slate-600">
+              <div className="space-y-3 text-sm text-slate-600">
                 <p>Take the remaining balance on this booking?</p>
                 <div className="rounded-xl bg-slate-50 px-3 py-2">
                   <div className="flex justify-between"><span>Paid</span><span className="tabular-nums">{formatCurrency(payingBooking.paid_amount || 0)}</span></div>
                   <div className="flex justify-between font-semibold text-slate-900"><span>Remaining</span><span className="tabular-nums">{formatCurrency(payingRemaining)}</span></div>
                 </div>
+                <ProofPick
+                  id="booking-payment-proof"
+                  file={payProofFile}
+                  onChange={setPayProofFile}
+                  disabled={paying}
+                  hint="Attach the transfer or QRIS receipt when the customer pays online."
+                />
               </div>
             ) : undefined
           }
@@ -1091,6 +1111,9 @@ function BookingFormFields({
   setDiscountCode: (code: string) => void;
   setDownPayment: (n: number) => void;
 }) {
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false);
+  const [createdCustomerOption, setCreatedCustomerOption] = useState<{ value: string; label: string } | null>(null);
+
   // A discount that needs a code belongs to the customer who quotes it, so the
   // picker only offers the ones that apply on their own. Typing the code adds
   // that one discount to the list.
@@ -1124,16 +1147,40 @@ function BookingFormFields({
 
   return (
     <div className="space-y-6">
-      <FieldGroup title="Customer">
+      <FieldGroup
+        title="Customer"
+        action={
+          !locked ? (
+            <button
+              type="button"
+              onClick={() => setNewCustomerOpen(true)}
+              className="inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-indigo-700"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              New
+            </button>
+          ) : null
+        }
+      >
         <AutoCompleteSelect
           label="Customer"
           value={bookingForm.customer_id}
           onChange={(val) => updateBookingField('customer_id', val)}
           fetchOptions={fetchCustomerOptions}
+          extraOptions={createdCustomerOption ? [createdCustomerOption] : []}
           error={formErrors.customer_id}
           placeholder="Search name or phone"
         />
       </FieldGroup>
+      <NewCustomerModal
+        isOpen={newCustomerOpen}
+        nested
+        onClose={() => setNewCustomerOpen(false)}
+        onCreated={(customer) => {
+          setCreatedCustomerOption({ value: customer.id, label: customerOptionLabel(customer) });
+          updateBookingField('customer_id', customer.id);
+        }}
+      />
 
       <FieldGroup title="Dates">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1287,9 +1334,7 @@ function BookingFormFields({
             value={bookingForm.booking_guarantee}
             onChange={(e) => updateBookingField('booking_guarantee', e.target.value)}
             options={[
-              { value: 'KTP', label: 'KTP' },
-              { value: 'Passport', label: 'Passport' },
-              { value: 'Student ID', label: 'Student ID' },
+              ...BOOKING_GUARANTEE_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
               { value: 'Other', label: 'Other' },
             ]}
             error={formErrors.booking_guarantee}

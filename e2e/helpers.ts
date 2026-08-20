@@ -70,6 +70,7 @@ const ROUTES: Record<string, string> = {
   users: '/dashboard/users',
   assets: '/dashboard/admin/assets',
   'bulk-input-sync': '/dashboard/admin/bulk-input-sync',
+  'wa-reminders': '/dashboard/admin/wa-reminders',
   'financial-report': '/dashboard/admin/financial-report',
 };
 

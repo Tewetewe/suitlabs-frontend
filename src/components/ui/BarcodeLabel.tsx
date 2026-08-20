@@ -96,14 +96,11 @@ export function BarcodeLabel({
           format: format,
           width: width,
           height: height,
-          displayValue: true,
+          displayValue: false,
           fontSize: fontSize,
           margin: 8,
           background: '#ffffff',
           lineColor: '#000000',
-          textAlign: 'center',
-          textPosition: 'bottom',
-          textMargin: 4
         });
 
         const maxBarcodeW = 360;
@@ -114,14 +111,11 @@ export function BarcodeLabel({
             format: format,
             width: barWidth,
             height: height,
-            displayValue: true,
+            displayValue: false,
             fontSize: fontSize,
             margin: 8,
             background: '#ffffff',
             lineColor: '#000000',
-            textAlign: 'center',
-            textPosition: 'bottom',
-            textMargin: 4,
           });
           drawW = barcodeCanvas.width;
         }

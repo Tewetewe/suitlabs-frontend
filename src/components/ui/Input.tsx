@@ -196,14 +196,19 @@ export function NumberInput({
 
 export function FieldGroup({
   title,
+  action,
   children,
 }: {
   title: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="space-y-3">
-      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
+        {action}
+      </div>
       {children}
     </section>
   );

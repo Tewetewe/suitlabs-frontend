@@ -20,6 +20,7 @@ type BranchForm = {
   receipt_subtitle: string;
   address: string;
   phone: string;
+  opening_hours: string;
   email: string;
   website: string;
   latitude: string;
@@ -35,6 +36,7 @@ const emptyForm = (): BranchForm => ({
   receipt_subtitle: '',
   address: '',
   phone: '',
+  opening_hours: '',
   email: '',
   website: '',
   latitude: '',
@@ -51,6 +53,7 @@ function toForm(branch: Branch): BranchForm {
     receipt_subtitle: branch.receipt_subtitle,
     address: branch.address,
     phone: branch.phone,
+    opening_hours: branch.opening_hours || '',
     email: branch.email,
     website: branch.website,
     latitude: String(branch.latitude ?? ''),
@@ -121,6 +124,7 @@ export default function BranchesPage() {
       receipt_subtitle: form.receipt_subtitle,
       address: form.address,
       phone: form.phone,
+      opening_hours: form.opening_hours,
       email: form.email,
       website: form.website,
       latitude: Number(form.latitude) || 0,
@@ -216,6 +220,7 @@ export default function BranchesPage() {
             <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           </div>
           <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <Input label="Opening hours" value={form.opening_hours} onChange={(e) => setForm({ ...form, opening_hours: e.target.value })} helperText="Shown in the WhatsApp pickup and return reminders. Leave empty to hide the line." />
           <Input label="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input label="Website" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
           <Input label="Geofence (km)" value={form.geofence_km} onChange={(e) => setForm({ ...form, geofence_km: e.target.value })} />

@@ -33,6 +33,51 @@ export interface ItemSyncResult {
 export type GoogleSyncJobType = 'item_import' | 'booking_export';
 export type GoogleSyncStatus = 'running' | 'completed' | 'failed';
 
+export type WAReminderType = 'pickup' | 'return';
+export type WAReminderStatus = 'pending' | 'sent' | 'failed' | 'skipped';
+export type WAReminderTrigger = 'auto' | 'manual';
+
+export interface WAReminder {
+  id: string;
+  rental_id: string;
+  customer_id: string;
+  branch_id: string;
+  reminder_type: WAReminderType;
+  reminder_date: string;
+  phone: string;
+  language: string;
+  message: string;
+  status: WAReminderStatus;
+  trigger: WAReminderTrigger;
+  wablas_id?: string;
+  error_summary?: string;
+  triggered_by?: string;
+  sent_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WAReminderStatusInfo {
+  configured: boolean;
+  timezone: string;
+  send_delay_sec: number;
+  batch_size: number;
+  max_per_run: number;
+  // "wablas device speed" when no app-side delay is set, otherwise "app".
+  paced_by: string;
+  company_name: string;
+}
+
+export interface WAReminderRunResult {
+  reminder_date: string;
+  trigger: WAReminderTrigger;
+  pickup_sent: number;
+  return_sent: number;
+  skipped: number;
+  failed: number;
+  results?: WAReminder[];
+}
+
 export interface GoogleSyncRun {
   id: string;
   job_type: GoogleSyncJobType;
@@ -197,6 +242,7 @@ export interface Branch {
   receipt_subtitle: string;
   address: string;
   phone: string;
+  opening_hours?: string;
   email: string;
   website: string;
   latitude: number;
@@ -404,6 +450,9 @@ export interface Customer {
   tiktok?: string;
   address?: string;
   notes?: string;
+  language?: 'id' | 'en';
+  // True when the customer asked to stop receiving WhatsApp messages.
+  wa_opt_out?: boolean;
   is_active: boolean;
   branch_id?: string;
   branch?: Branch;
@@ -464,6 +513,7 @@ export interface Booking {
   updated_at: string;
   items?: BookingItem[];
   invoice_number?: string;
+  payment_proof_url?: string;
   full_name?: string;
   phone_number?: string;
   branch_id?: string;
@@ -501,6 +551,20 @@ export interface Rental {
   late_fee: number;
   damage_charges: number;
   identity_card_url?: string; // URL to uploaded identity card image
+  deposit_payment_method?: 'cash' | 'transfer' | null;
+  deposit_bank_name?: string;
+  deposit_account_name?: string;
+  deposit_account_number?: string;
+  deposit_collected_at?: string;
+  deposit_proof_url?: string;
+  deposit_refunded_at?: string;
+  /** True when the seven-day job released it, so nobody checked the item. */
+  deposit_auto_released?: boolean;
+  deposit_refund_method?: 'cash' | 'transfer' | null;
+  deposit_refund_proof_url?: string;
+  agreement_token?: string;
+  agreement_sent_at?: string;
+  agreement_accepted_at?: string;
   notes?: string;
   created_by: string; // User who created the rental
   updated_by?: string; // User who last updated the rental
@@ -522,6 +586,35 @@ export interface RentalItem {
   item?: Item; // Item details
   created_at: string;
   updated_at: string;
+}
+
+export interface DepositAgreementItemView {
+  item_id: string;
+  name: string;
+  code?: string;
+  quantity: number;
+  replacement_fee: number;
+}
+
+export interface DepositAgreementView {
+  token: string;
+  language: string;
+  customer_name: string;
+  company_name: string;
+  branch_name?: string;
+  branch_address?: string;
+  branch_phone?: string;
+  rental_date: string;
+  return_date: string;
+  booking_amount: number;
+  deposit_amount: number;
+  deposit_percent: number;
+  items: DepositAgreementItemView[];
+  accepted: boolean;
+  accepted_at?: string;
+  replacement_clause: string;
+  release_clause: string;
+  deposit_clause: string;
 }
 
 export type SaleSource = 'standalone' | 'booking_addon' | 'rental_return';
@@ -914,6 +1007,7 @@ export interface BalanceSheetReport {
   payables: number;
   loans: number;
   output_tax: number;
+  customer_deposits: number;
   total_liabilities: number;
   opening_equity: number;
   retained_earnings: number;
@@ -1069,6 +1163,8 @@ export interface ItemFilters {
   tags?: string;
   barcode?: string;
   is_sellable?: boolean;
+  branch_id?: string;
+  all_branches?: boolean;
   page?: number;
   limit?: number;
 }
@@ -1132,6 +1228,7 @@ export interface CreateBookingRequest {
   paid_amount?: number;
   discount_amount?: number;
   remaining_amount?: number;
+  payment_proof_url?: string;
   items: Array<{
     item_id: string;
     quantity: number;
@@ -1159,6 +1256,8 @@ export interface CreateCustomerRequest {
   tiktok?: string;
   address?: string;
   notes?: string;
+  language?: 'id' | 'en';
+  wa_opt_out?: boolean;
 }
 
 // Additional types for new features
@@ -1222,12 +1321,20 @@ export interface MaintenanceItem {
   notes?: string;
 }
 
+export type PaymentProofKind = 'booking_payment' | 'deposit' | 'deposit_refund';
+
 export interface PaymentProof {
   id: string;
-  booking_id: string;
+  kind: PaymentProofKind;
+  owner_id: string; // Booking id for booking_payment, Rental id for the deposit kinds
+  branch_id?: string;
   file_url: string;
-  upload_date: string;
-  verified: boolean;
+  amount?: number;
+  method?: string;
+  note?: string;
+  uploaded_by: string;
+  uploaded_at: string;
+  created_at: string;
 }
 
 export interface InvoiceItem {
@@ -1253,6 +1360,7 @@ export interface DashboardStats {
   totalBookings: number;
   activeRentals: number;
   todayRevenue: number;
+  todayDepositReleases: number;
   lowStockItems: number;
   maintenanceItems: number;
 }

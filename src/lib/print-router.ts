@@ -1,5 +1,6 @@
 /**
- * One Print button, four possible routes, picked from the device it was tapped on.
+ * Two Print buttons, four possible routes, picked from the device they were
+ * tapped on.
  *
  *   Android   → SuitLabs Print Bridge   receipt + cash drawer, stays in the app
  *   iOS       → Bluetooth Print app     receipt only, no drawer
@@ -8,11 +9,12 @@
  *   Desktop   → browser print dialog    always available, whatever printer the
  *                                       computer has, no drawer
  *
- * The desktop routes are ordered deliberately: a paired thermal printer is the
- * better outcome (58 mm paper, drawer pops, no dialog), but it can only exist
- * on a secure origin in a Chromium browser after someone has picked the device.
- * The print dialog is the floor — it needs no setup and no permissions, so the
- * button is never a dead end.
+ * Print barcode uses the same routes but never opens the drawer — it is a
+ * reprint of the bars, not a sale. The desktop routes are ordered deliberately:
+ * a paired thermal printer is the better outcome (58 mm paper, no dialog), but
+ * it can only exist on a secure origin in a Chromium browser after someone has
+ * picked the device. The print dialog is the floor — it needs no setup and no
+ * permissions, so the buttons are never a dead end.
  */
 import type { InvoiceData, Rental, Sale } from '@/types';
 import {
@@ -30,7 +32,8 @@ import {
   openBprint,
   openPrintBridge,
 } from './bprint';
-import { findOpenReceiptNode, printImageDataUrl, printReceiptNode } from './print-browser';
+import { findOpenReceiptNode, printImageDataUrl, printOpenReceiptBarcode, printReceiptNode } from './print-browser';
+import { rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 import { thermalPrinter } from './thermal-printer';
 
 export type PrintRoute = 'bridge' | 'bprint' | 'thermal' | 'browser';
@@ -109,64 +112,113 @@ async function viaThermal(send: () => Promise<void>): Promise<boolean> {
   return true;
 }
 
-export async function printBookingInvoice(invoice: InvoiceData): Promise<PrintOutcome> {
+export type PrintInvoiceOptions = {
+  /** Reprint just the invoice barcode. Never opens the cash drawer. */
+  barcodeOnly?: boolean;
+};
+
+async function printOnDetectedRoute(args: {
+  androidUrl: string;
+  iosUrl: string;
+  iosAndroidFallbackUrl: string;
+  sendThermal: () => Promise<void>;
+  openDrawer: boolean;
+  browser: () => void;
+}): Promise<PrintOutcome> {
+  if (isAndroidDevice()) {
+    openPrintBridge(args.androidUrl);
+    return { route: 'bridge', drawer: args.openDrawer };
+  }
+  if (isIOSDevice()) {
+    openBprint(args.iosUrl, args.iosAndroidFallbackUrl);
+    return { route: 'bprint', drawer: false };
+  }
+  if (hasThermalPrinter()) {
+    if (args.openDrawer) {
+      await viaThermal(args.sendThermal);
+    } else {
+      await args.sendThermal();
+    }
+    return { route: 'thermal', drawer: args.openDrawer };
+  }
+  args.browser();
+  return { route: 'browser', drawer: false };
+}
+
+export async function printBookingInvoice(
+  invoice: InvoiceData,
+  options: PrintInvoiceOptions = {},
+): Promise<PrintOutcome> {
   const type = invoice.invoice_type === 'dp' ? 'dp' : 'full';
   const bookingId = invoice.booking_id;
+  const barcodeOnly = Boolean(options.barcodeOnly);
 
-  if (isAndroidDevice()) {
-    openPrintBridge(getAndroidBridgeBookingInvoiceUrl(bookingId, type));
-    return { route: 'bridge', drawer: true };
-  }
-  if (isIOSDevice()) {
-    openBprint(
-      getBprintBookingInvoiceUrl(bookingId, type),
-      getAndroidBridgeBookingInvoiceUrl(bookingId, type),
-    );
-    return { route: 'bprint', drawer: false };
-  }
-  if (hasThermalPrinter()) {
-    await viaThermal(() => thermalPrinter.printBookingInvoice(invoice));
-    return { route: 'thermal', drawer: true };
-  }
-
-  printReceiptNode(findOpenReceiptNode(), `Invoice ${invoice.invoice_number}`);
-  return { route: 'browser', drawer: false };
+  return printOnDetectedRoute({
+    androidUrl: getAndroidBridgeBookingInvoiceUrl(bookingId, type, barcodeOnly),
+    iosUrl: getBprintBookingInvoiceUrl(bookingId, type, undefined, barcodeOnly),
+    iosAndroidFallbackUrl: getAndroidBridgeBookingInvoiceUrl(bookingId, type, barcodeOnly),
+    sendThermal: barcodeOnly
+      ? () => thermalPrinter.printInvoiceBarcode(invoice.invoice_number)
+      : () => thermalPrinter.printBookingInvoice(invoice),
+    openDrawer: !barcodeOnly,
+    browser: () => {
+      if (barcodeOnly) {
+        printOpenReceiptBarcode(invoice.invoice_number, `Barcode ${invoice.invoice_number}`);
+        return;
+      }
+      printReceiptNode(findOpenReceiptNode(), `Invoice ${invoice.invoice_number}`);
+    },
+  });
 }
 
-export async function printRentalInvoice(rental: Rental): Promise<PrintOutcome> {
-  if (isAndroidDevice()) {
-    openPrintBridge(getAndroidBridgeRentalInvoiceUrl(rental.id));
-    return { route: 'bridge', drawer: true };
-  }
-  if (isIOSDevice()) {
-    openBprint(getBprintRentalInvoiceUrl(rental.id), getAndroidBridgeRentalInvoiceUrl(rental.id));
-    return { route: 'bprint', drawer: false };
-  }
-  if (hasThermalPrinter()) {
-    await viaThermal(() => thermalPrinter.printRentalInvoice(rental));
-    return { route: 'thermal', drawer: true };
-  }
+export async function printRentalInvoice(
+  rental: Rental,
+  options: PrintInvoiceOptions = {},
+): Promise<PrintOutcome> {
+  const barcodeOnly = Boolean(options.barcodeOnly);
+  const invoiceNumber = rentalInvoiceNumber(rental);
 
-  printReceiptNode(findOpenReceiptNode(), `Rental ${rental.id.slice(-8)}`);
-  return { route: 'browser', drawer: false };
+  return printOnDetectedRoute({
+    androidUrl: getAndroidBridgeRentalInvoiceUrl(rental.id, barcodeOnly),
+    iosUrl: getBprintRentalInvoiceUrl(rental.id, undefined, barcodeOnly),
+    iosAndroidFallbackUrl: getAndroidBridgeRentalInvoiceUrl(rental.id, barcodeOnly),
+    sendThermal: barcodeOnly
+      ? () => thermalPrinter.printInvoiceBarcode(invoiceNumber)
+      : () => thermalPrinter.printRentalInvoice(rental),
+    openDrawer: !barcodeOnly,
+    browser: () => {
+      if (barcodeOnly) {
+        printOpenReceiptBarcode(invoiceNumber, `Barcode ${invoiceNumber}`);
+        return;
+      }
+      printReceiptNode(findOpenReceiptNode(), `Rental ${rental.id.slice(-8)}`);
+    },
+  });
 }
 
-export async function printSaleInvoice(sale: Sale): Promise<PrintOutcome> {
-  if (isAndroidDevice()) {
-    openPrintBridge(getAndroidBridgeSaleInvoiceUrl(sale.id));
-    return { route: 'bridge', drawer: true };
-  }
-  if (isIOSDevice()) {
-    openBprint(getBprintSaleInvoiceUrl(sale.id), getAndroidBridgeSaleInvoiceUrl(sale.id));
-    return { route: 'bprint', drawer: false };
-  }
-  if (hasThermalPrinter()) {
-    await viaThermal(() => thermalPrinter.printSaleInvoice(sale));
-    return { route: 'thermal', drawer: true };
-  }
+export async function printSaleInvoice(
+  sale: Sale,
+  options: PrintInvoiceOptions = {},
+): Promise<PrintOutcome> {
+  const barcodeOnly = Boolean(options.barcodeOnly);
+  const invoiceNumber = saleInvoiceNumber(sale);
 
-  printReceiptNode(findOpenReceiptNode(), `Sale ${sale.sale_number}`);
-  return { route: 'browser', drawer: false };
+  return printOnDetectedRoute({
+    androidUrl: getAndroidBridgeSaleInvoiceUrl(sale.id, barcodeOnly),
+    iosUrl: getBprintSaleInvoiceUrl(sale.id, undefined, barcodeOnly),
+    iosAndroidFallbackUrl: getAndroidBridgeSaleInvoiceUrl(sale.id, barcodeOnly),
+    sendThermal: barcodeOnly
+      ? () => thermalPrinter.printInvoiceBarcode(invoiceNumber)
+      : () => thermalPrinter.printSaleInvoice(sale),
+    openDrawer: !barcodeOnly,
+    browser: () => {
+      if (barcodeOnly) {
+        printOpenReceiptBarcode(invoiceNumber, `Barcode ${invoiceNumber}`);
+        return;
+      }
+      printReceiptNode(findOpenReceiptNode(), `Sale ${sale.sale_number}`);
+    },
+  });
 }
 
 export type LabelItem = {

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { FormEvent, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Download } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/Card';
@@ -332,6 +333,17 @@ export function AccountingReports({
                   {(bs?.output_tax || 0) !== 0 && (
                     <tr><td className="px-4 py-3">Output Tax</td><td className="px-4 py-3 text-right">{formatCurrency(bs?.output_tax || 0)}</td></tr>
                   )}
+                  {/* This one liability is created by the counter, so it links to
+                      the rentals behind it. A cashier collects it at Pickup and
+                      clears it at Return without opening an admin screen. */}
+                  <tr>
+                    <td className="px-4 py-3">
+                      <Link href="/dashboard/rentals?deposit=held" className="underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500">
+                        Customer Deposits
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-right">{formatCurrency(bs?.customer_deposits || 0)}</td>
+                  </tr>
                   <tr><td className="px-4 py-3 font-medium">Total Liabilities</td><td className="px-4 py-3 text-right font-medium">{formatCurrency(bs?.total_liabilities || 0)}</td></tr>
                   <tr><td className="px-4 py-3">Opening Equity</td><td className="px-4 py-3 text-right">{formatCurrency(bs?.opening_equity || 0)}</td></tr>
                   <tr><td className="px-4 py-3">Retained Earnings</td><td className="px-4 py-3 text-right">{formatCurrency(bs?.retained_earnings || 0)}</td></tr>

@@ -56,6 +56,7 @@ test.describe('Print', () => {
     await expect(receipt).toContainText('ITEMS:');
     await expect(receipt).toContainText('TOTAL:');
     await expect(page.getByTestId('print-invoice')).toBeVisible();
+    await expect(page.getByTestId('print-barcode')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
 
     await page.getByTestId('print-invoice').click();
@@ -79,6 +80,7 @@ test.describe('Print', () => {
       expect(hrefs.join('\n')).toMatch(/com\.suitlabs\.printbridge/);
       expect(hrefs.join('\n')).toMatch(/suitlabs-print/);
       expect(hrefs.join('\n')).toMatch(/booking-invoice/);
+      expect(hrefs.join('\n')).not.toMatch(/barcode_only/);
       expect(hrefs.join('\n')).not.toMatch(/mate\.bluetoothprint/);
       await expect(page.getByRole('heading', { name: 'Booking Invoice' })).toBeVisible();
     } finally {
@@ -96,6 +98,58 @@ test.describe('Print', () => {
       expect(prints).toBe(0);
       expect(hrefs.join('\n')).toMatch(/^bprint:\/\//);
       expect(hrefs.join('\n')).toMatch(/booking-invoice/);
+      expect(hrefs.join('\n')).not.toMatch(/barcode_only/);
+      expect(hrefs.join('\n')).not.toMatch(/printbridge/);
+      await expect(page.getByText('Cash drawer opened')).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('desktop Print barcode uses the browser dialog and does not open the drawer', async ({ page }) => {
+    await openBookingInvoice(page, customer.fullName, 'Full invoice');
+    await expect(page.getByTestId('print-barcode')).toBeVisible();
+
+    await page.getByTestId('print-barcode').click();
+    await expect.poll(async () => (await readPrintHooks(page)).prints).toBeGreaterThan(0);
+    const hooks = await readPrintHooks(page);
+    expect(hooks.hrefs).toEqual([]);
+    expect(hooks.title).toMatch(/Barcode/i);
+    await expect(page.getByText('Cash drawer opened')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Booking Invoice' })).toBeVisible();
+    await closeDialog(page);
+  });
+
+  test('Android Print barcode hands the barcode slip to the Print Bridge', async ({ browser }) => {
+    const { context, page } = await pageWithUA(browser, ANDROID_UA);
+    try {
+      await openBookingInvoice(page, customer.fullName, 'Full invoice');
+      await page.getByTestId('print-barcode').click();
+      await expect.poll(async () => (await readPrintHooks(page)).hrefs.length).toBeGreaterThan(0);
+      const { hrefs, prints } = await readPrintHooks(page);
+      expect(prints).toBe(0);
+      expect(hrefs.join('\n')).toMatch(/com\.suitlabs\.printbridge/);
+      expect(hrefs.join('\n')).toMatch(/suitlabs-print/);
+      expect(hrefs.join('\n')).toMatch(/booking-invoice/);
+      expect(hrefs.join('\n')).toMatch(/barcode_only/);
+      expect(hrefs.join('\n')).not.toMatch(/mate\.bluetoothprint/);
+      await expect(page.getByRole('heading', { name: 'Booking Invoice' })).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('iOS Print barcode opens Bluetooth Print without the drawer', async ({ browser }) => {
+    const { context, page } = await pageWithUA(browser, IOS_UA);
+    try {
+      await openBookingInvoice(page, customer.fullName, 'Full invoice');
+      await page.getByTestId('print-barcode').click();
+      await expect.poll(async () => (await readPrintHooks(page)).hrefs.length).toBeGreaterThan(0);
+      const { hrefs, prints } = await readPrintHooks(page);
+      expect(prints).toBe(0);
+      expect(hrefs.join('\n')).toMatch(/^bprint:\/\//);
+      expect(hrefs.join('\n')).toMatch(/booking-invoice/);
+      expect(hrefs.join('\n')).toMatch(/barcode_only=1/);
       expect(hrefs.join('\n')).not.toMatch(/printbridge/);
       await expect(page.getByText('Cash drawer opened')).toHaveCount(0);
     } finally {
@@ -116,6 +170,8 @@ test.describe('Print', () => {
     await expect(page.getByRole('heading', { name: 'Rental Invoice' })).toBeVisible();
     await expect(page.getByTestId('thermal-receipt')).toContainText('SUITLABS BALI');
     await expect(page.getByTestId('thermal-receipt')).toContainText(customer.fullName);
+    await expect(page.getByTestId('print-invoice')).toBeVisible();
+    await expect(page.getByTestId('print-barcode')).toBeVisible();
 
     await page.getByTestId('print-invoice').click();
     await expect.poll(async () => (await readPrintHooks(page)).prints).toBeGreaterThan(0);

@@ -9,6 +9,7 @@ import {
   Calendar,
   Check,
   CreditCard,
+  HandCoins,
   Landmark,
   Minus,
   Package,
@@ -35,15 +36,17 @@ import { Input } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
-import SimpleModal from '@/components/modals/SimpleModal';
+import NewCustomerModal from '@/components/modals/NewCustomerModal';
+import { ProofPick } from '@/components/payments/ProofPick';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { SaleInvoiceModal } from '@/components/modals/SaleInvoiceModal';
 import { useCashierChrome } from '@/components/cashier/CashierChromeContext';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { customerOptionLabel } from '@/lib/branch-scope';
-import { BOOKING_OCCASION_OPTIONS, facetLabel } from '@/lib/select-options';
+import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS, customerLanguageLabel, facetLabel } from '@/lib/select-options';
 import { issueBookingInvoice } from '@/lib/issue-invoice';
 import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
+import { Badge } from '@/components/ui/DataDisplay';
 import {
   BookingInstitution,
   BookingPaymentMethod,
@@ -152,6 +155,7 @@ export function CashierPOS() {
   const [packageId, setPackageId] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [payChannel, setPayChannel] = useState<PayChannel>('cash');
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [payCoverage, setPayCoverage] = useState<PayCoverage>('dp');
   const [paidInput, setPaidInput] = useState('');
   const [discount, setDiscount] = useState('');
@@ -163,12 +167,11 @@ export function CashierPOS() {
   const [datesOpen, setDatesOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({ first_name: '', last_name: '', phone: '', instagram: '', tiktok: '' });
-  const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [done, setDone] = useState<DoneReceipt | null>(null);
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [saleInvoice, setSaleInvoice] = useState<Sale | null>(null);
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [todayDepositReleases, setTodayDepositReleases] = useState<number | null>(null);
 
   const selectedPackage = packages.find((pkg) => pkg.id === packageId);
   const subtotal = cart.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
@@ -240,6 +243,29 @@ export function CashierPOS() {
   useEffect(() => {
     void loadItems(1, false);
   }, [loadItems]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const today = todayISO();
+        const res = await apiClient.getRentals({
+          page: 1,
+          limit: 1,
+          deposit_refunded_from: today,
+          deposit_refunded_to: today,
+        });
+        if (!cancelled) {
+          setTodayDepositReleases(res.data?.pagination?.total ?? 0);
+        }
+      } catch {
+        if (!cancelled) setTodayDepositReleases(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const root = catalogRef.current;
@@ -415,30 +441,10 @@ export function CashierPOS() {
     }
   };
 
-  const handleCreateCustomer = async () => {
-    if (!newCustomer.first_name.trim() || !newCustomer.phone.trim()) {
-      error('Customer incomplete', 'First name and phone are required.');
-      return;
-    }
-    try {
-      setCreatingCustomer(true);
-      const created = await apiClient.findOrCreateCustomer({
-        first_name: newCustomer.first_name.trim(),
-        last_name: newCustomer.last_name.trim(),
-        phone: newCustomer.phone.trim(),
-        instagram: newCustomer.instagram.trim() || undefined,
-        tiktok: newCustomer.tiktok.trim() || undefined,
-      });
-      if (created?.id) customersByIdRef.current.set(created.id, created);
-      setCustomer(created);
-      setNewCustomerOpen(false);
-      setNewCustomer({ first_name: '', last_name: '', phone: '', instagram: '', tiktok: '' });
-      success('Customer ready', `${created.first_name} ${created.last_name}`);
-    } catch (e) {
-      error('Could not save customer', e instanceof Error ? e.message : 'Try again.');
-    } finally {
-      setCreatingCustomer(false);
-    }
+  const handleCreatedCustomer = (created: Customer) => {
+    if (created?.id) customersByIdRef.current.set(created.id, created);
+    setCustomer(created);
+    setNewCustomerOpen(false);
   };
 
   const handleCharge = async () => {
@@ -485,6 +491,14 @@ export function CashierPOS() {
         success('Sale recorded', sale.sale_number);
       } else {
         const paymentStatus = paidAmount <= 0 ? 'pending' : paidAmount >= total ? 'completed' : 'partial';
+        let proofUrl: string | undefined;
+        if (proofFile && paidAmount > 0) {
+          try {
+            proofUrl = await apiClient.uploadProofFile(proofFile, 'booking_payment');
+          } catch {
+            error('Proof upload failed', 'The booking is still charged. Attach the proof from Bookings.');
+          }
+        }
         const payload = {
           customer_id: customer!.id,
           booking_date: new Date(rentalDate).toISOString(),
@@ -498,6 +512,7 @@ export function CashierPOS() {
           package_pricing_id: packageId || undefined,
           ...(packageId ? {} : { total_amount: gross }),
           paid_amount: paidAmount,
+          payment_proof_url: proofUrl,
           discount_amount: packageId ? 0 : discountAmount,
           remaining_amount: remaining,
           created_by: user?.id,
@@ -534,6 +549,7 @@ export function CashierPOS() {
       }
       setCart([]);
       setCartOpen(false);
+      setProofFile(null);
     } catch (e) {
       error(
         mode === 'sale' ? 'Sale failed' : 'Booking failed',
@@ -691,8 +707,13 @@ export function CashierPOS() {
           {customer ? (
             <div className="flex items-center justify-between rounded-2xl glass-panel px-3 py-3" data-testid="pos-customer">
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-slate-900">
-                  {customer.first_name} {customer.last_name}
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-slate-900">
+                    {customer.first_name} {customer.last_name}
+                  </span>
+                  <Badge variant={customer.language === 'en' ? 'info' : 'default'}>
+                    {customerLanguageLabel(customer.language)}
+                  </Badge>
                 </div>
                 <div className="mt-0.5"><BranchBadge branch={customer.branch} always /></div>
                 <div className="text-xs text-slate-500">{customer.phone}</div>
@@ -720,9 +741,9 @@ export function CashierPOS() {
           <div>
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Guarantee</div>
             <div className="flex flex-wrap gap-2">
-              {['KTP', 'Passport', 'Student ID'].map((option) => (
-                <Chip key={option} selected={guarantee === option} onClick={() => setGuarantee(option)}>
-                  {option}
+              {BOOKING_GUARANTEE_OPTIONS.map((option) => (
+                <Chip key={option.value} selected={guarantee === option.value} onClick={() => setGuarantee(option.value)}>
+                  {option.label}
                 </Chip>
               ))}
             </div>
@@ -788,6 +809,16 @@ export function CashierPOS() {
             ))}
           </div>
         </div>
+
+        {mode === 'rental' && paidAmount > 0 && (
+          <ProofPick
+            id="pos-payment-proof"
+            file={proofFile}
+            onChange={setProofFile}
+            disabled={submitting}
+            hint="Attach the transfer or QRIS receipt when the customer pays online."
+          />
+        )}
 
         {mode === 'rental' && payCoverage === 'dp' && (
           <div>
@@ -910,6 +941,17 @@ export function CashierPOS() {
                     suppressHydrationWarning
                   />
                 </div>
+                <div
+                  className="flex h-11 shrink-0 items-center gap-1.5 rounded-2xl glass-control px-3 text-sm text-slate-700"
+                  title="Security deposits released today"
+                  data-testid="pos-deposit-releases-today"
+                >
+                  <HandCoins className="h-4 w-4 text-teal-600" />
+                  <span className="tabular-nums font-semibold text-slate-900">
+                    {todayDepositReleases === null ? '—' : todayDepositReleases}
+                  </span>
+                  <span className="hidden text-xs text-slate-500 xl:inline">releases today</span>
+                </div>
                 <button
                   type="button"
                   onClick={() => setScannerOpen(true)}
@@ -922,6 +964,17 @@ export function CashierPOS() {
               </>
             )}
           </div>
+
+          {isPhone && todayDepositReleases !== null && (
+            <div
+              className="flex items-center gap-1.5 text-xs text-slate-600"
+              data-testid="pos-deposit-releases-today"
+            >
+              <HandCoins className="h-3.5 w-3.5 text-teal-600" />
+              <span className="tabular-nums font-semibold text-slate-900">{todayDepositReleases}</span>
+              <span>deposit releases today</span>
+            </div>
+          )}
 
           {isPhone && (
             <div className="flex gap-2">
@@ -1191,50 +1244,11 @@ export function CashierPOS() {
         </div>
       )}
 
-      <SimpleModal
+      <NewCustomerModal
         isOpen={newCustomerOpen}
-        title="New customer"
         onClose={() => setNewCustomerOpen(false)}
-        size="sm"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setNewCustomerOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreateCustomer} loading={creatingCustomer}>Save</Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <Input
-            label="First name"
-            value={newCustomer.first_name}
-            onChange={(e) => setNewCustomer((prev) => ({ ...prev, first_name: e.target.value }))}
-          />
-          <Input
-            label="Last name"
-            value={newCustomer.last_name}
-            onChange={(e) => setNewCustomer((prev) => ({ ...prev, last_name: e.target.value }))}
-          />
-          <Input
-            label="Phone"
-            type="tel"
-            inputMode="tel"
-            value={newCustomer.phone}
-            onChange={(e) => setNewCustomer((prev) => ({ ...prev, phone: e.target.value }))}
-          />
-          <Input
-            label="Instagram (optional)"
-            value={newCustomer.instagram}
-            onChange={(e) => setNewCustomer((prev) => ({ ...prev, instagram: e.target.value }))}
-            placeholder="@username"
-          />
-          <Input
-            label="TikTok (optional)"
-            value={newCustomer.tiktok}
-            onChange={(e) => setNewCustomer((prev) => ({ ...prev, tiktok: e.target.value }))}
-            placeholder="@username"
-          />
-        </div>
-      </SimpleModal>
+        onCreated={handleCreatedCustomer}
+      />
 
       <BarcodeScanner isOpen={scannerOpen} onScan={handleBarcode} onClose={() => setScannerOpen(false)} />
       <BookingInvoiceModal

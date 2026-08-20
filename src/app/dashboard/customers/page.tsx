@@ -18,6 +18,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useBranch } from '@/contexts/BranchContext';
+import { CUSTOMER_LANGUAGE_OPTIONS, customerLanguageLabel } from '@/lib/select-options';
 
 export default function CustomersPage() {
   const [filters, setFilters] = useState<CustomerFilters>({});
@@ -37,7 +38,8 @@ export default function CustomersPage() {
     instagram: '',
     tiktok: '',
     address: '',
-    notes: ''
+    notes: '',
+    language: 'id',
   };
   const [formData, setFormData] = useState<CreateCustomerRequest>(emptyForm);
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -283,6 +285,9 @@ export default function CustomersPage() {
                           {customer.first_name} {customer.last_name}
                         </span>
                         {!customer.is_active && <Badge variant="danger">Inactive</Badge>}
+                        <Badge variant={customer.language === 'en' ? 'info' : 'default'}>
+                          {customerLanguageLabel(customer.language)}
+                        </Badge>
                       </div>
                       {meta && <p className="mt-0.5 truncate text-sm text-slate-500">{meta}</p>}
                     </button>
@@ -360,6 +365,14 @@ export default function CustomersPage() {
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               placeholder="08xx-xxxx-xxxx"
+            />
+
+            <Select
+              searchable={false}
+              label="Language"
+              value={formData.language || 'id'}
+              onChange={(e) => setFormData({ ...formData, language: e.target.value as 'id' | 'en' })}
+              options={CUSTOMER_LANGUAGE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

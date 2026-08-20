@@ -11,9 +11,10 @@ import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
 import { CreateSaleRequest, Item, Rental, RentalItem, SaleLineType, SalePaymentMethod } from '@/types';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
-import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Plus, Trash2, UserPlus } from 'lucide-react';
 import clsx from 'clsx';
 import { Badge } from '@/components/ui/DataDisplay';
+import NewCustomerModal from '@/components/modals/NewCustomerModal';
 
 export type CartLine = {
   key: string;
@@ -74,6 +75,8 @@ export function SaleComposer({
   const [searching, setSearching] = useState(false);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState(customerId || '');
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false);
+  const [createdCustomerOption, setCreatedCustomerOption] = useState<{ value: string; label: string } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>('cash');
   const [discount, setDiscount] = useState('');
   const [notes, setNotes] = useState('');
@@ -457,15 +460,38 @@ export function SaleComposer({
         </div>
 
         <div className="rounded-xl border border-black/10 bg-white p-4 space-y-3">
-          <AutoCompleteSelect
-            label="Customer (optional)"
-            value={selectedCustomerId}
-            onChange={setSelectedCustomerId}
-            placeholder="Walk-in or search customer"
-            minQueryLength={0}
-            emptyMessage="No matching customers"
-            emptyOption={{ value: '', label: 'Walk-in' }}
-            fetchPage={fetchCustomerPage}
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <AutoCompleteSelect
+                label="Customer (optional)"
+                value={selectedCustomerId}
+                onChange={setSelectedCustomerId}
+                placeholder="Walk-in or search customer"
+                minQueryLength={0}
+                emptyMessage="No matching customers"
+                emptyOption={{ value: '', label: 'Walk-in' }}
+                fetchPage={fetchCustomerPage}
+                extraOptions={createdCustomerOption ? [createdCustomerOption] : []}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mb-0.5 shrink-0"
+              onClick={() => setNewCustomerOpen(true)}
+            >
+              <UserPlus className="h-4 w-4" />
+              New
+            </Button>
+          </div>
+          <NewCustomerModal
+            isOpen={newCustomerOpen}
+            nested
+            onClose={() => setNewCustomerOpen(false)}
+            onCreated={(customer) => {
+              setCreatedCustomerOption({ value: customer.id, label: customerOptionLabel(customer) });
+              setSelectedCustomerId(customer.id);
+            }}
           />
           <Select
             label="Payment method"

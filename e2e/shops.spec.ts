@@ -130,10 +130,18 @@ test.describe('Admin shops', () => {
 });
 
 test.describe('Staff shop scope', () => {
-  test('E2E-30 Jimbaran staff cannot switch to Nusa Dua', async ({ page }) => {
+  test('E2E-30 Jimbaran staff cannot switch to Nusa Dua for writes', async ({ page }) => {
     await page.goto('/dashboard');
     await expect(page.locator('#branch-switcher')).toHaveCount(0);
     await expect(page.getByText('Jimbaran').first()).toBeVisible();
-    await expect(page.getByText('Nusa Dua')).toHaveCount(0);
+  });
+
+  test('E2E-23b staff can see other-shop stock and open Transfer', async ({ page }) => {
+    await goTo(page, 'items');
+    await expect(page.getByRole('combobox', { name: 'Shop' })).toBeVisible();
+    await chooseSelect(page, 'Shop', 'Nusa Dua');
+    await expect(page.getByText('Nusa Dua').first()).toBeVisible({ timeout: 20_000 });
+    await page.getByLabel('Item actions').first().click();
+    await expect(page.getByRole('button', { name: 'Transfer' })).toBeVisible();
   });
 });

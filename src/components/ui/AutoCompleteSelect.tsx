@@ -32,6 +32,8 @@ interface AutoCompleteSelectProps {
   emptyMessage?: string;
   /** Shown at the top of the list when nothing is selected (e.g. Walk-in). */
   emptyOption?: AutoOption;
+  /** Options kept in the list even if the latest fetch did not return them (e.g. a customer just created). */
+  extraOptions?: AutoOption[];
 }
 
 export default function AutoCompleteSelect({
@@ -47,6 +49,7 @@ export default function AutoCompleteSelect({
   minQueryLength = 0,
   emptyMessage = 'No matches',
   emptyOption,
+  extraOptions,
 }: AutoCompleteSelectProps) {
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<AutoOption[]>([]);
@@ -126,9 +129,12 @@ export default function AutoCompleteSelect({
       setSelectedLabel('');
       return;
     }
-    const match = options.find((o) => o.value === value);
+    const match =
+      options.find((o) => o.value === value) ||
+      extraOptions?.find((o) => o.value === value) ||
+      (emptyOption?.value === value ? emptyOption : undefined);
     if (match) setSelectedLabel(match.label);
-  }, [value, options]);
+  }, [value, options, extraOptions, emptyOption]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -159,16 +165,21 @@ export default function AutoCompleteSelect({
   };
 
   const visibleOptions = useMemo(() => {
+    const extras = extraOptions || [];
+    const merged = [
+      ...extras.filter((extra) => !options.some((option) => option.value === extra.value)),
+      ...options,
+    ];
     const q = query.trim().toLowerCase();
     const filtered = q
-      ? options.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
-      : options;
+      ? merged.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
+      : merged;
     if (!emptyOption) return filtered;
     const matchesEmpty = !q || emptyOption.label.toLowerCase().includes(q);
     if (!matchesEmpty) return filtered;
     if (filtered.some((o) => o.value === emptyOption.value)) return filtered;
     return [emptyOption, ...filtered];
-  }, [options, query, emptyOption]);
+  }, [options, query, emptyOption, extraOptions]);
 
   const loadMore = async () => {
     if (!hasMore || loadingMore || searching) return;

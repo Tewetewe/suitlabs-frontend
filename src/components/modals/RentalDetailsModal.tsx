@@ -16,10 +16,12 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/DataDisplay';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { SafeImage } from '@/components/ui/SafeImage';
+import { ProofList } from '@/components/payments/ProofList';
 import { formatCurrency } from '@/lib/currency';
 import { calculateDuration, formatDateShort, formatDateTime } from '@/lib/date';
+import { customerLanguageLabel } from '@/lib/select-options';
 import { Rental } from '@/types';
-import { Printer, ShoppingBag } from 'lucide-react';
+import { Printer, ShoppingBag, MessageCircle } from 'lucide-react';
 
 interface RentalDetailsModalProps {
   isOpen: boolean;
@@ -30,6 +32,8 @@ interface RentalDetailsModalProps {
   onComplete?: () => void;
   onCancel?: () => void;
   onInvoice?: () => void;
+  onSendWAReminder?: () => void;
+  sendingWAReminder?: boolean;
 }
 
 function statusVariant(status: string): 'success' | 'warning' | 'primary' | 'default' | 'danger' {
@@ -60,6 +64,8 @@ export function RentalDetailsModal({
   onComplete,
   onCancel,
   onInvoice,
+  onSendWAReminder,
+  sendingWAReminder,
 }: RentalDetailsModalProps) {
   if (!rental) return null;
 
@@ -72,6 +78,10 @@ export function RentalDetailsModal({
   const canActivate = rental.status === 'pending' && Boolean(onActivate);
   const canComplete = (rental.status === 'active' || rental.status === 'overdue') && Boolean(onComplete);
   const canCancel = (rental.status === 'pending' || rental.status === 'active') && Boolean(onCancel);
+  const canSendWA =
+    Boolean(onSendWAReminder) &&
+    (rental.status === 'pending' || rental.status === 'active' || rental.status === 'overdue');
+  const waLabel = rental.status === 'pending' ? 'Send pickup WA' : 'Send return WA';
   const primary = canActivate
     ? { label: 'Activate', onClick: onActivate }
     : canComplete
@@ -106,6 +116,17 @@ export function RentalDetailsModal({
               Invoice
             </Button>
           )}
+          {canSendWA && (
+            <Button
+              variant="secondary"
+              onClick={onSendWAReminder}
+              loading={sendingWAReminder}
+              data-testid="rental-send-wa-reminder"
+            >
+              <MessageCircle className="h-4 w-4" />
+              {waLabel}
+            </Button>
+          )}
           {onEdit && !primary && (
             <Button variant="secondary" onClick={onEdit}>Edit</Button>
           )}
@@ -136,6 +157,11 @@ export function RentalDetailsModal({
         <DetailContact
           phone={rental.customer?.phone}
           email={rental.customer?.email}
+          extra={
+            rental.customer ? (
+              <span className="text-slate-400">{customerLanguageLabel(rental.customer.language)}</span>
+            ) : null
+          }
         />
 
         <DetailSection label="Items">
@@ -190,6 +216,10 @@ export function RentalDetailsModal({
             />
           </DetailSection>
         )}
+
+        <DetailSection label="Payment proofs">
+          <ProofList owner="rental" ownerId={rental.id} title="Deposit and refund receipts" />
+        </DetailSection>
 
         {rental.notes?.trim() && (
           <DetailSection label="Notes">

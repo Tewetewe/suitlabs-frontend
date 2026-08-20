@@ -19,6 +19,11 @@ export const SALE_PAYMENT_METHOD_OPTIONS = [
   { value: 'cc', label: 'Credit Card' },
 ] as const;
 
+export const DEPOSIT_PAYMENT_METHOD_OPTIONS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'transfer', label: 'Transfer' },
+] as const;
+
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   ...Object.fromEntries(BOOKING_PAYMENT_METHOD_OPTIONS.map((option) => [option.value, option.label])),
   ...Object.fromEntries(SALE_PAYMENT_METHOD_OPTIONS.map((option) => [option.value, option.label])),

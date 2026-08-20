@@ -38,7 +38,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <figure>
     <div class="fig-scroll">
-      <svg viewBox="0 0 940 400" role="img" aria-label="System map: the web app on tablets and phones and the Android print bridge both talk to the Go API, which owns the PostgreSQL database, mirrors data to Google Sheets, stores photos in Cloudflare R2, and runs three scheduled jobs each night.">
+      <svg viewBox="0 0 940 400" role="img" aria-label="System map: the web app on tablets and phones and the Android print bridge both talk to the Go API, which owns the PostgreSQL database, mirrors data to Google Sheets, stores photos in Cloudflare R2, and runs four scheduled jobs each night.">
         <defs>
           <marker id="sm-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -92,11 +92,12 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <text x="791" y="164" text-anchor="middle" font-size="13" fill="currentColor">Cloudflare R2</text>
         <text x="791" y="181" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">item photos, ID photos, proofs</text>
 
-        <rect x="662" y="228" width="258" height="90" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+        <rect x="662" y="228" width="258" height="108" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
         <text x="791" y="252" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Scheduled jobs · inside the API</text>
         <text x="676" y="274" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:05  mark rentals overdue</text>
-        <text x="676" y="292" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:10  post recurring expenses</text>
-        <text x="676" y="310" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:20  1st only — export the month</text>
+        <text x="676" y="292" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:07  release unchecked deposits</text>
+        <text x="676" y="310" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:10  post recurring expenses</text>
+        <text x="676" y="328" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:20  1st only — export the month</text>
         <path d="M 576 190 L 620 190 L 620 262 L 656 262" fill="none" stroke="currentColor" opacity=".5" marker-end="url(#sm-a)"/>
 
         <line x1="20" y1="350" x2="920" y2="350" stroke="currentColor" opacity=".15"/>
@@ -209,7 +210,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <tr><td>Recurring expense templates</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>On the Expenses page, admin only.</td></tr>
         <tr><td>Lock / unlock a month</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>The single most consequential button in the system. It locks that month for <b>both</b> shops.</td></tr>
         <tr><td>Google Sheets import, branch setup</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Bulk Input Sync and Branches.</td></tr>
-        <tr><td>View "All branches" together</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Staff sees only assigned shops.</td></tr>
+        <tr><td>View "All branches" together</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Staff writes stay on the assigned shop. Items catalogue shows every shop so Staff can Transfer stock.</td></tr>
         <tr><td>See the money tiles on the Dashboard</td><td class="mid no">No</td><td class="mid yes">Yes</td><td>Revenue, profit, cash on hand and assets are hidden from staff.</td></tr>
       </tbody>
     </table>
@@ -232,12 +233,12 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <tbody>
         <tr><td><b>Cashier</b></td><td>The POS. Rental mode and Sale mode, barcode scan, ticket, occasion, payment, charge.</td><td>One charge writes a <b>Booking</b> <i>and</i> its <b>Rental</b>, already on <code>pending</code>. Pickup still happens on Rentals. Set both dates before picking items or the catalogue won't filter by availability.</td></tr>
         <tr><td><b>Dashboard</b></td><td>Today at a glance: item count, bookings, active rentals, today's revenue, low stock, maintenance. For an admin, also this month's accrual summary and the shop's asset value.</td><td>Today's revenue is accrual, not the cash in the drawer. Staff see only the six counts.</td></tr>
-        <tr><td><b>Bookings</b></td><td>The full booking list. Edit, <b>Collect balance</b> (which issues the full invoice), reprint DP or full invoices, add a sale on top.</td><td>A booking with payment status <code>completed</code> is deliberately locked from editing. While its rental is still <code>pending</code>, editing the booking rewrites the rental to match; after pickup the two are independent.</td></tr>
-        <tr><td><b>Rentals</b></td><td>Pickup the pending rental the POS created, change dates, complete, cancel with a reason.</td><td>Everything chargeable — lost items, damage, add-ons — must be recorded <b>before</b> Complete. <b>New Rental</b> is only for legacy bookings that have no rental.</td></tr>
+        <tr><td><b>Bookings</b></td><td>The full booking list. Edit, <b>Collect balance</b> (which issues the full invoice), reprint DP or full invoices, add a sale on top. The detail view lists every <b>payment proof</b> attached to the booking.</td><td>A booking with payment status <code>completed</code> is deliberately locked from editing. While its rental is still <code>pending</code>, editing the booking rewrites the rental to match; after pickup the two are independent.</td></tr>
+        <tr><td><b>Rentals</b></td><td>Pickup the pending rental the POS created, change dates, complete, cancel with a reason. Pickup also sends the <b>deposit agreement</b>, collects the deposit and the remaining balance, and takes the customer's bank details for the refund. <b>Release deposit</b> settles a returned rental after the item is checked. The detail view lists the deposit and refund proofs.</td><td>Everything chargeable — lost items, damage, add-ons — must be recorded <b>before</b> Complete. Pickup is refused until the customer accepts the agreement, and there is no admin override. <b>New Rental</b> is only for legacy bookings that have no rental.</td></tr>
         <tr><td><b>Sales</b></td><td>Walk-in retail, booking add-ons, and rental-return charges — including the lost-item replacement screen. Cancel a sale here.</td><td>Only items marked sellable appear. An ex-rental suit sells as clearance, not retail. A replacement line also marks the lost item <code>lost</code>.</td></tr>
         <tr><td><b>Expenses</b></td><td>Money out, by category, with the payment method. Monthly summary. Recurring templates (admin only).</td><td>Void, never delete. Record on the day the money actually moved.</td></tr>
-        <tr><td><b>Items</b></td><td>Inventory. Search, filter, barcode lookup, availability check for a date range, transfer to the other shop, generate and print labels.</td><td>Availability depends on status <i>and</i> dates. Maintenance items are invisible to the catalogue — that is the point. For an admin, the buying price field here <b>posts a purchase or a write-off</b> to the books.</td></tr>
-        <tr><td><b>Customers</b></td><td>One company-wide customer list. Origin branch shows which shop first registered them.</td><td>Customers are shared across shops on purpose. Don't create a duplicate because "they're ours now."</td></tr>
+        <tr><td><b>Items</b></td><td>Inventory. Search, filter by shop, barcode lookup, availability check for a date range, transfer to the other shop, generate and print labels. Staff and Admin both see stock at every Branch.</td><td>Availability depends on status <i>and</i> dates. Maintenance items are invisible to the catalogue — that is the point. For an admin, the buying price field here <b>posts a purchase or a write-off</b> to the books.</td></tr>
+        <tr><td><b>Customers</b></td><td>One company-wide customer list. Origin branch shows which shop first registered them. Language is ID or EN.</td><td>Customers are shared across shops on purpose. Don't create a duplicate because "they're ours now." Mark language so the next shift knows which to speak.</td></tr>
         <tr><td><b>Package Pricing</b></td><td>Fixed-price bundles that replace the item total on a booking. Only active packages show at the POS.</td><td>A package replaces the item total <i>and</i> hides the discount field. Lines flipped to <b>Add-on</b> are charged on top of the package price. It is not a discount tool.</td></tr>
         <tr><td><b>Discounts</b></td><td>Discount codes and rules, at booking level or item level.</td><td>Booking-level and item-level can both apply. Check the total before charging.</td></tr>
         <tr><td><b>Categories</b></td><td>How items are grouped in the catalogue and in reports.</td><td>Renaming a category reshapes past reports. Decide the taxonomy once.</td></tr>
@@ -251,7 +252,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <thead><tr><th style="width:22%">Screen</th><th style="width:38%">What it is for</th><th>The thing people get wrong</th></tr></thead>
       <tbody>
         <tr><td><b>Users</b></td><td>Create accounts, set role, assign branches, deactivate leavers.</td><td>Deactivate, don't delete. And no shared logins.</td></tr>
-        <tr><td><b>Branches</b></td><td>Each shop's name, code, receipt subtitle, address, phone, geofence, and Google Sheet.</td><td>Receipt text here is what prints on customers' invoices. The spreadsheet ID is this shop only — Jimbaran and Nusa Dua do not share a sheet.</td></tr>
+        <tr><td><b>Branches</b></td><td>Each shop's name, code, receipt subtitle, address, phone, <b>opening hours</b>, geofence, and Google Sheet.</td><td>Receipt text here is what prints on customers' invoices, and opening hours is what the WhatsApp reminders quote. Both reach customers, so check a real print and a real reminder after editing. The spreadsheet ID is this shop only — Jimbaran and Nusa Dua do not share a sheet.</td></tr>
         <tr><td><b>Assets</b></td><td>Inventory value plus fixed assets — racks, steamers, chairs — with buying price, purchase date, vendor, and how they were paid for. In use, or disposed.</td><td>Recording a purchase here moves real money. Paying by cash or bank reduces cash; on credit it creates a payable. Disposing an asset writes its remaining value off.</td></tr>
         <tr><td><b>Financial Report</b></td><td>P&amp;L, Balance Sheet, Cash Flow, per month or full year, per shop or the group. Opening Balance, Payables, Loans, Dividends. Excel export. Google Sheets export runs with retry. Lock month.</td><td>All of it is accrual. Reconcile before you lock, not after.</td></tr>
         <tr><td><b>Analytics</b></td><td>Owner decision board: booking value and outstanding, sales revenue, monthly volume, occasion and package mix, how money arrived, sales vs clearance, sizes and colours that move, hottest and idle stock, per shop — with advice cards.</td><td>This is operational demand and mix, not P&amp;L. Use Financial Report for the books. The sheet is a mirror, not the place to decide.</td></tr>
@@ -329,7 +330,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <line x1="598" y1="183" x2="666" y2="183" stroke="currentColor" marker-end="url(#lc-a)"/>
         <rect x="672" y="146" width="248" height="140" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
         <text x="796" y="170" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">Settled at completion</text>
-        <text x="686" y="192" font-size="11" fill="currentColor" opacity=".8">· late fee — 20% of daily rate / day</text>
+        <text x="686" y="192" font-size="11" fill="currentColor" opacity=".8">· late fee — 50% one day, 100% beyond</text>
         <text x="686" y="210" font-size="11" fill="currentColor" opacity=".8">· damage charge — typed, revenue</text>
         <text x="686" y="228" font-size="11" fill="currentColor" opacity=".8">· lost item — replacement sale, then</text>
         <text x="686" y="244" font-size="11" fill="currentColor" opacity=".8">  marked lost and off stock, automatically</text>
@@ -354,7 +355,20 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     </div>
     <div class="card">
       <h3>Late return</h3>
-      <p>20% of the daily rate for each day past the return date, calculated automatically. If the customer actually returned earlier, backdate the actual return date — that is the only correct fix.</p>
+      <p>A fixed schedule on the whole rental, not a rate on the daily. One day late costs <b>50%</b> of the rental; more than one day costs the <b>whole rental</b>, and it stops there. Days are whole days ending at midnight in the shop timezone, so the hour of the return never changes the price. If the customer actually returned earlier, backdate the actual return date — that is the only correct fix.</p>
+    </div>
+    <div class="card">
+      <h3>Security deposit</h3>
+      <p>Collected at Pickup as a percentage of the booking amount, set by <code>SECURITY_DEPOSIT_PERCENT</code>. It is <b>held, not earned</b> — it credits <b>Customer Deposits</b>, a liability on the balance sheet, and stays there until Return. Set the percent to 0 and both the deposit and the agreement disappear from Pickup.</p>
+    </div>
+    <div class="card">
+      <h3>Deposit agreement</h3>
+      <p>A WhatsApp link the customer must <b>Accept</b> before Pickup. It states the deposit, the replacement fee per item taken from each item's selling price, and the shop that holds the money — branch name, address and phone. The WhatsApp message carries the address too. Pickup is refused until they accept — staff cannot override it, and there is no admin bypass either.</p>
+    </div>
+    <div class="card">
+      <h3>Deposit release</h3>
+      <p>Release happens <b>after the item is checked</b>, not at Return. A returned rental keeps its deposit until somebody taps <b>Release deposit</b> on it. That step prices the check: damage is <b>applied from</b> the deposit and becomes revenue, damage above it is collected from the customer, and the rest goes back. Any staff member may release. Completing a Return <b>refuses</b> a damage charge, because the release step owns it.</p>
+      <p>The refund goes back by <b>cash</b> or <b>transfer</b> — those two, nothing else. Cash credits the <b>Cash Drawer</b>; transfer credits <b>Bank</b>. The staff member picks at release, and the choice is free: a deposit that arrived by transfer can go back as cash, and the other way round. A transfer needs the customer's bank, account name and account number, which Pickup collected and the release screen shows.</p>
     </div>
   </div>
 </section>
@@ -454,6 +468,108 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       </tbody>
     </table>
   </div>
+
+  <h3>What a reminder says</h3>
+  <p class="measure">Both reminders open with the customer's name, the shop, and today's date, then list the items, the branch name and address, the <b>opening hours</b> from the Branches page, and the branch phone. The return reminder adds the late fee schedule in plain numbers — 50% of the rental one day late, the whole rental beyond that — because a customer who reads a figure acts on it and a customer who reads "late fees apply" does not. A branch with no opening hours simply drops that line.</p>
+
+  <h3>Protecting the shop's WhatsApp number</h3>
+  <p class="measure">Reminders and the deposit agreement go out through Wablas from <b>one</b> WhatsApp number. If WhatsApp restricts that number, every reminder at both shops stops at once, and Pickup stops with it because the agreement cannot be sent. These are the controls in place.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:26%">Control</th><th style="width:20%">Setting</th><th>Why it exists</th></tr></thead>
+      <tbody>
+        <tr><td><b>Device speed</b></td><td>Wablas dashboard → Device → Settings</td><td><b>This is the control that matters.</b> Wablas holds the whole queue and releases it at the speed set there, so that speed — not anything in SuitLabs — is the rate WhatsApp sees. Set it before anything else.</td></tr>
+        <tr><td><b>Optional second pause</b></td><td><code>WABLAS_SEND_DELAY_SEC</code>, default <b>0</b></td><td>Leave it at 0. Wablas already paces. A value adds a pause between requests, capped at 120s with up to 25% jitter, and only makes the run take longer.</td></tr>
+        <tr><td><b>Per-run cap</b></td><td><code>WABLAS_MAX_PER_RUN</code>, default 60</td><td>A busy day cannot become a volume spike. Anything over the cap is skipped with the reason on the row, never sent late and never dropped silently. Wablas does not cap daily volume; this does.</td></tr>
+        <tr><td><b>Request size</b></td><td><code>WABLAS_BATCH_SIZE</code>, default 20</td><td>How many messages ride in one v2 request. It changes nothing WhatsApp sees, because Wablas queues them — it only bounds how many rows one failed request takes with it.</td></tr>
+        <tr><td><b>Rotating wording</b></td><td>4 openings × 3 closings per language and type</td><td>Identical text to many recipients is what gets flagged. Each customer gets a phrasing chosen from the rental id, so the same rental resent repeats its own wording rather than looking like a new message.</td></tr>
+        <tr><td><b>Opt-out</b></td><td><b>No WhatsApp</b> on the Customer</td><td>Blocks and reports are the main reason a business number is restricted. Every reminder carries a "reply STOP" line, and the flag stops reminders and the agreement.</td></tr>
+        <tr><td><b>Daily de-duplication</b></td><td>Automatic</td><td>One rental gets at most one pickup and one return reminder per day. Only a manual send repeats.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="flag care">
+    <span class="flag-t">Warm a new number up</span>
+    <p>A number that has never sent anything and then sends 60 messages at 10:00 is the classic restriction pattern. On a fresh number, lower <code>WABLAS_MAX_PER_RUN</code> for the first week and let the volume climb. The 60 cap is a ceiling, not a target.</p>
+  </div>
+
+  <div class="flag care">
+    <span class="flag-t">"Sent" means Wablas accepted it, not that it arrived</span>
+    <p>A row on <b>Admin → WA Reminders</b> flips to <code>sent</code> when Wablas takes the message, which is seconds after the run starts. Wablas then releases the queue at the device speed, so the customer may receive it much later. A whole run reading <code>sent</code> is not proof anybody has been messaged yet.</p>
+  </div>
+
+  <div class="flag stop">
+    <span class="flag-t">Read the Wablas inbox</span>
+    <p>The opt-out line asks customers to reply <b>STOP</b>. Nothing reads those replies automatically — they land in the Wablas dashboard inbox. Somebody has to check it and tick <b>No WhatsApp</b> on the customer. A shop that promises an opt-out and ignores it collects reports, which is worse than never offering one.</p>
+  </div>
+
+  <h3>Customer Deposits — the one liability the floor creates</h3>
+  <p class="measure">Every other liability on the balance sheet is yours: payables, loans, tax. <b>Customer Deposits</b> is different — a cashier creates it at Pickup and clears it at Return, without ever opening an admin screen. Account <code>2400</code>.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:26%">Event</th><th style="width:37%">Entry</th><th>What to check</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Deposit collected</b> at Pickup</td>
+          <td>Debit Cash Drawer or Bank · Credit Customer Deposits</td>
+          <td>Cash on hand goes up but profit does not move. If a month shows a jump in cash with flat revenue, this is usually why.</td>
+        </tr>
+        <tr>
+          <td><b>Damage applied</b> from the deposit at Return</td>
+          <td>Debit Customer Deposits · Credit Booking revenue</td>
+          <td>This is the only path where held money becomes revenue. No cash moves.</td>
+        </tr>
+        <tr>
+          <td><b>Deposit refunded</b> at the item check, or by the seven-day job</td>
+          <td>Debit Customer Deposits · Credit Cash Drawer or Bank</td>
+          <td>Cash out with no expense. It must never appear in the P&amp;L.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="flag care">
+    <span class="flag-t">A rising Customer Deposits balance is an operational signal</span>
+    <p>The number should churn — up at Pickup, down at Return. If it keeps climbing, suits are going out and not coming back, or returns are being completed without releasing the deposit. Read it against the count of <code>active</code> and <code>overdue</code> rentals, not against revenue.</p>
+  </div>
+
+  <div class="flag care">
+    <span class="flag-t">The seven-day automatic release posts to the books</span>
+    <p>A deposit nobody checks within <b>seven days of the return</b> goes back in full at 00:07. The shop charges no damage, because nobody looked at the suit and so it has no claim. The job runs company-wide, not per shop.</p>
+    <p>Read this twice: the automatic release <b>writes the refund into the journal</b>. The books say the money left on day seven whether or not a person handed it over. Somebody has to pay it out that day. Filter Rentals by <b>Auto-released, unchecked</b> to see every deposit that went this way, and check the drawer against it.</p>
+    <p>Nobody picks a method, so the job reuses <b>however the deposit arrived</b>. A deposit taken by transfer posts a credit to <b>Bank</b> — the books record a transfer that no one sent. A cash deposit credits the <b>Cash Drawer</b>. Both need a real payment behind them, and the transfer case will not show up in a drawer count, so it is the easier one to miss.</p>
+    <p><b>Awaiting item check</b> is the queue to work: returned suits whose deposit is still held. A row waiting seven days or more shows amber on the Rentals page. Clear the queue and the automatic release never fires.</p>
+  </div>
+
+  <h3>Payment proof — evidence, not an entry</h3>
+  <p class="measure">Not every payment goes through the shop's BCA merchant terminal. A customer can transfer straight to the shop account, and a courier can carry the money for a Pickup or a Return. Those payments leave no EDC slip, so staff may attach a receipt instead.</p>
+
+  <div class="flag stop">
+    <span class="flag-t">A proof posts nothing</span>
+    <p>Attaching a receipt writes <b>no journal entry</b> and changes <b>no balance</b>. The amount and method the cashier entered are what post. So a proof can never explain a discrepancy in the books — and a missing proof never means the money was not recorded. Read the two independently.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:22%">Kind</th><th style="width:22%">Attached to</th><th>Captured at</th></tr></thead>
+      <tbody>
+        <tr><td><code>booking_payment</code></td><td>A Booking</td><td>The POS charge, <b>Collect balance</b>, and the balance box at Pickup. One row per payment, so a DP and a balance both keep their own receipt.</td></tr>
+        <tr><td><code>deposit</code></td><td>A Rental</td><td>The deposit box at Pickup.</td></tr>
+        <tr><td><code>deposit_refund</code></td><td>A Rental</td><td>The refund box on Complete rental. This one is the shop's evidence that money went <b>out</b>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>What you need to know as admin</h4>
+  <ul class="plain">
+    <li><b>It is optional, by design.</b> No screen blocks on it and no report requires it. Do not build a policy that treats a missing proof as a failed payment.</li>
+    <li><b>A failed upload never loses money.</b> The payment posts first; the receipt is attached after. Staff see a message telling them so.</li>
+    <li><b>Branch scope applies.</b> A proof belongs to the shop that took or paid the money. Only that shop's staff and an admin can read or remove it.</li>
+    <li><b>Clearing and deleting are different.</b> Clearing the proof on a booking only removes what the booking shows; the kept rows stay, so a wrong attachment never destroys the trail. Deleting a row removes that one receipt.</li>
+    <li><b>Files:</b> JPEG, PNG, WebP, GIF and PDF, capped by <code>MAX_UPLOAD_SIZE</code>. PDF matters — bank and e-wallet statements arrive as PDF.</li>
+    <li><b>It is not in the Google Sheet export.</b> Proof lives in the system only. A month-end reviewer working from the spreadsheet will not see it.</li>
+  </ul>
 </section>
 
 <section id="branches">
@@ -689,7 +805,8 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <h3>What is on a printed receipt</h3>
   <ul class="plain">
-    <li>A fixed <b>SUITLABS BALI</b> heading, then the <b>branch receipt subtitle, address and phone</b> — those three are edited on the Branches page, so check a real print after any branch edit.</li>
+    <li>A fixed <b>SUITLABS BALI</b> heading, then the <b>branch receipt subtitle, address and phone</b> — those three are edited on the Branches page, so check a real print after any branch edit. Booking, rental and sale receipts all print the same block now. The <code>TEL:</code> line is dropped when the branch has no phone, rather than printing a placeholder.</li>
+    <li>A branch that fails to load falls back to the <b>Jimbaran</b> subtitle and address. That is deliberate — a receipt with the wrong address beats one with none — but it means a Nusa Dua receipt reading Jimbaran is a loading fault, not a data-entry mistake.</li>
     <li>Invoice number, date, the last eight of the booking id, DP or FULL, payment status, the customer's name, the item lines, and the totals. It closes with a thank-you and <code>suitlabs.bali</code>.</li>
     <li><b>Invoice barcode (CODE128)</b> under the invoice number — scan it at the POS to open that booking or rental. Hyphens are stripped so the scanner can read it. Item labels stay the CODE128 barcode from the item page.</li>
     <li>No QR code. Paper is 58&nbsp;mm.</li>
@@ -838,7 +955,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     <li><b>Access audit.</b> Every account, every role, every branch assignment. Deactivate the rest.</li>
     <li><b>Tax decision.</b> The tax pack is a seam that is currently switched off; if the business needs PPN handling, that is the moment to configure it — and it changes how every future entry posts.</li>
     <li><b>Reprint worn barcode labels</b> and check the printers, the drawer cable, and the bridge app on each device.</li>
-    <li><b>Branch details</b> — receipt text, address, phone, geofence — still correct on every printed invoice.</li>
+    <li><b>Branch details</b> — receipt text, address, phone, opening hours, geofence — still correct on every printed invoice and every WhatsApp reminder.</li>
   </ul>
 
   <h3><span class="chip adm">Admin</span> <span class="chip ev">One-time · when something changes</span></h3>
@@ -870,6 +987,18 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <div class="flag care">
     <span class="flag-t">Expecting P&amp;L to equal the cash in the drawer</span>
     <p>The books are accrual. Revenue is recognised when the booking is earned; the cash may arrive on a different day, or a different month. Cash on Hand is the number to reconcile against reality — not net profit.</p>
+  </div>
+  <div class="flag care">
+    <span class="flag-t">Counting held deposits as money the shop owns</span>
+    <p>A security deposit sits in the drawer or the bank but belongs to the customer. It inflates Cash on Hand while adding nothing to profit. Read <b>Customer Deposits</b> on the balance sheet before you conclude the shop had a good month, and before taking a dividend out of it.</p>
+  </div>
+  <div class="flag stop">
+    <span class="flag-t">Letting staff hammer Resend agreement</span>
+    <p>Every tap is a real message from the shop's only WhatsApp number. Repeated sends to a customer who has not replied is the fastest way to have that number restricted — and a restricted number stops Pickup at both shops, because the agreement cannot be sent. Train it out at the counter, and check <b>Admin → WA Reminders</b> for failure patterns weekly.</p>
+  </div>
+  <div class="flag care">
+    <span class="flag-t">Reading a payment proof as an accounting record</span>
+    <p>A proof is an attached image or PDF. It posts nothing and it is optional, so a payment with no proof is not a problem to investigate, and a proof on file is not confirmation the entry is right. When a figure looks wrong, go to the journal entry — never to the receipt.</p>
   </div>
   <div class="flag care">
     <span class="flag-t">Dividends and loans entered as revenue or expense</span>

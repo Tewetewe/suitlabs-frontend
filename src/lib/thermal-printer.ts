@@ -14,6 +14,7 @@ import {
 } from './escpos';
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
+import { receiptAddress, receiptPhone, receiptSubtitle } from './branch-scope';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -380,13 +381,13 @@ export class ThermalPrinterService {
       .lineFeed()
       .setFontSize(1, 1)
       .setBold(false)
-      .text(invoice.company?.subtitle || 'Sewa Jas Jimbaran')
+      .text(receiptSubtitle(invoice.company?.subtitle))
       .lineFeed(2);
 
     // Company Info (optimized for 58mm paper width)
     generator
       .setFontSize(1, 1)
-      .text(invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362')
+      .text(receiptAddress(invoice.company?.address))
       .lineFeed();
     
     if (invoice.company?.phone) {
@@ -509,8 +510,9 @@ export class ThermalPrinterService {
   async printRentalInvoice(rental: Rental): Promise<void> {
     const generator = new ESCPOSGenerator();
     const invoiceNumber = rentalInvoiceNumber(rental);
-    const shopSubtitle = rental.branch?.receipt_subtitle || 'Sewa Jas Jimbaran';
-    const shopAddress = rental.branch?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kab. Badung, Bali 80362';
+    const shopSubtitle = receiptSubtitle(rental.branch?.receipt_subtitle);
+    const shopAddress = receiptAddress(rental.branch?.address);
+    const shopPhone = receiptPhone(rental.branch?.phone);
 
     // Initialize printer
     generator.initialize();
@@ -531,7 +533,11 @@ export class ThermalPrinterService {
     generator
       .setFontSize(1, 1)
       .text(shopAddress)
-      .lineFeed(2);
+      .lineFeed();
+    if (shopPhone) {
+      generator.text(`TEL: ${shopPhone}`).lineFeed();
+    }
+    generator.lineFeed();
 
     // Separator
     generator.separator();
@@ -660,8 +666,9 @@ export class ThermalPrinterService {
   async printSaleInvoice(sale: Sale): Promise<void> {
     const generator = new ESCPOSGenerator();
     const invoiceNumber = saleInvoiceNumber(sale);
-    const shopSubtitle = sale.branch?.receipt_subtitle || 'Sewa Jas Jimbaran';
-    const shopAddress = sale.branch?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kab. Badung, Bali 80362';
+    const shopSubtitle = receiptSubtitle(sale.branch?.receipt_subtitle);
+    const shopAddress = receiptAddress(sale.branch?.address);
+    const shopPhone = receiptPhone(sale.branch?.phone);
     const customerName = sale.customer
       ? `${sale.customer.first_name} ${sale.customer.last_name}`.trim() || 'Walk-in'
       : 'Walk-in';
@@ -681,7 +688,11 @@ export class ThermalPrinterService {
     generator
       .setFontSize(1, 1)
       .text(shopAddress)
-      .lineFeed(2);
+      .lineFeed();
+    if (shopPhone) {
+      generator.text(`TEL: ${shopPhone}`).lineFeed();
+    }
+    generator.lineFeed();
 
     generator.separator();
     generator
@@ -748,6 +759,24 @@ export class ThermalPrinterService {
   }
 
   /**
+   * Print just the invoice barcode: the number as text plus the bars.
+   *
+   * Uses the label tear-bar gap because this is a reprint, not a full receipt.
+   * The caller must not open the cash drawer — barcode reprints are not a sale.
+   */
+  async printInvoiceBarcode(invoiceNumber: string): Promise<void> {
+    const generator = new ESCPOSGenerator();
+    generator.initialize();
+    if (invoiceNumber) {
+      generator.setAlign('center').setBold(true).text(invoiceNumber).lineFeed().setBold(false);
+    }
+    appendInvoiceBarcode(generator, invoiceNumber);
+    generator.lineFeed(LABEL_CUT_MARGIN_LINES);
+    generator.cut();
+    await this.print(generator.getBytes());
+  }
+
+  /**
    * Print product/item label with barcode (simple label only)
    */
   async printProductLabel(item: {
@@ -796,14 +825,9 @@ export class ThermalPrinterService {
     try {
       const barcodeData = item.barcode.replace(/[^A-Za-z0-9]/g, '');
       if (barcodeData.length > 0) {
-        // The number below the bars is a text line, not the printer's own HRI
-        // font. The HRI font is about 8 dots tall and unreadable on a worn
-        // ribbon, so `hri` is off and the value prints in the normal font.
         generator
           .setAlign('center')
-          .barcode(barcodeData, 'CODE128', { height: 120, width: 3, hri: false })
-          .text(barcodeData)
-          .lineFeed();
+          .barcode(barcodeData, 'CODE128', { height: 120, width: 3, hri: false });
       } else {
         generator.setAlign('center').text('Invalid barcode').lineFeed();
       }

@@ -33,6 +33,7 @@ import {
   Receipt,
   BookOpen,
   TrendingUp,
+  MessageCircle,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CashierChromeProvider, useCashierChrome } from '@/components/cashier/CashierChromeContext';
@@ -79,6 +80,7 @@ const navigationSections: NavigationSection[] = [
     title: 'Admin',
     items: [
       { name: 'Bulk Input Sync', href: '/dashboard/admin/bulk-input-sync', icon: FileSpreadsheet, roles: ['admin'] },
+      { name: 'WA Reminders', href: '/dashboard/admin/wa-reminders', icon: MessageCircle, roles: ['admin'] },
       { name: 'Assets', href: '/dashboard/admin/assets', icon: Landmark, roles: ['admin'] },
       { name: 'Analytics', href: '/dashboard/admin/rental-analytics', icon: TrendingUp, roles: ['admin'] },
       { name: 'Financial Report', href: '/dashboard/admin/financial-report', icon: BarChart3, roles: ['admin'] },

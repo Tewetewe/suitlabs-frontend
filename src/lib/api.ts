@@ -62,7 +62,13 @@ import {
   GoogleSyncJobType,
   GoogleSyncRun,
   ItemSyncResult,
-  Branch
+  Branch,
+  WAReminder,
+  WAReminderStatusInfo,
+  WAReminderRunResult,
+  DepositAgreementView,
+  PaymentProof,
+  PaymentProofKind,
 } from '@/types';
 import { emitAPIStatus } from '@/lib/api-status';
 import { unwrapNamedRecord } from '@/lib/api-utils';
@@ -141,8 +147,10 @@ class APIClient {
         if (error.response?.status === 401) {
           // Don't redirect if this IS the login request — let the login page
           // handle the error and display it to the user.
-          const isLoginRequest = error.config?.url?.includes('/auth/login');
-          if (!isLoginRequest) {
+          const url = typeof error.config?.url === 'string' ? error.config.url : '';
+          const isLoginRequest = url.includes('/auth/login');
+          const isPublicAgreement = url.includes('/public/deposit-agreements/');
+          if (!isLoginRequest && !isPublicAgreement) {
             this.clearToken();
             localStorage.removeItem('auth_token');
             if (typeof window !== 'undefined') {
@@ -235,8 +243,10 @@ class APIClient {
   }
 
   // Items
-  async getItemFacets(): Promise<ItemFacets> {
-    const response = await this.client.get<APIResponse<ItemFacets>>('/api/v1/items/facets');
+  async getItemFacets(allBranches = false): Promise<ItemFacets> {
+    const response = await this.client.get<APIResponse<ItemFacets>>('/api/v1/items/facets', {
+      params: allBranches ? { all_branches: true } : undefined,
+    });
     return response.data.data || { types: [], brands: [], colors: [], sizes: [], statuses: [], conditions: [] };
   }
 
@@ -437,6 +447,23 @@ class APIClient {
       `/api/v1/admin/google-sheets/booking-exports/${runId}/retry`
     );
     return response.data.data!.run;
+  }
+
+  async getWAReminderStatus(): Promise<WAReminderStatusInfo> {
+    const response = await this.client.get<APIResponse<WAReminderStatusInfo>>('/api/v1/admin/wa-reminders/status');
+    return this.handleResponse<WAReminderStatusInfo>(response);
+  }
+
+  async getWAReminders(limit = 30): Promise<WAReminder[]> {
+    const response = await this.client.get<APIResponse<{ reminders: WAReminder[] }>>('/api/v1/admin/wa-reminders', {
+      params: { limit },
+    });
+    return response.data.data?.reminders || [];
+  }
+
+  async sendWARemindersNow(): Promise<WAReminderRunResult> {
+    const response = await this.client.post<APIResponse<WAReminderRunResult>>('/api/v1/admin/wa-reminders/send');
+    return this.handleResponse<WAReminderRunResult>(response);
   }
 
   async uploadIdentityCard(file: File): Promise<string> {
@@ -642,13 +669,33 @@ class APIClient {
     return response.data.data?.data?.bookings || [];
   }
 
-  async addPayment(bookingId: string, amount: number, paymentMethod: string, paidOn?: string): Promise<Booking> {
+  async addPayment(
+    bookingId: string,
+    amount: number,
+    paymentMethod: string,
+    paidOn?: string,
+    paymentProofUrl?: string,
+  ): Promise<Booking> {
     const response = await this.client.put<APIResponse<Booking>>(`/api/v1/bookings/${bookingId}/payment`, {
       amount,
       payment_method: paymentMethod,
       paid_on: paidOn,
+      payment_proof_url: paymentProofUrl,
     });
     return response.data.data!;
+  }
+
+  // uploadProofFile stores one receipt and returns its URL. Send that URL with
+  // the payment, the deposit, or the refund. Proof is optional everywhere.
+  async uploadProofFile(file: File, kind: PaymentProofKind, ownerId?: string): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('kind', kind);
+    if (ownerId) formData.append('owner_id', ownerId);
+    const response = await this.client.post<APIResponse<{ url: string }>>('/api/v1/upload/payment-proof', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data!.url;
   }
 
   async uploadPaymentProof(bookingId: string, file: File): Promise<void> {
@@ -657,6 +704,39 @@ class APIClient {
     await this.client.post(`/api/v1/bookings/${bookingId}/payment-proof`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
+  }
+
+  async attachPaymentProof(bookingId: string, paymentProofUrl: string): Promise<Booking> {
+    const response = await this.client.put<APIResponse<{ booking: Booking }>>(
+      `/api/v1/bookings/${bookingId}/payment-proof`,
+      { payment_proof_url: paymentProofUrl },
+    );
+    return response.data.data!.booking;
+  }
+
+  async clearPaymentProof(bookingId: string): Promise<Booking> {
+    const response = await this.client.delete<APIResponse<{ booking: Booking }>>(
+      `/api/v1/bookings/${bookingId}/payment-proof`,
+    );
+    return response.data.data!.booking;
+  }
+
+  async getBookingPaymentProofs(bookingId: string): Promise<PaymentProof[]> {
+    const response = await this.client.get<APIResponse<{ proofs: PaymentProof[] }>>(
+      `/api/v1/bookings/${bookingId}/payment-proofs`,
+    );
+    return response.data.data?.proofs || [];
+  }
+
+  async getRentalPaymentProofs(rentalId: string): Promise<PaymentProof[]> {
+    const response = await this.client.get<APIResponse<{ proofs: PaymentProof[] }>>(
+      `/api/v1/rentals/${rentalId}/payment-proofs`,
+    );
+    return response.data.data?.proofs || [];
+  }
+
+  async deletePaymentProof(proofId: string): Promise<void> {
+    await this.client.delete(`/api/v1/payment-proofs/${proofId}`);
   }
 
   async submitForApproval(bookingId: string): Promise<Booking> {
@@ -675,7 +755,20 @@ class APIClient {
   }
 
   // Rentals
-  async getRentals(params?: { page?: number; limit?: number; status?: string; user_id?: string; search?: string }): Promise<RentalPaginatedResponse> {
+  async getRentals(params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    user_id?: string;
+    search?: string;
+    deposit_refunded_from?: string;
+    deposit_refunded_to?: string;
+    /**
+     * 'held' is money owed on a suit that is still out, 'released' has gone
+     * back, 'unreleased' is a completed rental whose deposit never went back.
+     */
+    deposit_state?: 'held' | 'awaiting_check' | 'released' | 'auto_released';
+  }): Promise<RentalPaginatedResponse> {
     const search = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -706,15 +799,42 @@ class APIClient {
     return response.data.data!;
   }
 
-  async activateRental(rentalId: string, userId: string, identityCardUrl?: string): Promise<Rental> {
+  async activateRental(
+    rentalId: string,
+    userId: string,
+    identityCardUrl?: string,
+    deposit?: {
+      deposit_payment_method?: string;
+      deposit_bank_name?: string;
+      deposit_account_name?: string;
+      deposit_account_number?: string;
+    },
+    remainingPaymentMethod?: string,
+    proofs?: {
+      deposit_proof_url?: string;
+      remaining_payment_proof_url?: string;
+    },
+  ): Promise<Rental> {
     const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/activate`, {
       user_id: userId,
-      identity_card_url: identityCardUrl
+      identity_card_url: identityCardUrl,
+      remaining_payment_method: remainingPaymentMethod,
+      ...deposit,
+      ...proofs,
     });
     return response.data.data!;
   }
 
-  async completeRental(rentalId: string, userId: string, actualReturnDate?: string, damageCharges?: number, damageNotes?: string, paymentMethod?: string): Promise<Rental> {
+  async completeRental(
+    rentalId: string,
+    userId: string,
+    actualReturnDate?: string,
+    damageCharges?: number,
+    damageNotes?: string,
+    paymentMethod?: string,
+    depositRefundMethod?: string,
+    depositRefundProofUrl?: string,
+  ): Promise<Rental> {
     const body: Record<string, unknown> = {
       user_id: userId
     };
@@ -722,7 +842,52 @@ class APIClient {
     if (typeof damageCharges === 'number') body.damage_charges = damageCharges;
     if (damageNotes) body.damage_notes = damageNotes;
     if (paymentMethod) body.payment_method = paymentMethod;
+    if (depositRefundMethod) body.deposit_refund_method = depositRefundMethod;
+    if (depositRefundProofUrl) body.deposit_refund_proof_url = depositRefundProofUrl;
     const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/complete`, body);
+    return response.data.data!;
+  }
+
+  /**
+   * Settles a held deposit after the item is checked. Damage comes off the
+   * deposit first, anything above it the customer pays, and the rest goes back.
+   */
+  async releaseDeposit(
+    rentalId: string,
+    payload: {
+      damage_charges?: number;
+      damage_notes?: string;
+      payment_method?: string;
+      deposit_refund_method?: string;
+      deposit_refund_proof_url?: string;
+    },
+  ): Promise<Rental> {
+    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/release-deposit`, payload);
+    return response.data.data!;
+  }
+
+  async getDepositSettings(): Promise<{ percent: number; enabled: boolean }> {
+    const response = await this.client.get<APIResponse<{ percent: number; enabled: boolean }>>('/api/v1/rentals/deposit-settings');
+    return response.data.data!;
+  }
+
+  async sendDepositAgreement(rentalId: string): Promise<Rental> {
+    const response = await this.client.post<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/deposit-agreement`, {});
+    return response.data.data!;
+  }
+
+  async sendRentalWAReminder(rentalId: string): Promise<WAReminder> {
+    const response = await this.client.post<APIResponse<{ reminder: WAReminder }>>(`/api/v1/rentals/${rentalId}/wa-reminder`, {});
+    return response.data.data!.reminder;
+  }
+
+  async getPublicDepositAgreement(token: string): Promise<DepositAgreementView> {
+    const response = await this.client.get<APIResponse<DepositAgreementView>>(`/api/v1/public/deposit-agreements/${token}`);
+    return response.data.data!;
+  }
+
+  async acceptPublicDepositAgreement(token: string): Promise<DepositAgreementView> {
+    const response = await this.client.post<APIResponse<DepositAgreementView>>(`/api/v1/public/deposit-agreements/${token}/accept`, {});
     return response.data.data!;
   }
 
@@ -1531,11 +1696,20 @@ class APIClient {
   // Dashboard Stats
   async getDashboardStats(): Promise<import('@/types').DashboardStats> {
     try {
+      const today = (() => {
+        const d = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      })();
+
       // Aggregate data from existing endpoints
-      const [itemsResponse, bookingsResponse, rentalsResponse] = await Promise.allSettled([
+      const [itemsResponse, bookingsResponse, rentalsResponse, depositReleasesResponse] = await Promise.allSettled([
         this.client.get<ItemPaginatedResponse>('/api/v1/items?limit=1'),
         this.client.get<BookingPaginatedResponse>('/api/v1/bookings?limit=1'),
-        this.client.get<RentalPaginatedResponse>('/api/v1/rentals')
+        this.client.get<RentalPaginatedResponse>('/api/v1/rentals'),
+        this.client.get<RentalPaginatedResponse>(
+          `/api/v1/rentals?limit=1&deposit_refunded_from=${today}&deposit_refunded_to=${today}`
+        ),
       ]);
 
       // Calculate stats from responses
@@ -1551,10 +1725,13 @@ class APIClient {
         ? (rentalsResponse.value.data?.data?.data?.rentals || []).filter((rental: Rental) => rental.status === 'active').length || 0 
         : 0;
 
+      const todayDepositReleases = depositReleasesResponse.status === 'fulfilled'
+        ? depositReleasesResponse.value.data?.data?.pagination?.total || 0
+        : 0;
+
       // Calculate today's revenue from bookings
       let todayRevenue = 0;
       if (bookingsResponse.status === 'fulfilled') {
-        const today = new Date().toISOString().split('T')[0];
         const todayBookings = bookingsResponse.value.data?.data?.data?.bookings?.filter((booking: Booking) => 
           booking.booking_date && booking.booking_date.startsWith(today) && booking.status === 'completed'
         ) || [];
@@ -1589,6 +1766,7 @@ class APIClient {
         totalBookings,
         activeRentals,
         todayRevenue,
+        todayDepositReleases,
         lowStockItems,
         maintenanceItems,
       };
@@ -1600,6 +1778,7 @@ class APIClient {
         totalBookings: 0,
         activeRentals: 0,
         todayRevenue: 0,
+        todayDepositReleases: 0,
         lowStockItems: 0,
         maintenanceItems: 0,
       };

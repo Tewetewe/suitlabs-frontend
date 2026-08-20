@@ -49,7 +49,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
         <li><b>Open Analytics, Financial Report, Assets, Users, Branches, or Bulk Input Sync.</b></li>
         <li><b>See the money side of the Dashboard.</b> Revenue, net profit, cash on hand and assets only appear for an admin login.</li>
         <li><b>Lock or unlock a month.</b></li>
-        <li><b>Switch to "All branches."</b> You only see the shops you are assigned to.</li>
+        <li><b>Switch to another shop for bookings or sales.</b> Your write shop stays the one you are assigned to. You can still open Items across shops and Transfer stock.</li>
       </ul>
     </div>
   </div>
@@ -294,7 +294,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <li><b>Set the rental date and the return date first.</b><span>The rental date starts on today; the return date starts empty. Only when <b>both</b> are set does the grid filter by availability — until then it shows everything, including suits already promised to someone else.</span></li>
     <li><b>Fill the ticket.</b><span>Tap tiles, or hit the scan button and scan the tag. Adjust quantity with − and + in the ticket. Same-day rentals are fine — return date can equal rental date.</span></li>
     <li><b>Attach the customer.</b><span>Search by name or phone. If they are new, tap <b>New</b>: first name, last name and phone, plus Instagram and TikTok if they offer them. Phone is what you will search on next time, so get it right.</span></li>
-    <li><b>Pick the guarantee.</b><span>KTP, Passport, or Student ID — whatever they are leaving with you.</span></li>
+    <li><b>Pick the guarantee.</b><span>KTP, Passport, Student ID, or <b>Existing Customer</b> for returning customers who do not need to leave an ID. Existing Customer skips the ID photo at pickup.</span></li>
     <li><b>Pick the occasion.</b><span>Wedding, wedding guest, corporate, university, SMA/SMK, SMP, SD or TK. It starts on Wedding, so change it deliberately — Analytics reads the occasion mix straight off this, and the POS will not charge without one.</span></li>
     <li><b>Choose a package, or leave it on item total.</b><span>A package price covers every item on the ticket by default. Tap a line’s badge to flip it to <b>Add-on</b> and charge it on top of the package. The discount box disappears while a package is selected.</span></li>
     <li><b>DP or Full, then the method.</b><span>DP: type the amount, or use the <b>0</b>, <b>50%</b> and <b>100%</b> shortcuts. Full: the total fills in automatically. Then tap how they are actually paying — cash, QRIS, transfer, debit or card.</span></li>
@@ -312,7 +312,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
   <figure>
     <div class="fig-scroll">
-      <svg viewBox="0 0 940 220" role="img" aria-label="Cash payments go to the Cash Drawer; QRIS, transfer, debit and credit card all go through the EDC terminal into Bank.">
+      <svg viewBox="0 0 940 240" role="img" aria-label="Cash payments go to the Cash Drawer; QRIS, transfer, debit and credit card settle to Bank; a direct transfer bypasses the EDC terminal and leaves no slip.">
         <defs>
           <marker id="pay-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -353,6 +353,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
         <line x1="20" y1="200" x2="920" y2="200" stroke="currentColor" opacity=".15"/>
         <text x="20" y="192" font-size="11" fill="currentColor" opacity=".6">EDC is the machine, not a payment method — always record the actual method the customer used: QRIS, debit, or card.</text>
+        <text x="20" y="212" font-size="11" fill="currentColor" opacity=".6">A transfer never touches the EDC, so it leaves no slip. That is the payment to attach a proof to.</text>
       </svg>
     </div>
     <figcaption><b>Two pots, five buttons.</b> Pick the wrong button and the drawer count won't match the system that night — which becomes someone's problem at month end.</figcaption>
@@ -368,6 +369,52 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <p>Once payment status reads <code>completed</code>, edit is disabled — on purpose. If something is genuinely wrong, get an admin. Do not cancel and re-book to work around it.</p>
     </div>
   </div>
+
+  <h3>Payment proof</h3>
+  <p class="measure">Not every payment goes through the EDC terminal. A customer who transfers from their phone, or pays a courier on the doorstep, leaves you no slip at all. <b>Payment proof</b> is where you keep the receipt they send you.</p>
+
+  <div class="flag ok">
+    <span class="flag-t">Optional everywhere, and it never blocks you</span>
+    <p>Every proof box is optional. No button waits on it, and a failed upload never loses the payment — the money is recorded first, and you get a message telling you to attach the proof from <b>Bookings</b> afterwards. Take the money, serve the customer, attach the proof after.</p>
+  </div>
+
+  <p class="measure">You get the same control in four places, and each one has a <b>Camera</b> button next to it, so a screenshot on their phone can be photographed at the counter:</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:26%">Where</th><th style="width:36%">Which receipt</th><th>Attach it when</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>POS</b>, under the method buttons</td>
+          <td>The first payment — the DP or the full amount</td>
+          <td>The customer transferred or scanned a QRIS that is not the shop's EDC.</td>
+        </tr>
+        <tr>
+          <td><b>Bookings › Collect balance</b></td>
+          <td>The remaining balance</td>
+          <td>The balance arrived by transfer before they walked in.</td>
+        </tr>
+        <tr>
+          <td><b>Pickup</b>, deposit and balance boxes</td>
+          <td>The security deposit, and the balance if it is still owing</td>
+          <td>The deposit came in by transfer, or a courier is collecting instead of the customer.</td>
+        </tr>
+        <tr>
+          <td><b>Complete rental</b>, refund box</td>
+          <td>The deposit going back out</td>
+          <td>You refunded by transfer. This one is the shop's own evidence that the money left.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="measure">JPEG, PNG, WebP, GIF or <b>PDF</b>, under 5 MB. PDF is there because a bank or e-wallet statement usually comes as one. Everything you attach shows up under <b>Payment proofs</b> when you open the booking or the rental, so the next person to serve that customer can see it too.</p>
+
+  <div class="flag care">
+    <span class="flag-t">Proof is evidence, not the payment</span>
+    <p>Attaching a receipt records <b>nothing</b> in the books. The amount and the method you enter are what post to the ledger. So a transfer still has to be recorded as <i>transfer</i> — attaching the receipt does not do that part for you.</p>
+  </div>
 </section>
 
 <section id="pickup">
@@ -375,9 +422,27 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <h2>Pickup</h2>
   <ol class="steps">
     <li><b>Rentals.</b><span>Find the customer's <code>pending</code> rental — it was created the moment you charged the booking. Fastest: scan the invoice barcode at the POS and it opens the rental. If theirs genuinely isn't there, <b>New Rental</b> builds one from an older booking that never got one.</span></li>
-    <li><b>Tap Pickup, and photograph the ID.</b><span>A clear photo of the guarantee document is <b>required</b> — <i>Confirm pickup</i> stays disabled until you attach one. JPEG, PNG or WebP, under 5 MB.</span></li>
+    <li><b>Send the deposit agreement, if the shop takes a deposit.</b><span>Tap <b>Send agreement</b> and the customer gets a WhatsApp link listing the deposit amount and the replacement fee on every item they are taking. The link also names <b>your shop, its address and its phone</b>, so the customer can see where the money is held and where to bring the suit back. <b>Confirm pickup stays disabled until they tap Accept.</b> Nothing you can type gets around that. If they say they never got it, <b>Resend agreement</b>.</span></li>
+    <li><b>Collect the remaining balance and the deposit.</b><span>Both boxes appear on the Pickup screen with the amount already worked out. Pick how each one was paid. A deposit paid by <b>transfer</b> also asks for the customer's bank, account name and account number — that is the account you refund to at return, so get it right at the counter, not later. Attach a proof for either one if the money came in online.</span></li>
+    <li><b>Photograph the ID.</b><span>A clear photo of the guarantee document is normally <b>required</b> — <i>Confirm pickup</i> stays disabled until you attach one. JPEG, PNG or WebP, under 5 MB. If this customer already has an ID on file from a previous rental (or the guarantee is <b>Existing Customer</b>), the photo is optional and Confirm uses the saved one.</span></li>
     <li><b>Check the items physically as you hand them over.</b><span>The rental becomes <code>active</code>. Print the rental invoice from the row menu if the customer wants one.</span></li>
   </ol>
+
+  <div class="flag ok">
+    <span class="flag-t">The deposit is not revenue</span>
+    <p>A security deposit is money the shop is <b>holding</b>, not money it has earned. It sits as a debt to the customer until you refund it at return, or until a damage charge eats into it. Never describe it to a customer as part of the price.</p>
+  </div>
+
+  <div class="flag stop">
+    <span class="flag-t">Do not tap Resend agreement repeatedly</span>
+    <p>Each tap is a real WhatsApp message from the shop's number. Tapping it three times because the customer is slow does not make the link arrive faster — it makes the shop look like a spammer, and WhatsApp restricts numbers that behave that way. Send once, then <b>phone them</b>. A restricted number stops every reminder for every customer, at both shops.</p>
+    <p>If a customer replies <b>STOP</b>, or tells you they do not want messages, open their <b>Customer</b> record and tick <b>No WhatsApp</b>. That stops every reminder and every agreement to them. It protects the shop's number — someone who is ignored presses Block, and blocks are what get the number restricted.</p>
+  </div>
+
+  <div class="flag care">
+    <span class="flag-t">When a courier collects instead of the customer</span>
+    <p>Nobody signs anything at the counter, so the paperwork <b>is</b> the record. Get the agreement accepted before the driver arrives, and attach the deposit and balance receipts on the Pickup screen. Without them there is nothing on file showing the money arrived.</p>
+  </div>
   <div class="flag care">
     <span class="flag-t">Dates changed at the counter?</span>
     <p>Use <b>Change dates</b> on the rental while it is pending or active. Do not just let it run over — a wrong return date silently creates a late fee that the customer will argue about. Once a rental is <code>overdue</code> the dates are frozen; only Complete is left.</p>
@@ -417,13 +482,13 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
         </tr>
         <tr>
           <td><b>Item is damaged</b></td>
-          <td>Write what is wrong in <b>Damage notes</b>, put the amount in <b>Damage charge</b>, and pick how they paid it under <b>Paid with</b>.</td>
+          <td>If the shop holds a deposit, write the note now and charge the damage later, on <b>Release deposit</b> — the complete screen will not take an amount. With no deposit, put the amount in <b>Damage charge</b> and pick how they paid it.</td>
           <td>Damage charge is <b>income</b> for the shop, not a cost. The note is your evidence if they come back to complain.</td>
         </tr>
         <tr>
           <td><b>They are late</b></td>
           <td>Nothing — the system calculates it. If they actually returned on an earlier day, set <b>Actual return date</b> to that day. Leave it empty and it uses right now.</td>
-          <td>The late fee is 20% of the daily rate for every day past the return date. Backdating is the only way to make it correct.</td>
+          <td>One day late costs <b>50% of the rental</b>. More than one day costs the <b>whole rental</b>, and it stops there — three days and three weeks cost the same. Days end at midnight, so the hour they walk in does not change it. Backdating is the only way to make a wrong day correct.</td>
         </tr>
         <tr>
           <td><b>They want to buy something too</b></td>
@@ -435,6 +500,11 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
           <td>Tick <b>Send rented items to maintenance</b> before completing.</td>
           <td>Keeps it out of the catalogue until it is ready. Nobody can book it by accident.</td>
         </tr>
+        <tr>
+          <td><b>A deposit is being refunded</b></td>
+          <td><b>Not here.</b> The deposit stays held when you complete. Check the suit first, then tap <b>Release deposit</b> on that rental.</td>
+          <td>The complete screen tells you the deposit stays held. Releasing is a second, separate tap — see <b>Releasing a deposit</b> below.</td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -442,6 +512,21 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <div class="flag ok">
     <span class="flag-t">Then, and only then</span>
     <p>Press <b>Complete</b>. Status goes to <code>completed</code>, the items go back to available (or to maintenance if you ticked it), the day's revenue is settled — and the rental invoice opens by itself with the late fee and damage charge on it, ready to print.</p>
+  </div>
+
+  <h4>Releasing a deposit</h4>
+  <p class="measure">A returned suit keeps its deposit until somebody checks it. That is on purpose: damage found on the rack after the customer has gone is too late if the money is already back in their pocket.</p>
+  <ol class="steps">
+    <li><b>Check the suit.</b><span>Look it over properly, off the counter, with time. This is the step the whole design exists for.</span></li>
+    <li><b>Open the rental and tap Release deposit.</b><span>Find it on <b>Rentals</b>, or set the deposit filter to <b>Awaiting item check</b> to see every suit waiting.</span></li>
+    <li><b>Price the check.</b><span>Damage notes, then the damage charge. The screen shows the <b>refundable deposit</b> as you type. If the damage runs past the deposit, it tells you what to collect and you pick how they paid.</span></li>
+    <li><b>Pay the deposit back — cash or transfer.</b><span>Those are the only two. Pick <b>Refund deposit with</b>. <b>Cash</b> comes out of the drawer, so count it out in front of them. <b>Transfer</b> goes to the bank account they gave at Pickup, shown right there on the screen — send it, then attach the receipt. You are not tied to how the deposit arrived: a deposit paid by transfer can go back as cash if that is what they want.</span></li>
+  </ol>
+
+  <div class="flag care">
+    <span class="flag-t">Seven days and it goes back on its own</span>
+    <p>A deposit nobody releases within <b>seven days</b> of the return is paid back in full overnight, with no damage charge. The shop loses the claim because nobody looked at the suit. Work the <b>Awaiting item check</b> list and this never happens. A row waiting seven days or more turns amber.</p>
+    <p>The books record that refund the moment the job runs, using whichever way the deposit came in. If your drawer has not paid it out, the drawer and the books disagree — tell your admin the same day. A deposit that came in by transfer is worse: the books show a transfer nobody sent, and no drawer count will catch it.</p>
   </div>
 
   <h4>If they never come back</h4>
@@ -513,7 +598,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <li>Every walk-in goes through the POS. No paper, no "I'll enter it later."</li>
     <li>Every hand-over gets an ID photo. Every return gets checked before Complete.</li>
     <li>Every rupiah that leaves the drawer gets an expense record, same day, correct method.</li>
-    <li>New customer? Get the phone number right — it is how you find them next time.</li>
+    <li>New customer? Get the phone number right — it is how you find them next time. Mark ID or EN so the next shift knows which language to use.</li>
   </ul>
 
   <h3><span class="chip day">Every shift · close</span></h3>
@@ -565,6 +650,14 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <p>Cash is the only method that goes in the drawer. QRIS, transfer, debit and card all go to the bank. Guessing breaks the nightly count.</p>
   </div>
   <div class="flag care">
+    <span class="flag-t">An online payment with no proof attached</span>
+    <p>The system will let you through — proof is optional. But a transfer that never went through the shop's EDC leaves no slip anywhere, so a month later the only answer to "did this customer really pay?" is the receipt you did or did not attach. Attach it while the customer is still in front of you.</p>
+  </div>
+  <div class="flag care">
+    <span class="flag-t">Taking the customer's bank details "later"</span>
+    <p>A deposit paid by transfer asks for their bank, account name and account number at <b>Pickup</b>. That is the account you refund at return. Chasing it on the return day, with a queue behind them, is how refunds go to the wrong account.</p>
+  </div>
+  <div class="flag care">
     <span class="flag-t">Applying a package "to give a discount"</span>
     <p>A package overrides the item total completely and switches off the discount box. Use it only when the customer is genuinely on that package. For a normal discount, use the discount field.</p>
   </div>
@@ -608,12 +701,44 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     </table>
   </div>
 
+  <h4>Payment proof</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:26%">Question</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td>Is it required?</td><td>No. Never. Every proof box is optional and no button waits on it.</td></tr>
+        <tr><td>When should I attach one?</td><td>Whenever the money moved outside the drawer and outside the shop's EDC — a transfer, a QRIS to a personal account, a courier payment.</td></tr>
+        <tr><td>What files work?</td><td>JPEG, PNG, WebP, GIF, PDF. Under 5 MB. Or use the <b>Camera</b> button.</td></tr>
+        <tr><td>Where do I see them later?</td><td><b>Payment proofs</b> on the booking detail, and on the rental detail for the deposit and the refund.</td></tr>
+        <tr><td>Which rentals is the shop holding a deposit on?</td><td>On <b>Rentals</b>, set the deposit filter to <b>Deposit held</b>. Each row shows the amount. <b>Awaiting item check</b> is the queue to release, and <b>Deposit released</b> shows the ones already paid back.</td></tr>
+        <tr><td>Can I refund a deposit by transfer?</td><td>Yes. <b>Cash</b> and <b>transfer</b> are both offered on <b>Release deposit</b>. For a transfer, use the account taken at Pickup and attach the receipt.</td></tr>
+        <tr><td>Upload failed — did I lose the payment?</td><td>No. The payment is already recorded. Attach the proof from the booking afterwards.</td></tr>
+        <tr><td>Does attaching it record the payment?</td><td>No. The amount and method you enter do that. Proof is evidence only.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>WhatsApp</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:30%">Situation</th><th>What you do</th></tr></thead>
+      <tbody>
+        <tr><td>Customer says the agreement never arrived</td><td>Resend <b>once</b>, then phone them. Never tap it repeatedly.</td></tr>
+        <tr><td>Customer replies STOP, or asks for no messages</td><td>Tick <b>No WhatsApp</b> on their Customer record. Do not send anything more.</td></tr>
+        <tr><td>Customer has No WhatsApp ticked and needs the agreement</td><td>Ask them face to face. Only if they agree, untick it and send.</td></tr>
+        <tr><td>Reminders stopped for everyone</td><td>Tell your admin at once. The shop's number may be restricted.</td></tr>
+        <tr><td>Customer asks what the reminder said</td><td>It gives the date, the items, the shop address, the <b>opening hours</b>, and the shop phone. The return reminder also states the late fee: 50% of the rental one day late, the whole rental beyond that.</td></tr>
+        <tr><td>The reminder shows the wrong opening hours</td><td>Tell your admin. Hours are edited per shop on <b>Admin &rarr; Branches</b>, not in the message.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <h4>Rental status</h4>
   <div class="table-wrap">
     <table>
       <thead><tr><th style="width:20%">Status</th><th style="width:40%">Means</th><th>You do</th></tr></thead>
       <tbody>
-        <tr><td><code>pending</code></td><td>Created with the booking, not handed over.</td><td>Pickup — with the ID photo.</td></tr>
+        <tr><td><code>pending</code></td><td>Created with the booking, not handed over.</td><td>Pickup — agreement accepted, deposit taken, ID photo.</td></tr>
         <tr><td><code>active</code></td><td>Suit is with the customer.</td><td>Wait for the return date.</td></tr>
         <tr><td><code>overdue</code></td><td>Past the return date. Set automatically at 00:05.</td><td>Phone them. Late fee is already accruing.</td></tr>
         <tr><td><code>completed</code></td><td>Back, checked, settled.</td><td>Nothing.</td></tr>

@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { Button } from '@/components/ui/Button';
 import { InvoiceData } from '@/types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -9,11 +8,12 @@ import { printBookingInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue } from '@/lib/barcode';
 import { formatCurrency } from '@/lib/currency';
-import { ThermalPrinterButton } from '@/components/print/ThermalPrinterButton';
+import { InvoicePrintActions } from '@/components/print/InvoicePrintActions';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
+import { receiptAddress, receiptSubtitle } from '@/lib/branch-scope';
 
 interface BookingInvoiceModalProps {
   isOpen: boolean;
@@ -22,7 +22,7 @@ interface BookingInvoiceModalProps {
 }
 
 export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoiceModalProps) {
-  const { error: toastError, success } = useToast();
+  const { error: toastError } = useToast();
 
   if (!isOpen || !invoice) return null;
 
@@ -47,17 +47,6 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
     const x = new Date(d);
     return x.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
       ' ' + x.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-  };
-
-  const handlePrint = async () => {
-    try {
-      const { route } = await printBookingInvoice(invoice);
-      if (route === 'thermal') {
-        success('Sent to the printer', 'Cash drawer opened.');
-      }
-    } catch (err) {
-      toastError('Could not print', err instanceof Error ? err.message : 'Please try again.');
-    }
   };
 
   const downloadInvoice = async () => {
@@ -170,18 +159,12 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
         size="xl"
         nested
         footer={
-          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-            <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
-              Close
-            </Button>
-            <ThermalPrinterButton className="w-full sm:w-auto" />
-            <Button variant="outline" onClick={downloadInvoice} className="w-full sm:w-auto">
-              Download
-            </Button>
-            <Button onClick={handlePrint} className="w-full sm:w-auto" data-testid="print-invoice">
-              Print
-            </Button>
-          </div>
+          <InvoicePrintActions
+            onClose={onClose}
+            onDownload={downloadInvoice}
+            printInvoice={() => printBookingInvoice(invoice)}
+            printBarcode={() => printBookingInvoice(invoice, { barcodeOnly: true })}
+          />
         }
       >
           <div className="flex flex-col items-center justify-center gap-4">
@@ -194,8 +177,8 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice }: BookingInvoice
                   {/* Company Header - same as bprint */}
                   <div className="receipt-center">
                     <div className="receipt-title">SUITLABS BALI</div>
-                    <div className="receipt-subtitle">{invoice.company?.subtitle || 'Sewa Jas Jimbaran'}</div>
-                    <div className="receipt-line">{invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362'}</div>
+                    <div className="receipt-subtitle">{receiptSubtitle(invoice.company?.subtitle)}</div>
+                    <div className="receipt-line">{receiptAddress(invoice.company?.address)}</div>
                     {invoice.company?.phone && <div className="receipt-line">TEL: {invoice.company.phone}</div>}
                   </div>
 

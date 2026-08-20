@@ -34,15 +34,12 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
 import SimpleModal from '@/components/modals/SimpleModal';
-import { useAuth } from '@/contexts/AuthContext';
 import { useBranch } from '@/contexts/BranchContext';
 
 type ViewMode = 'grid' | 'list';
 
 export default function ItemsPage() {
-  const { user } = useAuth();
-  const { viewingAll } = useBranch();
-  const isAdmin = user?.role === 'admin';
+  const { branches } = useBranch();
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 400);
   const [filters, setFilters] = useState<ItemFilters>({});
@@ -89,7 +86,7 @@ export default function ItemsPage() {
 
   const loadFacets = async () => {
     try {
-      const data = await apiClient.getItemFacets();
+      const data = await apiClient.getItemFacets(true);
       setFacets(data);
     } catch (err) {
       console.error('Failed to load item facets:', err);
@@ -135,6 +132,7 @@ export default function ItemsPage() {
     try {
       const paginationFilters = {
         ...filters,
+        all_branches: true,
         page,
         limit: LIST_PAGE_SIZE,
       };
@@ -269,14 +267,12 @@ export default function ItemsPage() {
       >
         Check dates
       </OverflowMenuItem>
-      {isAdmin && (
-        <OverflowMenuItem
-          icon={<ArrowRightLeft className="h-4 w-4 text-slate-400" />}
-          onClick={() => setTransferringItem(item)}
-        >
-          Transfer
-        </OverflowMenuItem>
-      )}
+      <OverflowMenuItem
+        icon={<ArrowRightLeft className="h-4 w-4 text-slate-400" />}
+        onClick={() => setTransferringItem(item)}
+      >
+        Transfer
+      </OverflowMenuItem>
       <OverflowMenuItem icon={<Edit className="h-4 w-4 text-slate-400" />} onClick={() => handleEditItem(item)}>
         Edit
       </OverflowMenuItem>
@@ -309,7 +305,7 @@ export default function ItemsPage() {
             </span>
           )}
         </div>
-        {viewingAll && item.branch?.name && (
+        {item.branch?.name && (
           <span className="pointer-events-none absolute bottom-2 left-2 max-w-[90%] truncate rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white">
             {item.branch.name}
           </span>
@@ -368,7 +364,7 @@ export default function ItemsPage() {
             </Link>
             <p className="mt-0.5 truncate text-sm text-slate-500">
               {itemFacts(item)}
-              {viewingAll && item.branch?.name ? ` · ${item.branch.name}` : ''}
+              {item.branch?.name ? ` · ${item.branch.name}` : ''}
             </p>
             {item.code && (
               <p className="mt-0.5 truncate font-mono text-[11px] text-slate-400">{item.code}</p>
@@ -467,6 +463,19 @@ export default function ItemsPage() {
                 <div className="space-y-4">
                   {/* Filter Dropdowns */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    <Select
+                      searchable={false}
+                      label="Shop"
+                      options={[
+                        { value: '', label: 'All shops' },
+                        ...branches.filter((branch) => branch.is_active).map((branch) => ({
+                          value: branch.id,
+                          label: branch.name,
+                        })),
+                      ]}
+                      value={filters.branch_id || ''}
+                      onChange={(e) => setFilters({ ...filters, branch_id: e.target.value || undefined })}
+                    />
                     <Select
                       searchable={false}
                       label="Type"

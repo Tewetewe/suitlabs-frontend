@@ -41,24 +41,32 @@ function buildAndroidBridgeUrl(path: string, query: string): string {
   return `${SUITLABS_PRINT_BRIDGE_SCHEME}?url=${encodeURIComponent(responseUrl)}`;
 }
 
-export function getAndroidBridgeBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full'): string {
+function barcodeOnlyQuery(barcodeOnly?: boolean): string {
+  return barcodeOnly ? '&barcode_only=1' : '';
+}
+
+export function getAndroidBridgeBookingInvoiceUrl(
+  bookingId: string,
+  type: 'dp' | 'full',
+  barcodeOnly = false,
+): string {
   return buildAndroidBridgeUrl(
     '/api/v1/bprint/booking-invoice',
-    `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}`,
+    `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${barcodeOnlyQuery(barcodeOnly)}`,
   );
 }
 
-export function getAndroidBridgeRentalInvoiceUrl(rentalId: string): string {
+export function getAndroidBridgeRentalInvoiceUrl(rentalId: string, barcodeOnly = false): string {
   return buildAndroidBridgeUrl(
     '/api/v1/bprint/rental-invoice',
-    `?rental_id=${encodeURIComponent(rentalId)}`,
+    `?rental_id=${encodeURIComponent(rentalId)}${barcodeOnlyQuery(barcodeOnly)}`,
   );
 }
 
-export function getAndroidBridgeSaleInvoiceUrl(saleId: string): string {
+export function getAndroidBridgeSaleInvoiceUrl(saleId: string, barcodeOnly = false): string {
   return buildAndroidBridgeUrl(
     '/api/v1/bprint/sale-invoice',
-    `?sale_id=${encodeURIComponent(saleId)}`,
+    `?sale_id=${encodeURIComponent(saleId)}${barcodeOnlyQuery(barcodeOnly)}`,
   );
 }
 
@@ -69,19 +77,41 @@ export function getAndroidBridgeProductLabelUrl(itemId: string): string {
   );
 }
 
-export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
+export function getBprintBookingInvoiceUrl(
+  bookingId: string,
+  type: 'dp' | 'full',
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
   const fmt = format ? `&format=${format}` : '';
-  return buildIosUrl('/api/v1/bprint/booking-invoice', `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`);
+  return buildIosUrl(
+    '/api/v1/bprint/booking-invoice',
+    `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
 }
 
-export function getBprintRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
+export function getBprintRentalInvoiceUrl(
+  rentalId: string,
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
   const fmt = format ? `&format=${format}` : '';
-  return buildIosUrl('/api/v1/bprint/rental-invoice', `?rental_id=${encodeURIComponent(rentalId)}${fmt}`);
+  return buildIosUrl(
+    '/api/v1/bprint/rental-invoice',
+    `?rental_id=${encodeURIComponent(rentalId)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
 }
 
-export function getBprintSaleInvoiceUrl(saleId: string, format?: 'entries' | 'object' | 'array'): string {
+export function getBprintSaleInvoiceUrl(
+  saleId: string,
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
   const fmt = format ? `&format=${format}` : '';
-  return buildIosUrl('/api/v1/bprint/sale-invoice', `?sale_id=${encodeURIComponent(saleId)}${fmt}`);
+  return buildIosUrl(
+    '/api/v1/bprint/sale-invoice',
+    `?sale_id=${encodeURIComponent(saleId)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
 }
 
 export function getBprintProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {
@@ -89,19 +119,41 @@ export function getBprintProductLabelUrl(itemId: string, format?: 'entries' | 'o
   return buildIosUrl('/api/v1/bprint/product-label', `?item_id=${encodeURIComponent(itemId)}${fmt}`);
 }
 
-export function getAndroidBluetoothBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
+export function getAndroidBluetoothBookingInvoiceUrl(
+  bookingId: string,
+  type: 'dp' | 'full',
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
   const fmt = format ? `&format=${format}` : '';
-  return buildAndroidUrl('/api/v1/bprint/booking-invoice', `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`);
+  return buildAndroidUrl(
+    '/api/v1/bprint/booking-invoice',
+    `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
 }
 
-export function getAndroidBluetoothRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
+export function getAndroidBluetoothRentalInvoiceUrl(
+  rentalId: string,
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
   const fmt = format ? `&format=${format}` : '';
-  return buildAndroidUrl('/api/v1/bprint/rental-invoice', `?rental_id=${encodeURIComponent(rentalId)}${fmt}`);
+  return buildAndroidUrl(
+    '/api/v1/bprint/rental-invoice',
+    `?rental_id=${encodeURIComponent(rentalId)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
 }
 
-export function getAndroidBluetoothSaleInvoiceUrl(saleId: string, format?: 'entries' | 'object' | 'array'): string {
+export function getAndroidBluetoothSaleInvoiceUrl(
+  saleId: string,
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
   const fmt = format ? `&format=${format}` : '';
-  return buildAndroidUrl('/api/v1/bprint/sale-invoice', `?sale_id=${encodeURIComponent(saleId)}${fmt}`);
+  return buildAndroidUrl(
+    '/api/v1/bprint/sale-invoice',
+    `?sale_id=${encodeURIComponent(saleId)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
 }
 
 export function getAndroidBluetoothProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {

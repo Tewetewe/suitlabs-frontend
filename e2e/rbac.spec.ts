@@ -17,6 +17,7 @@ test.describe('Staff RBAC', () => {
     await expect(page.getByTestId('nav-assets')).toHaveCount(0);
     await expect(page.getByTestId('nav-branches')).toHaveCount(0);
     await expect(page.getByTestId('nav-bulk-input-sync')).toHaveCount(0);
+    await expect(page.getByTestId('nav-wa-reminders')).toHaveCount(0);
     await expect(page.getByTestId('nav-operations-handbook')).toHaveCount(0);
 
     await expect(page.getByText('Cash on Hand')).toHaveCount(0);

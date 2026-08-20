@@ -24,27 +24,67 @@ const RENDER_SETTLE_MS = 150;
 /** How long to keep the iframe around after printing, for slower print queues. */
 const CLEANUP_DELAY_MS = 1000;
 
-function buildDocument(bodyHTML: string, title: string): string {
+const LABEL_CUT_MARGIN_HTML = `<div style="height:${LABEL_CUT_MARGIN_MM}mm"></div>`;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function replaceCanvasWithImage(dst: HTMLCanvasElement, src: HTMLCanvasElement): void {
+  try {
+    const img = document.createElement('img');
+    img.src = src.toDataURL('image/png');
+    img.alt = '';
+    img.style.width = '100%';
+    img.style.height = 'auto';
+    dst.replaceWith(img);
+  } catch {
+    // A tainted canvas cannot be snapshotted; the empty clone is the fallback.
+  }
+}
+
+/**
+ * Copy a receipt node as HTML, turning canvases into images so the barcode
+ * survives the trip into the print iframe. `outerHTML` of a canvas is an empty
+ * tag — without this the bars vanish on paper.
+ */
+function htmlWithCanvasImages(node: HTMLElement): string {
+  if (node instanceof HTMLCanvasElement) {
+    const wrap = document.createElement('div');
+    const clone = node.cloneNode(true) as HTMLCanvasElement;
+    wrap.appendChild(clone);
+    replaceCanvasWithImage(clone, node);
+    return wrap.innerHTML;
+  }
+  const clone = node.cloneNode(true) as HTMLElement;
+  const sources = Array.from(node.querySelectorAll('canvas'));
+  const destinations = Array.from(clone.querySelectorAll('canvas'));
+  sources.forEach((src, i) => {
+    const dst = destinations[i];
+    if (dst) replaceCanvasWithImage(dst, src);
+  });
+  return clone.outerHTML;
+}
+
+function buildDocument(bodyHTML: string, title: string, cutMarginHTML = CUT_MARGIN_HTML): string {
   return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>${title}</title>
+<title>${escapeHtml(title)}</title>
 <style>${RECEIPT_STYLES}</style>
 <style>${RECEIPT_PRINT_STYLES}</style>
 </head>
-<body>${bodyHTML}${CUT_MARGIN_HTML}</body>
+<body>${bodyHTML}${cutMarginHTML}</body>
 </html>`;
 }
 
-/**
- * Print one receipt node through the browser's own print dialog.
- *
- * Returns false when there is no DOM to print from (server render), so the
- * caller can fall through to another route instead of silently doing nothing.
- */
-export function printReceiptNode(node: HTMLElement | null, title = 'Receipt'): boolean {
-  if (typeof document === 'undefined' || !node) return false;
+function printHTML(bodyHTML: string, title: string, cutMarginHTML = CUT_MARGIN_HTML): boolean {
+  if (typeof document === 'undefined') return false;
 
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
@@ -91,9 +131,20 @@ export function printReceiptNode(node: HTMLElement | null, title = 'Receipt'): b
     return false;
   }
   frameDocument.open();
-  frameDocument.write(buildDocument(node.outerHTML, title));
+  frameDocument.write(buildDocument(bodyHTML, title, cutMarginHTML));
   frameDocument.close();
   return true;
+}
+
+/**
+ * Print one receipt node through the browser's own print dialog.
+ *
+ * Returns false when there is no DOM to print from (server render), so the
+ * caller can fall through to another route instead of silently doing nothing.
+ */
+export function printReceiptNode(node: HTMLElement | null, title = 'Receipt'): boolean {
+  if (typeof document === 'undefined' || !node) return false;
+  return printHTML(htmlWithCanvasImages(node), title);
 }
 
 /**
@@ -105,6 +156,24 @@ export function printReceiptNode(node: HTMLElement | null, title = 'Receipt'): b
 export function findOpenReceiptNode(): HTMLElement | null {
   if (typeof document === 'undefined') return null;
   return document.querySelector<HTMLElement>('.thermal-receipt-container .thermal-receipt');
+}
+
+export function findOpenReceiptBarcodeNode(): HTMLElement | null {
+  if (typeof document === 'undefined') return null;
+  return document.querySelector<HTMLElement>('.thermal-receipt-container .receipt-barcode');
+}
+
+/**
+ * Print just the invoice barcode — the number as text plus the bars — on a
+ * short slip. Uses the label tear-bar gap because this is a reprint, not a
+ * full receipt.
+ */
+export function printOpenReceiptBarcode(invoiceNumber: string, title = 'Barcode'): boolean {
+  const barcode = findOpenReceiptBarcodeNode();
+  if (!barcode) return false;
+  const number = escapeHtml(invoiceNumber);
+  const body = `<div class="thermal-receipt"><div class="receipt-center"><div class="receipt-line">${number}</div>${htmlWithCanvasImages(barcode)}</div></div>`;
+  return printHTML(body, title, LABEL_CUT_MARGIN_HTML);
 }
 
 /**
@@ -133,12 +202,13 @@ export function printImageDataUrl(dataUrl: string, title = 'Label'): boolean {
     return false;
   }
 
+  const safeTitle = escapeHtml(title);
   frameDocument.open();
   frameDocument.write(`<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>${title}</title>
+<title>${safeTitle}</title>
 <style>
   @page { size: auto; margin: 4mm; }
   html, body { margin: 0; padding: 0; background: #fff; }
@@ -147,7 +217,7 @@ export function printImageDataUrl(dataUrl: string, title = 'Label'): boolean {
   .label-cut-margin { height: ${LABEL_CUT_MARGIN_MM}mm; }
 </style>
 </head>
-<body><img id="label" alt="${title}" src="${dataUrl}"><div class="label-cut-margin"></div></body>
+<body><img id="label" alt="${safeTitle}" src="${dataUrl}"><div class="label-cut-margin"></div></body>
 </html>`);
   frameDocument.close();
 
