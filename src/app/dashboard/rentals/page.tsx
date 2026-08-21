@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/Select';
 import { InvoiceSearchField } from '@/components/ui/InvoiceSearchField';
 import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-utils';
 import { formatCurrency } from '@/lib/currency';
 import { formatDateShort } from '@/lib/date';
 import { Rental } from '@/types';
@@ -152,7 +153,9 @@ export default function RentalsPage() {
       success(`${kind} reminder sent`, `WhatsApp to ${reminder.phone} (${reminder.language.toUpperCase()})`);
     } catch (error) {
       console.error('Failed to send WA reminder:', error);
-      toastError('Could not send WhatsApp reminder', error instanceof Error ? error.message : 'Check phone and Wablas.');
+      // The backend explains a cooldown or a daily cap in its message, so show
+      // that instead of the status code.
+      toastError('Could not send WhatsApp reminder', apiErrorMessage(error, 'Check phone and Wablas.'));
     } finally {
       setSendingReminderId(null);
     }
