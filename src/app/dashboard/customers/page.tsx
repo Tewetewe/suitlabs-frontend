@@ -104,7 +104,11 @@ export default function CustomersPage() {
 
     try {
       setCreateLoading(true);
-      await apiClient.createCustomer(formData);
+      const email = formData.email?.trim();
+      await apiClient.createCustomer({
+        ...formData,
+        email: email || undefined,
+      });
       
       // Show success toast
       success(
@@ -352,7 +356,6 @@ export default function CustomersPage() {
             <Input
               label="Email"
               type="email"
-              required
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="john.doe@example.com"
