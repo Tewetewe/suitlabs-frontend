@@ -57,7 +57,7 @@ export default function DepositAgreementPage() {
         <header className="space-y-1 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">SuitLabs</p>
           <h1 className="text-2xl font-semibold text-slate-900">
-            {isEN ? 'Security Deposit Agreement' : 'Perjanjian Jaminan'}
+            {isEN ? 'Your rental deposit' : 'Jaminan sewa Anda'}
           </h1>
         </header>
 
@@ -74,31 +74,31 @@ export default function DepositAgreementPage() {
               </p>
               {view.branch_address && (
                 <p className="pt-1 text-xs text-slate-500">
-                  {isEN ? 'Pickup and return at' : 'Pengambilan dan pengembalian di'}: {view.branch_address}
+                  {isEN ? 'Pick up and return at' : 'Ambil dan kembalikan di'}: {view.branch_address}
                 </p>
               )}
               {view.branch_phone && (
                 <p className="text-xs text-slate-500">
-                  {isEN ? 'Shop phone' : 'Telepon toko'}: {view.branch_phone}
+                  {isEN ? 'Call or WhatsApp us' : 'Telepon atau WhatsApp kami'}: {view.branch_phone}
                 </p>
               )}
             </div>
 
             <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {isEN ? 'Security deposit' : 'Jaminan'}
+                {isEN ? 'Deposit you leave with us' : 'Jaminan yang Anda titipkan'}
               </p>
               <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
                 {formatCurrency(view.deposit_amount)}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {view.deposit_percent}% {isEN ? 'of booking' : 'dari booking'} ({formatCurrency(view.booking_amount)})
+                {view.deposit_percent}% {isEN ? 'of your rental' : 'dari sewa Anda'} ({formatCurrency(view.booking_amount)}) · {isEN ? 'you get it back' : 'akan dikembalikan'}
               </p>
             </div>
 
             <section className="space-y-2">
               <h2 className="text-sm font-semibold text-slate-800">
-                {isEN ? 'Replacement fees' : 'Biaya penggantian'}
+                {isEN ? 'If an item is lost, this is the cost' : 'Kalau barang hilang, ini biayanya'}
               </h2>
               <ul className="divide-y divide-slate-100 rounded-2xl border border-slate-200">
                 {view.items.map((item) => (
@@ -122,15 +122,15 @@ export default function DepositAgreementPage() {
             {view.accepted ? (
               <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                 {isEN
-                  ? 'Accepted. You can proceed to pickup at the shop.'
-                  : 'Sudah disetujui. Anda dapat melanjutkan pengambilan di toko.'}
+                  ? 'Thank you. Your rental is ready to collect at the shop.'
+                  : 'Terima kasih. Sewaan Anda siap diambil di toko.'}
                 {view.accepted_at && (
                   <span className="mt-1 block text-xs opacity-80">{formatDateShort(view.accepted_at)}</span>
                 )}
               </div>
             ) : (
               <Button className="w-full" loading={accepting} onClick={handleAccept}>
-                {isEN ? 'I have read and accept' : 'Saya telah membaca dan menyetujui'}
+                {isEN ? 'I have read this and I agree' : 'Saya sudah baca dan setuju'}
               </Button>
             )}
           </div>
