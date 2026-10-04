@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CheckCircle2, ClipboardCheck, ScanLine, Send } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardCheck, QrCode, ScanLine, Send } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import clsx from 'clsx';
 
 import { PageShell, StatGrid } from '@/components/ui/PageShell';
@@ -18,6 +19,8 @@ import apiClient from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
 import type { PickupPrep, PickupPrepDay, PickupPrepItem, PickupPrepItemCheck, PickupPrepProblem, PickupPrepStatus } from '@/types';
+
+const BarcodeScanner = dynamic(() => import('@/components/ui/BarcodeScanner'), { ssr: false });
 
 const STATUS_LABEL: Record<PickupPrepStatus, string> = {
   not_started: 'Not started',
@@ -82,6 +85,7 @@ export default function PickupPrepPage() {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [scan, setScan] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   // A quiet load keeps the list on screen for the timed refresh.
   const load = useCallback(async (forDate: string, quiet = false) => {
@@ -121,26 +125,62 @@ export default function PickupPrepPage() {
     });
   }, []);
 
+  // Saves for one Item run in order, so a fast second tap never races the first.
+  const itemQueue = useRef<Record<string, Promise<void>>>({});
+
   const saveItem = useCallback(
     async (rental: PickupPrep, item: PickupPrepItem, change: Partial<PickupPrepItemCheck>) => {
       const key = `${rental.rental_id}:${item.item_id}`;
-      setSaving((s) => ({ ...s, [key]: true }));
-      try {
-        const prep = await apiClient.checkPickupPrepItem(rental.rental_id, item.item_id, {
-          ...checkFromItem(item),
-          problem_note: notes[key] ?? item.problem_note,
-          ...change,
-        });
-        replaceRental(prep);
-        if (prep.warning) toastWarning('Check saved with a warning', prep.warning);
-        else if (change.problem === 'damaged') success('Marked damaged', `${item.code} is now in maintenance.`);
-      } catch (e: unknown) {
-        toastError('Could not save the check', errorMessage(e, 'Save failed'));
-      } finally {
-        setSaving((s) => ({ ...s, [key]: false }));
-      }
+      const next: PickupPrepItemCheck = {
+        ...checkFromItem(item),
+        problem_note: notes[key] ?? item.problem_note,
+        ...change,
+      };
+      // The same rule as the backend: a problem clears the check it contradicts.
+      if (next.problem === 'damaged') next.undamaged = false;
+      if (next.problem === 'not_found') next.found = false;
+
+      // Show the tap at once; the server answer then replaces the whole Rental.
+      setDay((current) =>
+        current &&
+        recount(
+          current,
+          current.rentals.map((r) =>
+            r.rental_id !== rental.rental_id
+              ? r
+              : {
+                  ...r,
+                  items: r.items.map((i) =>
+                    i.item_id !== item.item_id
+                      ? i
+                      : {
+                          ...i,
+                          ...next,
+                          passed: next.found && next.clean && next.undamaged && next.size_ok && !next.problem,
+                        },
+                  ),
+                },
+          ),
+        ),
+      );
+
+      const run = async () => {
+        try {
+          const prep = await apiClient.checkPickupPrepItem(rental.rental_id, item.item_id, next);
+          replaceRental(prep);
+          if (prep.warning) toastWarning('Check saved with a warning', prep.warning);
+          else if (change.problem === 'damaged') success('Marked damaged', `${item.code} is now in maintenance.`);
+        } catch (e: unknown) {
+          toastError('Could not save the check', errorMessage(e, 'Save failed'));
+          // Show what the server holds, not a tick that was not saved.
+          void load(date, true);
+        }
+      };
+      const queued = (itemQueue.current[key] ?? Promise.resolve()).then(run);
+      itemQueue.current[key] = queued;
+      await queued;
     },
-    [notes, replaceRental, success, toastError, toastWarning],
+    [notes, replaceRental, success, toastError, toastWarning, load, date],
   );
 
   const saveAddons = useCallback(
@@ -175,10 +215,11 @@ export default function PickupPrepPage() {
     [replaceRental, success, toastError],
   );
 
-  // A scanner types the code and presses Enter. The first matching Item that is
-  // not yet found gets its "Found on rack" tick.
-  const onScan = useCallback(async () => {
-    const code = scan.trim().toLowerCase();
+  // A USB scanner types the code and presses Enter; the camera scanner hands
+  // the code over directly. The first matching Item that is not yet found
+  // gets its "Found on rack" tick.
+  const markFound = useCallback(async (raw: string) => {
+    const code = raw.trim().toLowerCase();
     if (!code || !day) return;
     for (const rental of day.rentals) {
       const item = rental.items.find(
@@ -191,8 +232,8 @@ export default function PickupPrepPage() {
         return;
       }
     }
-    toastWarning('No match', `No Item waiting for "Found" has code ${scan.trim()} on this day.`);
-  }, [scan, day, saveItem, success, toastWarning]);
+    toastWarning('No match', `No Item waiting for "Found" has code ${raw.trim()} on this day.`);
+  }, [day, saveItem, success, toastWarning]);
 
   const visible = useMemo(
     () => (day?.rentals || []).filter((r) => !hideReady || r.status !== 'ready'),
@@ -242,7 +283,7 @@ export default function PickupPrepPage() {
             className="flex w-full gap-2 sm:max-w-sm"
             onSubmit={(e) => {
               e.preventDefault();
-              void onScan();
+              void markFound(scan);
             }}
           >
             <div className="flex-1">
@@ -254,7 +295,16 @@ export default function PickupPrepPage() {
                 data-testid="pickup-prep-scan"
               />
             </div>
-            <Button type="submit" variant="secondary" className="self-end">
+            <button
+              type="button"
+              onClick={() => setScannerOpen(true)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-2xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 touch-manipulation"
+              aria-label="Scan with camera"
+              data-testid="pickup-prep-camera"
+            >
+              <QrCode className="h-5 w-5" />
+            </button>
+            <Button type="submit" variant="secondary" className="self-end" disabled={!scan.trim()} data-testid="pickup-prep-found">
               <ScanLine className="h-4 w-4" />
               Found
             </Button>
@@ -312,6 +362,14 @@ export default function PickupPrepPage() {
           ))
         )}
       </div>
+      <BarcodeScanner
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={(code) => {
+          setScannerOpen(false);
+          void markFound(code);
+        }}
+      />
     </PageShell>
   );
 }
@@ -362,7 +420,6 @@ function RentalChecklist({
         <ul className="mt-4 divide-y divide-black/5">
           {rental.items.map((item) => {
             const key = `${rental.rental_id}:${item.item_id}`;
-            const busy = Boolean(saving[key]);
             const note = notes[key] ?? item.problem_note;
             return (
               <li key={item.item_id} className={clsx('py-3', item.problem && 'rounded-xl bg-red-50/60 px-3')}>
@@ -390,7 +447,6 @@ function RentalChecklist({
                           className="h-5 w-5 accent-emerald-600"
                           style={{ appearance: 'auto' }}
                           checked={item[check.key]}
-                          disabled={busy}
                           onChange={(e) => void onSaveItem(rental, item, { [check.key]: e.target.checked })}
                           data-testid={`prep-${check.key}`}
                         />
@@ -400,7 +456,7 @@ function RentalChecklist({
                     <Button
                       size="sm"
                       variant="ghost"
-                      disabled={busy || item.passed}
+                      disabled={item.passed}
                       onClick={() =>
                         void onSaveItem(rental, item, { found: true, clean: true, undamaged: true, size_ok: true, problem: '' })
                       }
@@ -410,7 +466,6 @@ function RentalChecklist({
                     <select
                       className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm"
                       value={item.problem}
-                      disabled={busy}
                       onChange={(e) => void onSaveItem(rental, item, { problem: e.target.value as PickupPrepProblem })}
                       aria-label="Problem"
                       data-testid="prep-problem"
