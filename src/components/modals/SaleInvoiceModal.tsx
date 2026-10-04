@@ -74,6 +74,7 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
               id: sale.id,
               invoiceNumber,
               customerPhone: sale.customer?.phone,
+              customerId: sale.customer?.id,
               autoSend: autoSendWhatsApp,
             }}
           />

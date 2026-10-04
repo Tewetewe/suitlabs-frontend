@@ -91,6 +91,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
               id: rental.id,
               invoiceNumber,
               customerPhone: rental.customer?.phone,
+              customerId: rental.customer?.id,
               autoSend: autoSendWhatsApp,
             }}
           />

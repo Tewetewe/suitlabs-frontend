@@ -489,7 +489,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <tr><td><b>Per-run cap</b></td><td><code>WABLAS_MAX_PER_RUN</code>, default 60</td><td>A busy day cannot become a volume spike. Anything over the cap is skipped with the reason on the row, never sent late and never dropped silently. Wablas does not cap daily volume; this does.</td></tr>
         <tr><td><b>Request size</b></td><td><code>WABLAS_BATCH_SIZE</code>, default 20</td><td>How many messages ride in one v2 request. It changes nothing WhatsApp sees, because Wablas queues them — it only bounds how many rows one failed request takes with it.</td></tr>
         <tr><td><b>Rotating wording</b></td><td>4 openings × 3 closings per language and type</td><td>Identical text to many recipients is what gets flagged. Each customer gets a phrasing chosen from the rental id, so the same rental resent repeats its own wording rather than looking like a new message.</td></tr>
-        <tr><td><b>Opt-out</b></td><td><b>No WhatsApp</b> on the Customer</td><td>Blocks and reports are the main reason a business number is restricted. Every reminder carries a "reply STOP" line, and the flag stops reminders and the agreement.</td></tr>
+        <tr><td><b>Opt-out</b></td><td><b>No WhatsApp</b> on the Customer</td><td>Blocks and reports are the main reason a business number is restricted. The reminders carry no "reply STOP" line; when a customer asks for no messages, Staff tick the flag, and it stops reminders, receipts, and the agreement.</td></tr>
         <tr><td><b>Daily de-duplication</b></td><td>Automatic</td><td>One rental gets at most one pickup and one return reminder per day. Only a manual send repeats.</td></tr>
       </tbody>
     </table>

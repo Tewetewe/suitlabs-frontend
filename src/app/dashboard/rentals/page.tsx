@@ -679,11 +679,13 @@ export default function RentalsPage() {
           autoSendWhatsApp={rentalInvoiceJustPaid}
         />
 
+        {/* The paid invoice shows at Pickup, but nothing goes to WhatsApp by
+            itself: the customer got the invoice with the Booking. Staff tap
+            WhatsApp when the customer asks for the paid receipt. */}
         <BookingInvoiceModal
           isOpen={!!pickupInvoice}
           onClose={() => setPickupInvoice(null)}
           invoice={pickupInvoice}
-          autoSendWhatsApp
         />
 
         <SimpleModal
