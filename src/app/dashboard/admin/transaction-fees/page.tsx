@@ -159,7 +159,7 @@ export default function TransactionFeesPage() {
                 return (
                   <div key={rule.id} className="grid gap-3 rounded-xl px-3 py-3 ring-1 ring-black/5 md:grid-cols-12 md:items-end" data-testid="fee-rule-row">
                     <div className="md:col-span-4">
-                      <Input label="Label" value={draft.label} onChange={(e) => setDraft(rule.id, { label: e.target.value })} />
+                      <Input id={`fee-label-${rule.id}`} label="Label" value={draft.label} onChange={(e) => setDraft(rule.id, { label: e.target.value })} />
                     </div>
                     <div className="md:col-span-2 text-sm">
                       <div className="text-xs font-medium text-slate-500">Method · terminal</div>
@@ -170,6 +170,7 @@ export default function TransactionFeesPage() {
                     </div>
                     <div className="md:col-span-2">
                       <Input
+                        id={`fee-rate-${rule.id}`}
                         label="Rate (%)"
                         inputMode="decimal"
                         value={draft.rate}
@@ -179,6 +180,7 @@ export default function TransactionFeesPage() {
                     </div>
                     <div className="md:col-span-2">
                       <Input
+                        id={`fee-min-${rule.id}`}
                         label="Only above (Rp)"
                         inputMode="numeric"
                         value={String(draft.min_amount)}
@@ -234,10 +236,10 @@ export default function TransactionFeesPage() {
                 </select>
               </label>
               <div className="md:col-span-4">
-                <Input label="Label" placeholder="BNI EDC · Credit card" value={newDraft.label} onChange={(e) => setNewDraft((d) => ({ ...d, label: e.target.value }))} />
+                <Input id="fee-new-label" label="Label" placeholder="BNI EDC · Credit card" value={newDraft.label} onChange={(e) => setNewDraft((d) => ({ ...d, label: e.target.value }))} />
               </div>
               <div className="md:col-span-2">
-                <Input label="Rate (%)" inputMode="decimal" value={newDraft.rate} onChange={(e) => setNewDraft((d) => ({ ...d, rate: e.target.value }))} helperText={newDraft.rate ? formatFeeRate(Math.round((parseFloat(newDraft.rate) || 0) * 100)) : undefined} />
+                <Input id="fee-new-rate" label="Rate (%)" inputMode="decimal" value={newDraft.rate} onChange={(e) => setNewDraft((d) => ({ ...d, rate: e.target.value }))} helperText={newDraft.rate ? formatFeeRate(Math.round((parseFloat(newDraft.rate) || 0) * 100)) : undefined} />
               </div>
               <div className="md:col-span-2">
                 <Button className="w-full" loading={saving === 'new'} disabled={!newDraft.label.trim() || !newDraft.rate} onClick={() => void addRule()}>
