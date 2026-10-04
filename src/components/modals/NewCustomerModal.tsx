@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 import { Select } from '@/components/ui/Select';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { apiClient } from '@/lib/api';
@@ -92,13 +93,11 @@ export default function NewCustomerModal({
           value={form.last_name}
           onChange={(e) => setForm((prev) => ({ ...prev, last_name: e.target.value }))}
         />
-        <Input
+        <PhoneInput
           label="Phone"
-          type="tel"
-          inputMode="tel"
           required
           value={form.phone}
-          onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+          onChange={(phone) => setForm((prev) => ({ ...prev, phone }))}
         />
         <Select
           searchable={false}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 import { Select } from '@/components/ui/Select';
 import { Customer, CreateCustomerRequest } from '@/types';
 import SimpleModal from '@/components/modals/SimpleModal';
@@ -173,12 +174,10 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
             error={errors.email}
           />
 
-          <Input
+          <PhoneInput
             label="Phone *"
-            type="tel"
             value={formData.phone}
-            onChange={(e) => handleInputChange('phone', e.target.value)}
-            placeholder="08xx-xxxx-xxxx"
+            onChange={(phone) => handleInputChange('phone', phone)}
             error={errors.phone}
           />
 
