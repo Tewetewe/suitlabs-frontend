@@ -17,7 +17,7 @@ import {
 type PhoneInputProps = {
   label?: string;
   value: string;
-  /** Gets the value to store: "0812…" for Indonesia, "+<code><number>" for the rest. */
+  /** Gets the value to store: "+<code><number>", so +6281234567890 for 0812-3456-7890. */
   onChange: (value: string) => void;
   error?: string;
   helperText?: string;
@@ -111,7 +111,7 @@ export function PhoneInput({
           disabled={disabled}
           value={parts.local}
           onChange={(e) => typeNumber(e.target.value)}
-          placeholder={placeholder ?? (parts.country === 'ID' ? '0812…' : parts.country === OTHER_COUNTRY ? '+354 611 2345' : 'Number')}
+          placeholder={placeholder ?? (parts.country === 'ID' ? '812…' : parts.country === OTHER_COUNTRY ? '+354 611 2345' : 'Number')}
           data-testid={testId}
           aria-invalid={Boolean(error)}
           className={clsx(CONTROL_CLASS, controlBorderClass(error), disabled && 'cursor-not-allowed opacity-60')}
