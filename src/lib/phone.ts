@@ -2,10 +2,11 @@
  * Phone numbers with a country code, for the WhatsApp sends.
  *
  * Staff pick the country and type the local number, or type the number with
- * its own code ("+82 10…" or "0082 10…"). An Indonesian number stays in the
- * local "0812…" form, so the customer phones already on file still match.
- * A foreign number is stored as "+<code><number>". The backend
- * (usecase.NormalizeWhatsAppPhone) reads both forms.
+ * its own code ("+82 10…" or "0082 10…"). Every number is stored as
+ * "+<code><number>". An Indonesian number drops its leading 0 for +62, so
+ * 0812-3456-7890 is stored as +6281234567890 and shown as 812-3456-7890 next
+ * to +62. The backend (usecase.CanonicalPhone) stores and matches the same
+ * form, and migration 076 moved the numbers already on file to it.
  */
 
 export type PhoneCountry = { iso: string; name: string; dial: string };
@@ -72,12 +73,13 @@ function countryForDigits(digits: string) {
 /** Splits a stored phone into the country and the number for the form. */
 export function splitPhone(value: string): { country: string; local: string } {
   const text = (value || '').trim();
-  if (!hasDialCode(text)) return { country: HOME_COUNTRY, local: text };
+  // A number from before migration 076 has no code: it is Indonesian.
+  if (!hasDialCode(text)) return { country: HOME_COUNTRY, local: text.replace(/^0+/, '') };
   const digits = internationalDigits(text);
   const country = countryForDigits(digits);
   if (!country) return { country: OTHER_COUNTRY, local: text };
   const national = digits.slice(country.dial.length);
-  return { country: country.iso, local: country.iso === HOME_COUNTRY ? `0${national.replace(/^0+/, '')}` : national };
+  return { country: country.iso, local: national.replace(/^0+/, '') };
 }
 
 /** The country that a typed "+code…" points to, or OTHER while it matches none. */
@@ -99,13 +101,13 @@ export function joinPhone(countryIso: string, local: string): string {
     country = countryForDigits(digits);
     if (!country) return digits ? `+${digits}` : '';
     national = digits.slice(country.dial.length);
-  } else if (!country || country.iso === HOME_COUNTRY) {
-    // Keep a local number as Staff typed it, like before.
+  } else if (!country) {
     return text;
   }
+  // The trunk 0 of a local number goes: 0812… under +62 is +62812….
   national = national.replace(/^0+/, '');
   if (!national) return '';
-  return country.iso === HOME_COUNTRY ? `0${national}` : `+${country.dial}${national}`;
+  return `+${country.dial}${national}`;
 }
 
 export function phoneCountryLabel(c: PhoneCountry) {

@@ -3,8 +3,9 @@ import { describe, it } from 'node:test';
 import { countryOfTyped, joinPhone, splitPhone } from './phone';
 
 describe('joinPhone', () => {
-  it('keeps an Indonesian number as Staff typed it', () => {
-    assert.equal(joinPhone('ID', '0812-3456-7890'), '0812-3456-7890');
+  it('stores an Indonesian number with +62 and without its leading 0', () => {
+    assert.equal(joinPhone('ID', '0812-3456-7890'), '+6281234567890');
+    assert.equal(joinPhone('ID', '812 3456 7890'), '+6281234567890');
   });
 
   it('adds the picked country code to a foreign number', () => {
@@ -18,9 +19,9 @@ describe('joinPhone', () => {
     assert.equal(joinPhone('ID', '0086 138 1234 5678'), '+8613812345678');
   });
 
-  it('turns a typed +62 back into the local form', () => {
-    assert.equal(joinPhone('KR', '+62 812-3456-7890'), '081234567890');
-    assert.equal(joinPhone('ID', '+62 0812 3456 7890'), '081234567890');
+  it('reads a typed +62 as Indonesian and drops a 0 after it', () => {
+    assert.equal(joinPhone('KR', '+62 812-3456-7890'), '+6281234567890');
+    assert.equal(joinPhone('ID', '+62 0812 3456 7890'), '+6281234567890');
   });
 
   it('keeps a code that is not on the list', () => {
@@ -34,19 +35,20 @@ describe('joinPhone', () => {
 });
 
 describe('splitPhone', () => {
-  it('reads a local number as Indonesian', () => {
-    assert.deepEqual(splitPhone('0812-3456-7890'), { country: 'ID', local: '0812-3456-7890' });
+  it('reads a number without a code as Indonesian, without its leading 0', () => {
+    assert.deepEqual(splitPhone('0812-3456-7890'), { country: 'ID', local: '812-3456-7890' });
     assert.deepEqual(splitPhone(''), { country: 'ID', local: '' });
   });
 
   it('finds the country of a stored foreign number', () => {
     assert.deepEqual(splitPhone('+821012345678'), { country: 'KR', local: '1012345678' });
     assert.deepEqual(splitPhone('+85291234567'), { country: 'HK', local: '91234567' });
-    assert.deepEqual(splitPhone('+62 812 3456 7890'), { country: 'ID', local: '081234567890' });
+    assert.deepEqual(splitPhone('+62 812 3456 7890'), { country: 'ID', local: '81234567890' });
+    assert.deepEqual(splitPhone('+6281234567890'), { country: 'ID', local: '81234567890' });
   });
 
   it('round-trips through joinPhone', () => {
-    for (const stored of ['+821012345678', '+61412345678', '+14155551234']) {
+    for (const stored of ['+6281234567890', '+821012345678', '+61412345678', '+14155551234']) {
       const { country, local } = splitPhone(stored);
       assert.equal(joinPhone(country, local), stored);
     }
