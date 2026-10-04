@@ -127,7 +127,6 @@ export async function createInventoryItem(page: Page, name?: string) {
   await page.keyboard.press('Enter');
   await dialog.getByLabel('Quantity *').fill('1');
   await dialog.getByLabel('Standard Price (3-day) *').fill('10000');
-  await dialog.getByLabel('One Day Price *').fill('5000');
   await dialog.getByLabel('Four Hour Price *').fill('3000');
   await dialog.getByRole('button', { name: 'Add item' }).click();
   await expect(page.getByText('Item Created Successfully!')).toBeVisible({ timeout: 45_000 });
@@ -356,7 +355,7 @@ export async function createPosBooking(
   await page.getByTestId('pos-new-customer').click();
   await page.getByLabel('First name').fill(customer.firstName);
   await page.getByLabel('Last name').fill(customer.lastName);
-  await page.getByLabel('Phone').fill(customer.phone);
+  await page.getByRole('textbox', { name: 'Phone' }).fill(customer.phone);
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByTestId('pos-customer')).toContainText(customer.fullName);
   if (opts.discount) {
@@ -381,7 +380,7 @@ export async function createPosBooking(
 
 export async function searchBooking(page: Page, customerName: string) {
   await goTo(page, 'bookings');
-  await page.getByPlaceholder('Search bookings...').fill(customerName);
+  await page.getByPlaceholder(/Search name, phone, or scan invoice/).fill(customerName);
   await page.waitForTimeout(700);
   return rowNamed(page, 'booking-row', customerName);
 }
@@ -392,7 +391,7 @@ export async function pickupNamedRental(page: Page, customerName: string) {
   await expect(async () => {
     await rental.getByTestId('rental-pickup').click({ timeout: 2500 });
   }).toPass({ timeout: 20_000 });
-  await page.getByTestId('identity-card-upload').setInputFiles(ID_CARD);
+  await page.getByTestId('pickup-id-card').setInputFiles(ID_CARD);
   await page.getByTestId('confirm-pickup').click();
   await expect(rental.getByText('active')).toBeVisible();
   return rental;
@@ -408,14 +407,15 @@ export async function switchShop(page: Page, shop: 'Jimbaran' | 'Nusa Dua' | 'Al
   }
   await expect(switcher).toBeVisible();
   await switcher.click();
-  await switcher.fill(shop);
+  // The switcher is a read-only list now; type only if it is a search box.
+  if (await switcher.isEditable()) await switcher.fill(shop);
   await page.getByRole('option', { name: shop, exact: true }).click();
   await expect(page.locator('#branch-switcher')).toHaveValue(new RegExp(shop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
 
 export async function openBookingInvoice(page: Page, customerName: string, kind: 'DP invoice' | 'Full invoice') {
   await goTo(page, 'bookings');
-  await page.getByPlaceholder('Search bookings...').fill(customerName);
+  await page.getByPlaceholder(/Search name, phone, or scan invoice/).fill(customerName);
   await page.waitForTimeout(700);
   const booking = await rowNamed(page, 'booking-row', customerName);
   await clickRowAction(booking, kind);

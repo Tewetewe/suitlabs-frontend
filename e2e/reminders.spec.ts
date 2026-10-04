@@ -34,7 +34,7 @@ test.describe('WhatsApp reminders', () => {
         }),
       });
     });
-    await page.route('**/api/v1/admin/wa-reminders', async (route) => {
+    await page.route(/\/api\/v1\/admin\/wa-reminders(\?.*)?$/, async (route) => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({ success: true, data: { reminders: sendCount ? [reminder] : [] } }),
@@ -73,7 +73,7 @@ test.describe('WhatsApp reminders', () => {
         }),
       });
     });
-    await page.route('**/api/v1/admin/wa-reminders', async (route) => {
+    await page.route(/\/api\/v1\/admin\/wa-reminders(\?.*)?$/, async (route) => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({ success: true, data: { reminders: [] } }),

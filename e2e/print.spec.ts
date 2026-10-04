@@ -162,7 +162,7 @@ test.describe('Print', () => {
     const rental = await findRowAcrossPages(page, 'rental-row', customer.fullName);
     await expect(rental.getByText('pending')).toBeVisible();
     await rental.getByTestId('rental-pickup').click();
-    await page.getByTestId('identity-card-upload').setInputFiles(ID_CARD);
+    await page.getByTestId('pickup-id-card').setInputFiles(ID_CARD);
     await page.getByTestId('confirm-pickup').click();
     await expect(rental.getByText('active')).toBeVisible();
 

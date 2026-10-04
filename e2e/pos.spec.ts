@@ -47,7 +47,7 @@ test.describe('POS variants', () => {
     await page.getByTestId('pos-new-customer').click();
     await page.getByLabel('First name').fill(customer.firstName);
     await page.getByLabel('Last name').fill(customer.lastName);
-    await page.getByLabel('Phone').fill(customer.phone);
+    await page.getByRole('textbox', { name: 'Phone' }).fill(customer.phone);
     await page.getByRole('button', { name: 'Save' }).click();
     await page.getByTestId('pos-pay-full').click();
     await page.getByTestId('pos-charge').click();
@@ -100,7 +100,7 @@ test.describe('POS variants', () => {
     await page.getByTestId('pos-new-customer').click();
     await page.getByLabel('First name').fill(customer.firstName);
     await page.getByLabel('Last name').fill(customer.lastName);
-    await page.getByLabel('Phone').fill(customer.phone);
+    await page.getByRole('textbox', { name: 'Phone' }).fill(customer.phone);
     await page.getByRole('button', { name: 'Save' }).click();
     await page.getByTestId('pos-pay-full').click();
     await page.getByTestId('pos-charge').click();

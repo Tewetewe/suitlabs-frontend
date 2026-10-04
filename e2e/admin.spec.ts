@@ -30,6 +30,8 @@ test.describe('Admin books', () => {
     await page.getByLabel('Description').fill(description);
     await page.getByLabel('Amount').fill('1000000');
     await page.getByLabel('Day of month (1-28)').fill('1');
+    // A transfer names the bank it leaves from.
+    await page.getByTestId('pot-bca').click();
     await page.getByRole('button', { name: 'Save recurring' }).click();
     await expect(page.getByText('Recurring expense saved')).toBeVisible();
     await expect(page.getByText(description)).toBeVisible();
@@ -41,7 +43,7 @@ test.describe('Admin books', () => {
     await goTo(page, 'items');
     await expect(async () => {
       await page.getByLabel('Item actions').first().click();
-      await page.getByRole('button', { name: 'Edit' }).click({ timeout: 2500 });
+      await page.getByRole('menuitem', { name: 'Edit' }).click({ timeout: 2500 });
     }).toPass({ timeout: 12_000 });
     await expect(page.getByLabel('Buying Price')).toBeVisible();
     await page.getByLabel('Buying Price').fill('100000');
@@ -62,9 +64,15 @@ test.describe('Admin books', () => {
     await page.getByLabel('Buying price (per unit)').fill('750000');
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Fixed asset recorded')).toBeVisible();
-    const row = page.getByRole('row', { name: new RegExp(name) });
+    // Assets sit in category groups that start closed; each has a "..." menu.
+    const fixedList = page.getByRole('group', { name: 'Fixed assets by category' });
+    // The form saves a new asset under Furniture by default.
+    const furniture = fixedList.getByRole('button', { name: /Furniture/ });
+    if ((await furniture.getAttribute('aria-expanded')) === 'false') await furniture.click();
+    const row = fixedList.locator('div.flex.items-start').filter({ hasText: name });
     await expect(row).toBeVisible();
-    await row.getByRole('button', { name: 'Dispose' }).click();
+    await row.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Dispose' }).click();
     await expect(page.getByText(/disposed/i).first()).toBeVisible();
   });
 
@@ -75,6 +83,8 @@ test.describe('Admin books', () => {
     const lender = `E2E lender ${Date.now()}`;
     await page.getByLabel('Lender').fill(lender);
     await page.getByLabel('Principal').fill('500000');
+    const loanForm = page.locator('form').filter({ has: page.getByLabel('Lender') });
+    await loanForm.getByTestId('pot-bca').click();
     await page.getByRole('button', { name: 'Record loan' }).click();
     await expect(page.getByText(lender, { exact: true })).toBeVisible();
     const dividendForm = page.locator('form').filter({ has: page.getByLabel('Shareholder') });
@@ -82,6 +92,7 @@ test.describe('Admin books', () => {
     await dividendForm.getByPlaceholder('0').fill('10000');
     const shareholder = `E2E owner ${Date.now()}`;
     await dividendForm.getByLabel('Shareholder').fill(shareholder);
+    await dividendForm.getByTestId('pot-bca').click();
     await dividendForm.getByRole('button', { name: 'Record dividend' }).click();
     await expect(page.getByText(shareholder, { exact: true })).toBeVisible();
   });

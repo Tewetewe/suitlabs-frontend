@@ -104,7 +104,7 @@ export default function DepositAgreementPage() {
                 {view.items.map((item) => (
                   <li key={item.item_id} className="flex items-start justify-between gap-3 px-4 py-3 text-sm">
                     <div className="min-w-0">
-                      <p className="font-medium text-slate-900">{item.name}{item.quantity > 1 ? ` ×${item.quantity}` : ''}</p>
+                      <p className="font-medium text-slate-900">{item.name?.trim() || (isEN ? 'Item' : 'Barang')}{item.quantity > 1 ? ` ×${item.quantity}` : ''}</p>
                       {item.code && <p className="font-mono text-xs text-slate-500">{item.code}</p>}
                     </div>
                     <p className="shrink-0 tabular-nums text-slate-700">{formatCurrency(item.replacement_fee)}</p>

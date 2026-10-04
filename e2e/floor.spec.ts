@@ -3,7 +3,6 @@ import {
   clickRowAction,
   closeDialog,
   createPosBooking,
-  dismissIssuedInvoice,
   expectHiddenRowActions,
   findRowAcrossPages,
   goTo,
@@ -28,14 +27,11 @@ test.describe('Floor flows', () => {
     await pickupNamedRental(page, customer.fullName);
 
     await goTo(page, 'bookings');
-    await page.getByPlaceholder('Search bookings...').fill(customer.fullName);
+    await page.getByPlaceholder(/Search name, phone, or scan invoice/).fill(customer.fullName);
     const booking = await rowNamed(page, 'booking-row', customer.fullName);
     await page.waitForTimeout(700);
 
-    await clickRowAction(booking, 'Collect balance');
-    await page.getByRole('button', { name: 'Take payment' }).click();
-    await expect(page.getByRole('heading', { name: 'Record full payment' })).toHaveCount(0);
-    await dismissIssuedInvoice(page, 'Booking Invoice');
+    // Pickup collects the remaining balance, so the Booking is already paid.
     await expect(booking).toContainText('Paid');
 
     await clickRowAction(booking, 'Full invoice');

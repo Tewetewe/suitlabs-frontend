@@ -59,7 +59,7 @@ test.describe('Return exceptions', () => {
       .evaluate((el) => (el as HTMLInputElement).click());
     await page.getByLabel('Replacement fee').fill('150000');
     await expect(page.getByText('Add a retail item or mark a lost item.')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Complete Sale' }).click();
+    await page.getByRole('button', { name: /Charge and record|Complete sale/i }).click();
     await expect(page.getByText('Sale recorded')).toBeVisible();
 
     await openItemNamed(page, itemName);
@@ -77,7 +77,7 @@ test.describe('Return exceptions', () => {
       .filter({ has: page.getByRole('button', { name: 'Add' }) });
     if (await inStock.count()) {
       await inStock.first().getByRole('button', { name: 'Add' }).click();
-      await page.getByRole('button', { name: 'Complete Sale' }).click();
+      await page.getByRole('button', { name: /Charge and record|Complete sale/i }).click();
       await expect(page.getByText('Sale recorded')).toBeVisible();
     }
 
