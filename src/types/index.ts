@@ -709,6 +709,8 @@ export interface Booking {
   booking_date: string;
   appointment_date?: string;
   booking_guarantee: string;
+  /** True when Staff or Admin decided this Customer pays no Security Deposit at Pickup. */
+  security_deposit_waived?: boolean;
   institution?: BookingInstitution | '';
   total_amount: number;
   discount_amount: number;
@@ -1471,6 +1473,8 @@ export interface CreateBookingRequest {
   booking_date: string; // ISO string
   appointment_date?: string; // ISO string
   booking_guarantee: string;
+  /** True when Staff or Admin decided this Customer pays no Security Deposit at Pickup. */
+  security_deposit_waived?: boolean;
   institution: BookingInstitution;
   notes?: string;
   status: 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled' | 'pending_approval';

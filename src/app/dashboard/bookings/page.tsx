@@ -135,6 +135,7 @@ export default function BookingsPage() {
     appointment_date?: string;
     booking_guarantee: string;
     booking_guarantee_other?: string;
+    take_deposit: boolean;
     institution: BookingInstitution | '';
     notes?: string;
     status: Booking['status'];
@@ -145,6 +146,7 @@ export default function BookingsPage() {
     customer_id: '',
     booking_date: new Date().toISOString().slice(0, 10),
     booking_guarantee: 'KTP',
+    take_deposit: true,
     institution: 'wedding',
     status: 'pending',
     payment_status: 'pending',
@@ -185,7 +187,7 @@ export default function BookingsPage() {
   const chargeNow = Math.max(0, payNow - alreadyPaid);
   const chargeNowFee = transactionFee(chargeNow, bookingForm.payment_method, feeRules, bookingFeeRuleId, bookingPot);
 
-  const updateBookingField = (field: keyof typeof bookingForm, value: string) => {
+  const updateBookingField = (field: keyof typeof bookingForm, value: string | boolean) => {
     setBookingForm(prev => ({ ...prev, [field]: value }));
     if (formErrors[field]) setFormErrors(prev => ({ ...prev, [field]: '' }));
   };
@@ -361,6 +363,7 @@ export default function BookingsPage() {
         booking_date: new Date(bookingForm.booking_date).toISOString(),
         appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
         booking_guarantee: bookingGuarantee,
+        security_deposit_waived: !bookingForm.take_deposit,
         institution: bookingForm.institution,
         notes: bookingForm.notes,
         status: bookingForm.status,
@@ -392,6 +395,7 @@ export default function BookingsPage() {
         customer_id: '',
         booking_date: new Date().toISOString().slice(0, 10),
         booking_guarantee: 'KTP',
+        take_deposit: true,
         institution: 'wedding',
         status: 'pending',
         payment_status: 'pending',
@@ -426,6 +430,7 @@ export default function BookingsPage() {
       appointment_date: booking.appointment_date?.slice(0, 10),
       booking_guarantee: isStandardGuarantee ? booking.booking_guarantee : 'Other',
       booking_guarantee_other: isStandardGuarantee ? '' : booking.booking_guarantee,
+      take_deposit: !booking.security_deposit_waived,
       institution: booking.institution || '',
       notes: booking.notes || '',
       status: booking.status,
@@ -475,6 +480,7 @@ export default function BookingsPage() {
             notes: bookingForm.notes,
             appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
             booking_guarantee: bookingGuarantee,
+            security_deposit_waived: !bookingForm.take_deposit,
             institution: bookingForm.institution || undefined,
           }
         : {
@@ -482,6 +488,7 @@ export default function BookingsPage() {
             booking_date: new Date(bookingForm.booking_date).toISOString(),
             appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
             booking_guarantee: bookingGuarantee,
+            security_deposit_waived: !bookingForm.take_deposit,
             institution: bookingForm.institution || undefined,
             notes: bookingForm.notes,
             status: bookingForm.status,
@@ -1105,6 +1112,7 @@ type BookingFormState = {
   appointment_date?: string;
   booking_guarantee: string;
   booking_guarantee_other?: string;
+  take_deposit: boolean;
   institution: BookingInstitution | '';
   notes?: string;
   status: Booking['status'];
@@ -1156,7 +1164,7 @@ function BookingFormFields({
   fetchCustomerOptions: (query: string) => Promise<{ value: string; label: string }[]>;
   fetchItemOptions: (query: string) => Promise<{ value: string; label: string }[]>;
   fetchTrousersOptions: (query: string) => Promise<{ value: string; label: string }[]>;
-  updateBookingField: (field: keyof BookingFormState, value: string) => void;
+  updateBookingField: (field: keyof BookingFormState, value: string | boolean) => void;
   updateItemField: (index: number, field: keyof BookingFormItem, value: string | number | boolean) => void;
   addItemLine: (catalogue?: 'any' | 'trousers', isAddon?: boolean) => void;
   removeItemLine: (index: number) => void;
@@ -1407,6 +1415,14 @@ function BookingFormFields({
               placeholder="Enter guarantee type"
             />
           )}
+          <label className="flex min-h-11 items-center gap-2 text-sm text-slate-600 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={bookingForm.take_deposit}
+              onChange={(e) => updateBookingField('take_deposit', e.target.checked)}
+            />
+            Take security deposit at Pickup
+          </label>
           <Select
             searchable={false}
             label="Occasion"
