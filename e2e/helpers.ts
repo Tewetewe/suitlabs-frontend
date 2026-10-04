@@ -296,6 +296,8 @@ export type PosBookingOpts = {
   rentalDate?: string;
   returnDate?: string;
   payMethod?: 'cash' | 'qris' | 'transfer';
+  /** The bank a non-cash payment goes to. The cashier must pick one. */
+  pot?: 'bca' | 'bni';
   discount?: string;
 };
 
@@ -368,6 +370,9 @@ export async function createPosBooking(
   if (opts.payMethod === 'qris') await page.getByTestId('pos-pay-qris').click();
   else if (opts.payMethod === 'transfer') await page.getByTestId('pos-pay-transfer').click();
   else if (opts.payMethod === 'cash') await page.getByTestId('pos-pay-cash').click();
+  if (opts.payMethod === 'qris' || opts.payMethod === 'transfer') {
+    await page.getByTestId(`pot-${opts.pot ?? 'bca'}`).click();
+  }
   await page.getByTestId('pos-charge').click();
   await dismissIssuedInvoice(page, 'Booking Invoice');
   await expect(page.getByTestId('pos-done').getByText('Booking charged')).toBeVisible();
