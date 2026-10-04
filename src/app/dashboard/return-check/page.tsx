@@ -180,7 +180,7 @@ export default function ReturnCheckPage() {
         success(`${kind} reminder sent`, `WhatsApp to ${customerName || reminder.phone}`);
         await load(date, true);
       } catch (e: unknown) {
-        // The backend explains a cooldown or a daily cap in its message.
+        // The backend explains the 15-second wait in its message.
         toastError('Could not send WhatsApp reminder', apiErrorMessage(e, 'Check phone and Wablas.'));
         await load(date, true);
       } finally {

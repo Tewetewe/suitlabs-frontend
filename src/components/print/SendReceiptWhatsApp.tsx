@@ -82,7 +82,7 @@ export function SendReceiptWhatsApp({ target }: { target: ReceiptWhatsAppTarget 
           warning('Receipt not sent', 'The customer opted out of WhatsApp.');
           break;
         case 'cooldown':
-          warning('Receipt already sent', 'It went to this number a moment ago. Wait 2 minutes to send it again.');
+          warning('Receipt already sent', 'It went to this number a moment ago. Wait 15 seconds to send it again.');
           break;
         case 'image':
           toastError('Could not send receipt', message);
