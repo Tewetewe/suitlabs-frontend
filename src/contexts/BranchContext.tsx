@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api';
 import {
   ALL_BRANCHES_ID,
+  defaultBranch,
   persistBranchScope,
   readStoredBranchId,
   readStoredWriteBranchId,
@@ -84,7 +85,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         const latestStored = readStoredBranchId();
         const latestWrite = readStoredWriteBranchId();
         const allowedIds = new Set(membership.map((branch) => branch.id));
-        const fallback = membership[0]?.id ?? null;
+        const fallback = defaultBranch(membership)?.id ?? null;
 
         if (user.role === 'admin' && latestStored === ALL_BRANCHES_ID) {
           applySelection(null, latestWrite && allowedIds.has(latestWrite) ? latestWrite : fallback);
@@ -114,7 +115,8 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
             applySelection(match?.id ?? latestStored, match?.id ?? latestStored);
             return;
           }
-          applySelection(match?.id ?? fromUser[0]?.id ?? null, match?.id ?? fromUser[0]?.id ?? null);
+          const firstShop = match?.id ?? defaultBranch(fromUser)?.id ?? null;
+          applySelection(firstShop, firstShop);
         }
       } finally {
         if (!cancelled) setLoading(false);
