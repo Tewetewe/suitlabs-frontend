@@ -123,7 +123,7 @@ async function printOnDetectedRoute(args: {
   iosAndroidFallbackUrl: string;
   sendThermal: () => Promise<void>;
   openDrawer: boolean;
-  browser: () => void;
+  browser: () => Promise<void>;
 }): Promise<PrintOutcome> {
   if (isAndroidDevice()) {
     openPrintBridge(args.androidUrl);
@@ -141,7 +141,7 @@ async function printOnDetectedRoute(args: {
     }
     return { route: 'thermal', drawer: args.openDrawer };
   }
-  args.browser();
+  await args.browser();
   return { route: 'browser', drawer: false };
 }
 
@@ -161,12 +161,16 @@ export async function printBookingInvoice(
       ? () => thermalPrinter.printInvoiceBarcode(invoice.invoice_number)
       : () => thermalPrinter.printBookingInvoice(invoice),
     openDrawer: !barcodeOnly,
-    browser: () => {
+    browser: async () => {
       if (barcodeOnly) {
-        printOpenReceiptBarcode(invoice.invoice_number, `Barcode ${invoice.invoice_number}`);
+        if (!await printOpenReceiptBarcode(invoice.invoice_number, `Barcode ${invoice.invoice_number}`)) {
+          throw new Error('The invoice barcode is not ready. Please try again.');
+        }
         return;
       }
-      printReceiptNode(findOpenReceiptNode(), `Invoice ${invoice.invoice_number}`);
+      if (!await printReceiptNode(findOpenReceiptNode(), `Invoice ${invoice.invoice_number}`)) {
+        throw new Error('The invoice is not ready. Please try again.');
+      }
     },
   });
 }
@@ -186,12 +190,16 @@ export async function printRentalInvoice(
       ? () => thermalPrinter.printInvoiceBarcode(invoiceNumber)
       : () => thermalPrinter.printRentalInvoice(rental),
     openDrawer: !barcodeOnly,
-    browser: () => {
+    browser: async () => {
       if (barcodeOnly) {
-        printOpenReceiptBarcode(invoiceNumber, `Barcode ${invoiceNumber}`);
+        if (!await printOpenReceiptBarcode(invoiceNumber, `Barcode ${invoiceNumber}`)) {
+          throw new Error('The invoice barcode is not ready. Please try again.');
+        }
         return;
       }
-      printReceiptNode(findOpenReceiptNode(), `Rental ${rental.id.slice(-8)}`);
+      if (!await printReceiptNode(findOpenReceiptNode(), `Rental ${rental.id.slice(-8)}`)) {
+        throw new Error('The invoice is not ready. Please try again.');
+      }
     },
   });
 }
@@ -211,12 +219,16 @@ export async function printSaleInvoice(
       ? () => thermalPrinter.printInvoiceBarcode(invoiceNumber)
       : () => thermalPrinter.printSaleInvoice(sale),
     openDrawer: !barcodeOnly,
-    browser: () => {
+    browser: async () => {
       if (barcodeOnly) {
-        printOpenReceiptBarcode(invoiceNumber, `Barcode ${invoiceNumber}`);
+        if (!await printOpenReceiptBarcode(invoiceNumber, `Barcode ${invoiceNumber}`)) {
+          throw new Error('The invoice barcode is not ready. Please try again.');
+        }
         return;
       }
-      printReceiptNode(findOpenReceiptNode(), `Sale ${sale.sale_number}`);
+      if (!await printReceiptNode(findOpenReceiptNode(), `Sale ${sale.sale_number}`)) {
+        throw new Error('The invoice is not ready. Please try again.');
+      }
     },
   });
 }

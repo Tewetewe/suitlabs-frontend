@@ -5,6 +5,7 @@
  */
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { waitForReceiptBarcodes } from './receipt-barcode';
 
 async function renderReceiptCanvas(): Promise<HTMLCanvasElement> {
   const receiptContainer = document.querySelector('.thermal-receipt-container') as HTMLElement | null;
@@ -12,6 +13,8 @@ async function renderReceiptCanvas(): Promise<HTMLCanvasElement> {
   if (!receiptContainer || !receipt) {
     throw new Error('Invoice not ready. Please try again.');
   }
+
+  await waitForReceiptBarcodes(receipt);
 
   // Copy the receipt at once, so the render still works if the modal closes.
   // cloneNode copies a <canvas> blank, so each canvas (the barcode) is drawn

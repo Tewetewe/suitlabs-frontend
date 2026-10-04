@@ -32,6 +32,7 @@ export function Barcode({
 
   useEffect(() => {
     if (canvasRef.current && value) {
+      canvasRef.current.dataset.barcodeStatus = 'pending';
       try {
         // Clean the barcode value: remove leading/trailing escaped quotes if present
         let cleanedValue = value.trim();
@@ -60,6 +61,7 @@ export function Barcode({
         // For CODE128, just ensure it's not empty
         if (barcodeFormat === 'CODE128' && cleanedValue.length === 0) {
           console.warn('Empty barcode value for CODE128');
+          canvasRef.current.dataset.barcodeStatus = 'error';
           return;
         }
 
@@ -77,8 +79,10 @@ export function Barcode({
           textPosition: 'bottom',
           textMargin: 2
         });
+        canvasRef.current.dataset.barcodeStatus = 'ready';
       } catch (error) {
         console.error('Failed to generate barcode:', error);
+        canvasRef.current.dataset.barcodeStatus = 'error';
         // Clear canvas and show error message
         if (canvasRef.current) {
           const ctx = canvasRef.current.getContext('2d');
@@ -116,7 +120,7 @@ export function Barcode({
           )}
         </div>
       )}
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} data-receipt-barcode data-barcode-status="pending" />
     </div>
   );
 }

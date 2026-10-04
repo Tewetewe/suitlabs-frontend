@@ -17,6 +17,7 @@ import {
   RECEIPT_PRINT_STYLES,
   RECEIPT_STYLES,
 } from './receipt-styles';
+import { waitForReceiptBarcodes } from './receipt-barcode';
 
 /** Chrome needs a moment between `load` and `print()` or it prints a blank page. */
 const RENDER_SETTLE_MS = 150;
@@ -142,8 +143,9 @@ function printHTML(bodyHTML: string, title: string, cutMarginHTML = CUT_MARGIN_H
  * Returns false when there is no DOM to print from (server render), so the
  * caller can fall through to another route instead of silently doing nothing.
  */
-export function printReceiptNode(node: HTMLElement | null, title = 'Receipt'): boolean {
+export async function printReceiptNode(node: HTMLElement | null, title = 'Receipt'): Promise<boolean> {
   if (typeof document === 'undefined' || !node) return false;
+  await waitForReceiptBarcodes(node);
   return printHTML(htmlWithCanvasImages(node), title);
 }
 
@@ -168,9 +170,10 @@ export function findOpenReceiptBarcodeNode(): HTMLElement | null {
  * short slip. Uses the label tear-bar gap because this is a reprint, not a
  * full receipt.
  */
-export function printOpenReceiptBarcode(invoiceNumber: string, title = 'Barcode'): boolean {
+export async function printOpenReceiptBarcode(invoiceNumber: string, title = 'Barcode'): Promise<boolean> {
   const barcode = findOpenReceiptBarcodeNode();
   if (!barcode) return false;
+  await waitForReceiptBarcodes(barcode);
   const number = escapeHtml(invoiceNumber);
   const body = `<div class="thermal-receipt"><div class="receipt-center"><div class="receipt-line">${number}</div>${htmlWithCanvasImages(barcode)}</div></div>`;
   return printHTML(body, title, LABEL_CUT_MARGIN_HTML);
