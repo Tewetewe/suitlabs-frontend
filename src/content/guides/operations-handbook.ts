@@ -11,6 +11,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     <a href="#branches">Two shops</a>
     <a href="#sheets">Spreadsheets</a>
     <a href="#devices">Devices</a>
+    <a href="#daily">Daily close</a>
     <a href="#close">Month close</a>
     <a href="#cadence">Who does what, when</a>
     <a href="#care">Watch out</a>
@@ -822,8 +823,60 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   </div>
 </section>
 
+<section id="daily">
+  <span class="eyebrow">10 — The daily close</span>
+  <h2>How Admin closes each shop each day</h2>
+  <p class="measure">At the end of each day, Admin opens <b>Admin → Daily Close</b> with one shop picked in the top bar. The page has one panel for each Pot, and a strip at the top shows the state of each Pot: a tick when it is checked, a cross when there is a difference, a circle when it is not checked yet. A close is a record. It locks nothing and posts nothing to the books.</p>
+
+  <h3>The steps</h3>
+  <ol class="steps">
+    <li><b>Settle each EDC first.</b><span>Settle the BCA EDC and the BNI EDC of the shop at closing time, every day at the same time. The slip then covers the same day as the close.</span></li>
+    <li><b>Read the Rentals to follow up.</b><span>Pickups not done and Rentals still out after their Return date. Tell Staff who to phone tomorrow.</span></li>
+    <li><b>Cash Drawer.</b><span>Record the cash deposit to the bank first, if there is one. Then count the drawer <b>without the tip bowl</b> and type the count. The first close of a shop also needs the cash that was in the drawer that morning.</span></li>
+    <li><b>Bank BCA and Bank BNI, EDC part.</b><span>Type the tips paid on this EDC, then the total on the settlement slip. "The slip should show" is the QRIS, debit, and card payments, plus the Transaction Fees the customers paid on top, plus the tips.</span></li>
+    <li><b>Bank BCA and Bank BNI, transfer part.</b><span>Open the mutasi of the bank. Tick each line when you find it, including the cash deposit. Both shops share the bank accounts, so the mutasi also shows the other shop's money: ignore it.</span></li>
+    <li><b>Bank (unassigned).</b><span>It shows only when a non-cash payment named no bank. Find the payment on either mutasi and tick it. Move it to the right bank later with a Pot Transfer.</span></li>
+    <li><b>Tips.</b><span>Count the tip bowl and type it. At the end of the month, mark the tips of the month as shared.</span></li>
+    <li><b>Close the day.</b><span>A difference in the cash or on a slip needs a note. You can close with lines not ticked yet. Closing the same day again replaces the count.</span></li>
+  </ol>
+
+  <h3>When something differs</h3>
+  <p class="measure">First count again or read the slip again: most differences are counting errors. Then compare the lines of that Pot on the page with the receipts, the slip, or the mutasi. When a record is wrong, correct the record: the page reads the books live, so the difference updates at once. When the money is really missing or extra, close with a note that says why.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:18%">Pot</th><th style="width:34%">What you see and the likely cause</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td><b>Cash Drawer</b> short</td><td>A cash deposit to the bank is not recorded</td><td>Record it in "Deposit cash to the bank".</td></tr>
+        <tr><td><b>Cash Drawer</b> short</td><td>An expense was paid from the drawer and not recorded</td><td>Record the Expense, paid in cash.</td></tr>
+        <tr><td><b>Cash Drawer</b> short</td><td>A Security Deposit was paid back in cash and not recorded</td><td>Record the refund on the Rental.</td></tr>
+        <tr><td><b>Cash Drawer</b> short</td><td>Wrong change was given</td><td>Nothing to correct. Write it in the note.</td></tr>
+        <tr><td><b>Cash Drawer</b> over</td><td>A customer paid and the payment is not recorded</td><td>Add the payment on the Booking or the Sale.</td></tr>
+        <tr><td><b>Cash Drawer</b> over</td><td>A tip went into the drawer</td><td>Move it to the tip bowl.</td></tr>
+        <tr><td><b>EDC slip</b> over</td><td>A tip on this EDC is not entered</td><td>Type it in "Tips on this EDC".</td></tr>
+        <tr><td><b>EDC slip</b> over</td><td>A card or QRIS payment is not recorded, or is recorded on the other bank</td><td>Add the payment. For the wrong bank, see the box below.</td></tr>
+        <tr><td><b>EDC slip</b> short</td><td>A payment was recorded as card but paid in cash</td><td>See the box below.</td></tr>
+        <tr><td><b>EDC slip</b> short</td><td>The EDC cancelled a charge that the system still has</td><td>See the box below.</td></tr>
+        <tr><td><b>EDC slip</b> either way</td><td>The slip settled at another time than the close, or a payment could take two fee rules (the page says so)</td><td>Settle at closing time. For a fee rule, ask the cashier which card they picked, then write it in the note.</td></tr>
+        <tr><td><b>Transfer</b> not on the mutasi</td><td>The transfer did not arrive, or went to the other bank</td><td>Ask the customer for the proof. Check the other bank.</td></tr>
+        <tr><td><b>Transfer</b> amount differs</td><td>The customer added a tip or paid short</td><td>Write it in the note.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="flag care">
+    <span class="flag-t">A Booking payment cannot be edited or voided</span>
+    <p>Staff can add a payment or cancel the whole Booking, nothing else. When a payment went to the wrong bank or the wrong method (cash or card), Admin records a Pot Transfer for the same amount, for example BNI → BCA or Cash Drawer → BCA. Each Pot then holds the right money on the books. The line still shows under its first Pot, so write the reason in the note. An Expense or a Pot Transfer entered wrong is voided and entered again; a Sale can be cancelled.</p>
+  </div>
+
+  <div class="flag care">
+    <span class="flag-t">When the cause stays unknown</span>
+    <p>Close the day with the difference and a clear note. The next close starts from the cash you counted, so a shortage does not carry into tomorrow. The history on the page keeps every difference, so a pattern by day or by person shows up.</p>
+  </div>
+</section>
+
 <section id="close">
-  <span class="eyebrow">10 — The monthly close</span>
+  <span class="eyebrow">11 — The monthly close</span>
   <h2>How a month gets shut</h2>
   <p class="measure">Most of it is automatic. Your job is the reconciliation in the middle, and the decision at the end.</p>
 
@@ -886,7 +939,8 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     <li><b>Post purchases and write-offs.</b><span>Anything bought for the shop, on Items or on Assets; anything scrapped or retired. Suits lost on rental are already off the books — the replacement sale did it — so check rather than re-post, or you will count the loss twice.</span></li>
     <li><b>Settle the liability side.</b><span>Payables paid, loan repayments, any dividend taken. A dividend is not an expense — record it as a dividend.</span></li>
     <li><b>Check the Google Sheets export.</b><span>The Financial Report page lists each monthly run. If one is <code>failed</code>, retry it there.</span></li>
-    <li><b>Reconcile cash on hand.</b><span>Count the drawer; pull the bank and EDC statements. Compare against Cash Drawer and Bank in the Balance Sheet. Investigate any gap <b>before</b> the next step, not after.</span></li>
+    <li><b>Reconcile cash on hand.</b><span>Every day of the month has a Daily Close, and every difference has a note. Pull the bank statements and compare against Cash Drawer and Bank in the Balance Sheet. Investigate any gap <b>before</b> the next step, not after.</span></li>
+    <li><b>Share the tips.</b><span>On Daily Close, mark the tips of the month as shared for each shop, after you pay Staff.</span></li>
     <li><b>Read the three reports, per shop and for the group.</b><span>P&amp;L, Balance Sheet, Cash Flow. If a number surprises you, find the event behind it now — that option disappears in a moment.</span></li>
     <li><b>Generate the Excel and file it.</b><span>Your durable copy, outside the system.</span></li>
     <li><b>Lock the month.</b><span>From the Financial Report page, with that month selected. Unlocking is possible but should be rare and deliberate — if you find yourself unlocking often, something upstream is broken.</span></li>
@@ -894,7 +948,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 </section>
 
 <section id="cadence">
-  <span class="eyebrow">11 — Responsibilities</span>
+  <span class="eyebrow">12 — Responsibilities</span>
   <h2>Who does what, and when</h2>
   <p class="measure">The rule of thumb: <b>Staff owns the day. Admin owns the month.</b> If an admin is fixing yesterday's counter work every morning, the floor routine has broken down — fix the routine, not the records.</p>
 
@@ -906,7 +960,8 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     <li>Run every transaction through the POS as it happens — no paper, no catching up later.</li>
     <li>ID photo on every hand-over; every return ticked on Return Check before <b>Complete return</b>.</li>
     <li>Record every expense the same day, with the correct payment method.</li>
-    <li>Count the drawer at close and report any difference that night, in writing.</li>
+    <li>Count the drawer at close, without the tip bowl, and report any difference that night, in writing.</li>
+    <li>Settle the BCA and BNI EDC at closing time and keep the slips for Admin.</li>
   </ul>
 
   <h3><span class="chip stf">Staff</span> <span class="chip wk">Weekly</span></h3>
@@ -930,7 +985,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     <li>Dashboard: today's revenue, active rentals, low stock, maintenance count.</li>
     <li>Return Check: the <b>Problem</b> and <b>Overdue</b> counts. A late rental more than a day or two old needs a decision, not just a phone call.</li>
     <li>Yesterday's expenses: sensible categories, sensible amounts, correct methods.</li>
-    <li>Any drawer discrepancy reported by the floor. Same day, while people still remember.</li>
+    <li><b>Daily Close</b> for each shop: the drawer count, both EDC slips, the transfer lines on the mutasi, and the tip bowl. Same day, while people still remember.</li>
   </ul>
 
   <h3><span class="chip adm">Admin</span> <span class="chip wk">Weekly</span></h3>
@@ -944,7 +999,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <h3><span class="chip adm">Admin</span> <span class="chip mo">Monthly</span></h3>
   <ul class="plain">
-    <li>Run the nine-step close above, in order, and lock the month.</li>
+    <li>Run the ten-step close above, in order, and lock the month.</li>
     <li>Compare the two shops side by side: revenue, COGS, expenses, net profit.</li>
     <li>Review the price list and packages against what actually sold.</li>
     <li>Review user accounts — anyone left, anyone changed shops?</li>
@@ -974,7 +1029,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 </section>
 
 <section id="care">
-  <span class="eyebrow">12 — Concerns</span>
+  <span class="eyebrow">13 — Concerns</span>
   <h2>What actually goes wrong</h2>
 
   <div class="flag stop">
@@ -1032,7 +1087,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 </section>
 
 <section id="onboard">
-  <span class="eyebrow">13 — Bringing someone in</span>
+  <span class="eyebrow">14 — Bringing someone in</span>
   <h2>The onboarding plan</h2>
 
   <div class="cols two">
@@ -1048,7 +1103,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <h3>Onboarding an admin <span class="chip adm">Admin</span></h3>
       <p><b>First</b> — they must already understand the floor. Give them the Cashier Floor Guide too, and a shift on the counter.</p>
       <p><b>Then</b> — sections 6 to 8 of this handbook: the journal-entry pipeline, the branch model, the close.</p>
-      <p><b>First month end</b> — run the nine-step close together, on a real month. Let them read the reports and find the events behind the numbers.</p>
+      <p><b>First month end</b> — run the ten-step close together, on a real month. Let them read the reports and find the events behind the numbers.</p>
       <p><b>Second month end</b> — they run it; you watch. They press Lock.</p>
       <p><b>Not yet</b> — hold back the tax pack and opening balance until they have closed two months cleanly. Both are hard to undo.</p>
     </div>

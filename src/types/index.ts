@@ -89,6 +89,133 @@ export interface PotTransfer {
   created_at: string;
 }
 
+// Daily Close (align with backend entity/daily_close.go and
+// usecase/daily_close_usecase.go). A record of the end-of-day cash count of one
+// shop; it locks nothing and posts no Journal Entry.
+export type StartCashFrom = 'last_close' | 'books' | 'admin';
+
+export interface DailyClose {
+  id: string;
+  branch_id: string;
+  close_date: string;
+  from_date: string;
+  start_cash: number;
+  start_cash_from: StartCashFrom | '';
+  cash_in: number;
+  cash_out: number;
+  expected_cash: number;
+  counted_cash: number;
+  difference: number;
+  bca_in: number;
+  bca_out: number;
+  bni_in: number;
+  bni_out: number;
+  unassigned_in: number;
+  unassigned_out: number;
+  edc_bca_fees: number;
+  edc_bni_fees: number;
+  edc_bca_expected: number;
+  edc_bca_slip?: number | null;
+  edc_bni_expected: number;
+  edc_bni_slip?: number | null;
+  checked_lines: string[];
+  tips_cash: number;
+  tips_bca: number;
+  tips_bni: number;
+  note: string;
+  closed_by: string;
+  closed_by_name?: string;
+  closed_at: string;
+}
+
+// Tips of one shop for one month, shared with Staff at the end of the month.
+export interface TipShare {
+  id: string;
+  branch_id: string;
+  month: string;
+  amount: number;
+  note: string;
+  shared_by: string;
+  shared_by_name?: string;
+  shared_at: string;
+}
+
+export interface TipMonth {
+  month: string; // YYYY-MM
+  total: number;
+  share?: TipShare;
+  can_share: boolean;
+  changed_since_share: boolean;
+}
+
+export interface DailyClosePot {
+  pot: Pot;
+  in: number;
+  out: number;
+  net: number;
+  balance: number;
+  /** QRIS, debit, and card money into a bank Pot; checked by the EDC slip. */
+  edc_in: number;
+  /** Transaction Fees paid on top of the EDC payments; the slip shows them. */
+  edc_fees: number;
+  /** EDC payments that two or more fee rules could price. */
+  fees_uncertain: number;
+  /** Other bank lines, ticked on the mutasi. */
+  to_check: number;
+  checked: number;
+}
+
+export type DailyCloseLineGroup = 'cash' | 'edc' | 'transfer';
+
+export interface DailyCloseLine {
+  key: string;
+  group: DailyCloseLineGroup;
+  checked: boolean;
+  fee?: number;
+  fee_uncertain?: boolean;
+  entry_id: string;
+  occurred_on: string;
+  source: string;
+  source_id?: string;
+  memo: string;
+  account: string;
+  method?: string;
+  pot: Pot;
+  in: number;
+  out: number;
+  created_by_name?: string;
+  created_at: string;
+}
+
+export interface DailyCloseRental {
+  rental_id: string;
+  invoice_number?: string;
+  customer_name: string;
+  status: string;
+  date: string;
+}
+
+export interface DailyCloseSummary {
+  branch_id: string;
+  date: string;
+  from_date: string;
+  is_today: boolean;
+  last_close?: DailyClose;
+  start_cash: number;
+  start_cash_from: StartCashFrom;
+  expected_cash: number;
+  tip_months: TipMonth[];
+  pots: DailyClosePot[];
+  sources: { source: string; in: number; out: number }[];
+  methods: { method: string; in: number; out: number }[];
+  lines: DailyCloseLine[];
+  open_returns: DailyCloseRental[];
+  open_pickups: DailyCloseRental[];
+  close?: DailyClose;
+  changed_since_close: boolean;
+  can_close: boolean;
+}
+
 // Transaction Fee Rules (align with backend entity/transaction_fee.go)
 export type FeeMethod = 'qris' | 'debit' | 'cc';
 
