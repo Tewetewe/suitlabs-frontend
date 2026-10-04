@@ -294,7 +294,7 @@ export type PosBookingOpts = {
   itemName?: string;
   rentalDate?: string;
   returnDate?: string;
-  payMethod?: 'cash' | 'qris' | 'transfer';
+  payMethod?: 'cash' | 'qris' | 'transfer' | 'debit' | 'cc';
   /** The bank a non-cash payment goes to. The cashier must pick one. */
   pot?: 'bca' | 'bni';
   discount?: string;
@@ -366,10 +366,8 @@ export async function createPosBooking(
   } else {
     await page.getByTestId('pos-pay-dp').click();
   }
-  if (opts.payMethod === 'qris') await page.getByTestId('pos-pay-qris').click();
-  else if (opts.payMethod === 'transfer') await page.getByTestId('pos-pay-transfer').click();
-  else if (opts.payMethod === 'cash') await page.getByTestId('pos-pay-cash').click();
-  if (opts.payMethod === 'qris' || opts.payMethod === 'transfer') {
+  if (opts.payMethod) await page.getByTestId(`pos-pay-${opts.payMethod}`).click();
+  if (opts.payMethod && opts.payMethod !== 'cash') {
     await page.getByTestId(`pot-${opts.pot ?? 'bca'}`).click();
   }
   await page.getByTestId('pos-charge').click();
