@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -361,13 +362,11 @@ export default function CustomersPage() {
               placeholder="john.doe@example.com"
             />
 
-            <Input
+            <PhoneInput
               label="Phone"
-              type="tel"
               required
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="08xx-xxxx-xxxx"
+              onChange={(phone) => setFormData({ ...formData, phone })}
             />
 
             <Select

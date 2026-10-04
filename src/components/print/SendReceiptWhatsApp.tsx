@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useToast } from '@/contexts/ToastContext';
 import { apiClient } from '@/lib/api';
@@ -116,12 +116,10 @@ export function SendReceiptWhatsApp({ target }: { target: ReceiptWhatsAppTarget 
           </div>
         }
       >
-        <Input
+        <PhoneInput
           label="WhatsApp number"
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          inputMode="tel"
-          placeholder="0812…"
+          onChange={setPhone}
           helperText={
             target.customerPhone
               ? 'The customer phone is filled in. Change it only if the customer asks.'
