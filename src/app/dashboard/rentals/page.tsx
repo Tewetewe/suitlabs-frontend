@@ -31,6 +31,7 @@ import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { useToast } from '@/contexts/ToastContext';
 import { SALE_PAYMENT_METHOD_OPTIONS, DEPOSIT_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
+import { waDeliveryLabel } from '@/lib/wa-delivery';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
@@ -95,7 +96,12 @@ export default function RentalsPage() {
     if (!depositEnabled || rental.status !== 'pending') return null;
     if (rental.booking?.security_deposit_waived) return { label: 'No deposit', variant: 'default' };
     if (rental.agreement_accepted_at) return { label: 'Agreement accepted', variant: 'success' };
-    if (rental.agreement_sent_at) return { label: 'Agreement sent', variant: 'warning' };
+    if (rental.agreement_sent_at) {
+      const delivery = waDeliveryLabel(rental.agreement_delivery_status);
+      if (delivery?.failed) return { label: 'Agreement not delivered', variant: 'danger' };
+      if (delivery?.queued) return { label: 'Agreement in Wablas queue', variant: 'warning' };
+      return { label: 'Agreement sent', variant: 'warning' };
+    }
     return { label: 'Needs agreement', variant: 'danger' };
   };
 

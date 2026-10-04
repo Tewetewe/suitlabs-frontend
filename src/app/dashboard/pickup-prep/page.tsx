@@ -18,6 +18,7 @@ import { useDepositSettings } from '@/hooks/useDepositSettings';
 import apiClient from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
+import { waDeliveryLabel } from '@/lib/wa-delivery';
 import type { PickupPrep, PickupPrepDay, PickupPrepItem, PickupPrepItemCheck, PickupPrepProblem, PickupPrepStatus } from '@/types';
 
 const BarcodeScanner = dynamic(() => import('@/components/ui/BarcodeScanner'), { ssr: false });
@@ -395,6 +396,7 @@ function RentalChecklist({
 }) {
   const { enabled: depositEnabled } = useDepositSettings();
   const agreementAccepted = Boolean(rental.agreement_accepted_at);
+  const agreementDelivery = rental.agreement_sent_at ? waDeliveryLabel(rental.agreement_delivery_status) : null;
 
   return (
     <Card data-testid="pickup-prep-rental">
@@ -526,6 +528,7 @@ function RentalChecklist({
                   <span className="text-amber-700">
                     {rental.agreement_sent_at ? 'Agreement sent, not accepted' : 'Agreement not sent'}
                   </span>
+                  {agreementDelivery && <Badge variant={agreementDelivery.variant}>{agreementDelivery.label}</Badge>}
                   <Button
                     size="sm"
                     variant="secondary"

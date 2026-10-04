@@ -51,10 +51,49 @@ export interface WAReminder {
   trigger: WAReminderTrigger;
   wablas_id?: string;
   error_summary?: string;
+  /** Newest WhatsApp status from Wablas. Empty until the first status arrives. */
+  delivery_status?: string;
+  delivery_note?: string;
+  delivery_updated_at?: string;
   triggered_by?: string;
   sent_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+/** The feature that sent a WhatsApp message (backend entity/wa_message_log.go). */
+export type WAMessageKind =
+  | 'reminder_pickup'
+  | 'reminder_return'
+  | 'receipt_booking'
+  | 'receipt_rental'
+  | 'receipt_sale'
+  | 'deposit_agreement'
+  | 'other';
+
+/** The kind groups that the message list filters on. */
+export type WAMessageKindFilter = 'reminder' | 'receipt' | 'deposit_agreement' | 'other';
+
+/** One WhatsApp message the system gave to Wablas. */
+export interface WAMessageLog {
+  id: string;
+  kind: WAMessageKind;
+  ref_id?: string;
+  branch_id?: string;
+  recipient_name?: string;
+  phone: string;
+  message: string;
+  image_url?: string;
+  /** sent = Wablas queued it; failed = Wablas queued nothing. */
+  status: 'sent' | 'failed';
+  wablas_id?: string;
+  error_summary?: string;
+  /** Newest WhatsApp status from Wablas. Empty until the first status arrives. */
+  delivery_status?: string;
+  delivery_note?: string;
+  delivery_updated_at?: string;
+  sent_by?: string;
+  created_at: string;
 }
 
 // Pots (align with backend entity/pot.go): where the shop's money sits.
@@ -283,6 +322,9 @@ export interface PickupPrep {
   addons_ready: boolean;
   deposit_required: boolean;
   agreement_sent_at?: string;
+  /** WhatsApp status of the newest agreement message. */
+  agreement_delivery_status?: string;
+  agreement_delivery_note?: string;
   agreement_accepted_at?: string;
   remaining_amount: number;
   warning?: string;
@@ -923,6 +965,9 @@ export interface Rental {
   deposit_refund_proof_url?: string;
   agreement_token?: string;
   agreement_sent_at?: string;
+  /** WhatsApp status of the newest agreement message. */
+  agreement_delivery_status?: string;
+  agreement_delivery_note?: string;
   agreement_accepted_at?: string;
   notes?: string;
   created_by: string; // User who created the rental
@@ -1674,6 +1719,10 @@ export interface WAReceipt {
   status: 'sent' | 'failed';
   wablas_id?: string;
   error_summary?: string;
+  /** Newest WhatsApp status from Wablas. Empty until the first status arrives. */
+  delivery_status?: string;
+  delivery_note?: string;
+  delivery_updated_at?: string;
   sent_by: string;
   created_at: string;
 }

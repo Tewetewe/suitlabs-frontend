@@ -17,6 +17,7 @@ import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { DEPOSIT_PAYMENT_METHOD_OPTIONS, SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { isExistingCustomerGuarantee } from '@/lib/select-options';
+import { waDeliveryLabel } from '@/lib/wa-delivery';
 import { PickupPrep, Rental } from '@/types';
 
 function rentalsFromUserResponse(payload: unknown): Rental[] {
@@ -82,6 +83,7 @@ export function PickupRentalModal({
   );
 
   const agreementAccepted = Boolean(rental?.agreement_accepted_at);
+  const agreementDelivery = rental?.agreement_sent_at ? waDeliveryLabel(rental.agreement_delivery_status) : null;
   const needsDeposit = depositEnabled;
   const remainingAmount = rental?.booking?.remaining_amount || 0;
   const needsRemaining = remainingAmount > 0.009;
@@ -375,6 +377,16 @@ export function PickupRentalModal({
                           ? 'Agreement sent. Waiting for the customer to accept before pickup.'
                           : 'Send the deposit agreement on WhatsApp. Pickup is blocked until they accept.'}
                       </p>
+                      {agreementDelivery?.failed && (
+                        <p className="text-sm text-red-700">
+                          WhatsApp did not deliver the agreement{rental.agreement_delivery_note ? ` (${rental.agreement_delivery_note})` : ''}. Check the number and resend.
+                        </p>
+                      )}
+                      {agreementDelivery?.queued && (
+                        <p className="text-sm text-amber-700">
+                          The agreement still waits in the Wablas queue. The customer has not got it yet.
+                        </p>
+                      )}
                       <Button
                         variant="secondary"
                         size="sm"

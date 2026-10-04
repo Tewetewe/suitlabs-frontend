@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/DataDisplay';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import apiClient from '@/lib/api';
+import { waDeliveryLabel } from '@/lib/wa-delivery';
+import { WAMessageList } from '@/components/whatsapp/WAMessageList';
 import type { WAReminder, WAReminderRunResult, WAReminderStatusInfo } from '@/types';
 
 function statusVariant(status: WAReminder['status']): 'success' | 'danger' | 'warning' | 'default' | 'info' {
@@ -117,7 +119,7 @@ export default function WARemindersPage() {
   return (
     <PageShell
       title="WhatsApp Reminders"
-      subtitle="Pickup and return reminders via Wablas. Auto-sends at 10:00 (shop timezone), gradually between messages."
+      subtitle="Every WhatsApp message the system sends through Wablas. Pickup and return reminders auto-send at 10:00 (shop timezone)."
     >
       <div className="space-y-4">
         <Card>
@@ -163,9 +165,11 @@ export default function WARemindersPage() {
           </CardContent>
         </Card>
 
+        <WAMessageList />
+
         <Card>
           <CardHeader>
-            <CardTitle size="lg">Recent sends</CardTitle>
+            <CardTitle size="lg">Reminder runs</CardTitle>
           </CardHeader>
           <CardContent>
             {reminders.length === 0 ? (
@@ -175,33 +179,40 @@ export default function WARemindersPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {reminders.map((row) => (
-                  <div
-                    key={row.id}
-                    className="flex flex-col gap-2 rounded-xl ring-1 ring-black/5 bg-white/50 px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-slate-900 capitalize">{row.reminder_type}</span>
-                        <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
-                        <Badge variant="default">{row.language.toUpperCase()}</Badge>
-                        <span className="text-xs text-slate-500">{row.trigger}</span>
+                {reminders.map((row) => {
+                  const delivery = waDeliveryLabel(row.delivery_status);
+                  return (
+                    <div
+                      key={row.id}
+                      className="flex flex-col gap-2 rounded-xl ring-1 ring-black/5 bg-white/50 px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-slate-900 capitalize">{row.reminder_type}</span>
+                          <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
+                          {delivery && <Badge variant={delivery.variant}>{delivery.label}</Badge>}
+                          <Badge variant="default">{row.language.toUpperCase()}</Badge>
+                          <span className="text-xs text-slate-500">{row.trigger}</span>
+                        </div>
+                        <div className="text-sm text-slate-600">
+                          {row.reminder_date} · {row.phone || 'no phone'}
+                        </div>
+                        {row.error_summary && (
+                          <div className="text-xs text-amber-700">{row.error_summary}</div>
+                        )}
+                        {delivery?.queued && row.delivery_note && (
+                          <div className="text-xs text-amber-700">{row.delivery_note}</div>
+                        )}
+                        {row.message && (
+                          <pre className="whitespace-pre-wrap text-xs text-slate-500 max-h-24 overflow-auto">{row.message}</pre>
+                        )}
                       </div>
-                      <div className="text-sm text-slate-600">
-                        {row.reminder_date} · {row.phone || 'no phone'}
+                      <div className="shrink-0 text-xs text-slate-400">
+                        {row.sent_at ? new Date(row.sent_at).toLocaleString() : new Date(row.created_at).toLocaleString()}
                       </div>
-                      {row.error_summary && (
-                        <div className="text-xs text-amber-700">{row.error_summary}</div>
-                      )}
-                      {row.message && (
-                        <pre className="whitespace-pre-wrap text-xs text-slate-500 max-h-24 overflow-auto">{row.message}</pre>
-                      )}
                     </div>
-                    <div className="shrink-0 text-xs text-slate-400">
-                      {row.sent_at ? new Date(row.sent_at).toLocaleString() : new Date(row.created_at).toLocaleString()}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

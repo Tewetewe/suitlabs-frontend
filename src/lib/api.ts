@@ -79,6 +79,8 @@ import {
   WAReminder,
   WAReminderStatusInfo,
   WAReminderRunResult,
+  WAMessageLog,
+  WAMessageKindFilter,
   DepositAgreementView,
   PaymentProof,
   PaymentProofKind,
@@ -478,6 +480,15 @@ class APIClient {
       params: { limit },
     });
     return response.data.data?.reminders || [];
+  }
+
+  async getWAMessages(
+    filter: { kind?: WAMessageKindFilter; status?: 'sent' | 'failed'; limit?: number } = {},
+  ): Promise<WAMessageLog[]> {
+    const response = await this.client.get<APIResponse<{ messages: WAMessageLog[] }>>('/api/v1/admin/wa-messages', {
+      params: { limit: filter.limit ?? 50, kind: filter.kind || undefined, status: filter.status || undefined },
+    });
+    return response.data.data?.messages || [];
   }
 
   async sendWARemindersNow(): Promise<WAReminderRunResult> {
