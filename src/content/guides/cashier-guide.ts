@@ -582,7 +582,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
   <div class="flag stop">
     <span class="flag-t">One reminder is enough</span>
-    <p>At <b>10:00</b> the system sends a reminder for every Pickup and every return due that day. After 10:00, send by hand only when the card reads <b>Not reminded</b> or <b>Last send failed</b>. A late rental from an earlier day gets no automatic reminder, so its card reads Not reminded until you send one. A card that reads <b>WhatsApp sent</b> is done. The system makes you wait between two sends to the same customer and caps the sends per day.</p>
+    <p>At <b>10:00</b> the system sends a reminder for every Pickup and every return due that day. After 10:00, send by hand only when the card reads <b>Not reminded</b> or <b>Last send failed</b>. A late rental from an earlier day gets no automatic reminder, so its card reads Not reminded until you send one. A card that reads <b>WhatsApp sent</b> is done. Two sends to the same customer need 15 seconds between them, so a double tap does not send twice. There is no limit per day.</p>
   </div>
   <div class="flag care">
     <span class="flag-t">A missing Item is a Sale, not a damage charge</span>

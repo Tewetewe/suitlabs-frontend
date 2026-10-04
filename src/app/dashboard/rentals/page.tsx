@@ -151,7 +151,7 @@ export default function RentalsPage() {
       success(`${kind} reminder sent`, `WhatsApp to ${reminder.phone} (${reminder.language.toUpperCase()})`);
     } catch (error) {
       console.error('Failed to send WA reminder:', error);
-      // The backend explains a cooldown or a daily cap in its message, so show
+      // The backend explains the 15-second wait in its message, so show
       // that instead of the status code.
       toastError('Could not send WhatsApp reminder', apiErrorMessage(error, 'Check phone and Wablas.'));
     } finally {
