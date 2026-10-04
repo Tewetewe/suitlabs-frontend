@@ -29,7 +29,7 @@ test.describe('Staff RBAC', () => {
     await goTo(page, 'items');
     await expect(async () => {
       await page.getByLabel('Item actions').first().click();
-      await page.getByRole('button', { name: 'Edit' }).click({ timeout: 2500 });
+      await page.getByRole('menuitem', { name: 'Edit' }).click({ timeout: 2500 });
     }).toPass({ timeout: 12_000 });
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByText('Buying Price')).toHaveCount(0);
@@ -52,7 +52,7 @@ test.describe('Admin RBAC', () => {
     await goTo(page, 'items');
     await expect(async () => {
       await page.getByLabel('Item actions').first().click();
-      await page.getByRole('button', { name: 'Edit' }).click({ timeout: 2500 });
+      await page.getByRole('menuitem', { name: 'Edit' }).click({ timeout: 2500 });
     }).toPass({ timeout: 12_000 });
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByText('Buying Price')).toBeVisible();

@@ -26,7 +26,7 @@ test.describe('Public deposit agreement', () => {
   test('renders incomplete item data and updates after acceptance', async ({ page }) => {
     let accepted = false;
 
-    await page.route('**/api/v1/public/deposit-agreements/agreement-e2e-token*', async (route) => {
+    await page.route('**/api/v1/public/deposit-agreements/agreement-e2e-token**', async (route) => {
       if (route.request().method() === 'POST' && route.request().url().endsWith('/accept')) {
         accepted = true;
         await route.fulfill({
@@ -55,7 +55,7 @@ test.describe('Public deposit agreement', () => {
     await page.getByRole('button', { name: 'I have read and accept' }).click();
 
     await expect.poll(() => accepted).toBe(true);
-    await expect(page.getByText('Accepted. You can proceed to pickup at the shop.')).toBeVisible();
+    await expect(page.getByText('Accepted. Your rental may be collected at the shop.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'I have read and accept' })).toHaveCount(0);
   });
 });

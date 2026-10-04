@@ -48,7 +48,7 @@ test.describe('Admin shops', () => {
   test('E2E-24 item availability check dialog', async ({ page }) => {
     await goTo(page, 'items');
     await page.getByLabel('Item actions').first().click();
-    await page.getByRole('button', { name: 'Check dates' }).click();
+    await page.getByRole('menuitem', { name: 'Check dates' }).click();
     await expect(page.getByRole('heading', { name: 'Check availability' })).toBeVisible();
     await page.getByLabel('Rental date').fill(localISODate(0));
     await page.getByLabel('Return date').fill(localISODate(1));
@@ -64,7 +64,7 @@ test.describe('Admin shops', () => {
     await page.getByLabel('First name').fill(customer.firstName);
     await page.getByLabel('Last name').fill(customer.lastName);
     await page.getByLabel('Email').fill(customer.email);
-    await page.getByLabel('Phone').fill(customer.phone);
+    await page.getByRole('textbox', { name: 'Phone' }).fill(customer.phone);
     await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
     await expect(page.getByText(/Customer Created/i)).toBeVisible();
 
@@ -80,8 +80,12 @@ test.describe('Admin shops', () => {
     await switchShop(page, 'Nusa Dua');
     await openCashier(page);
     await page.getByTestId('pos-mode-sale').click();
-    if (await page.getByTestId('pos-item').count()) {
-      await page.getByTestId('pos-item').first().click();
+    // Wait for the Sale list to settle. A rental-only Item shows greyed out
+    // (opacity-50) for a moment and cannot be sold.
+    const sellable = page.locator('[data-testid="pos-item"]:not(.opacity-50)');
+    await expect(sellable.first().or(page.getByText('No items match'))).toBeVisible();
+    if (await sellable.count()) {
+      await sellable.first().click();
       await page.getByTestId('pos-pay-cash').click();
       await page.getByTestId('pos-charge').click();
       await closeDialog(page);
@@ -89,7 +93,7 @@ test.describe('Admin shops', () => {
     }
     await switchShop(page, 'Jimbaran');
     await goTo(page, 'financial-report');
-    await expect(page.getByText('This report is Jimbaran only')).toBeVisible();
+    await expect(page.getByText(/Jimbaran only\./)).toBeVisible();
   });
 
   test('E2E-28 All branches is a group view; books stay per shop', async ({ page }) => {
@@ -109,7 +113,7 @@ test.describe('Admin shops', () => {
     await page.getByLabel('First name').fill('E2e');
     await page.getByLabel('Last name').fill(`Staff${stamp}`);
     await page.getByLabel('Email').fill(email);
-    await page.getByLabel('Phone').fill(`08${Date.now().toString().slice(-10)}`);
+    await page.getByRole('textbox', { name: 'Phone' }).fill(`08${Date.now().toString().slice(-10)}`);
     await page.getByLabel('Password').fill('staff12345');
     await chooseSelect(page, 'Role', 'Staff');
     await expect(page.getByRole('dialog').getByRole('radio', { name: 'Jimbaran' })).toBeVisible();
@@ -142,6 +146,6 @@ test.describe('Staff shop scope', () => {
     await chooseSelect(page, 'Shop', 'Nusa Dua');
     await expect(page.getByText('Nusa Dua').first()).toBeVisible({ timeout: 20_000 });
     await page.getByLabel('Item actions').first().click();
-    await expect(page.getByRole('button', { name: 'Transfer' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Transfer' })).toBeVisible();
   });
 });
