@@ -189,7 +189,7 @@ export function CashierPOS() {
   const [discount, setDiscount] = useState('');
   const [notes, setNotes] = useState('');
   const [guarantee, setGuarantee] = useState('KTP');
-  const [takeDeposit, setTakeDeposit] = useState(true);
+  const [takeDeposit, setTakeDeposit] = useState(false);
   const { enabled: depositEnabled } = useDepositSettings();
   const [occasion, setOccasion] = useState<BookingInstitution>('wedding');
   const [submitting, setSubmitting] = useState(false);
@@ -425,7 +425,7 @@ export function CashierPOS() {
     setFeeRuleId('');
     setPot('');
     setGuarantee('KTP');
-    setTakeDeposit(true);
+    setTakeDeposit(false);
     setCartOpen(false);
     setDone(null);
     setInvoiceData(null);
