@@ -18,11 +18,10 @@ function applyUserBranchStorage(user: User | null) {
     }
     // Admins can open any shop, not only assigned ones. Keep the saved
     // selection across refresh; BranchContext validates it against the live list.
+    // With nothing saved, BranchContext opens the default shop, Jimbaran.
     if (stored) {
       persistBranchScope(stored, stored);
-      return;
     }
-    persistBranchScope(ALL_BRANCHES_ID, assigned[0]?.id ?? undefined);
     return;
   }
 
@@ -81,7 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     apiClient.clearToken();
     localStorage.removeItem('auth_token');
-    persistBranchScope(null, null);
+    // The shop stays saved in this browser, so the next login opens the same
+    // shop. BranchContext checks it against what that user may open.
     setUser(null);
   };
 

@@ -2,6 +2,17 @@ export const BRANCH_STORAGE_KEY = 'suitlabs_branch_id';
 export const BRANCH_WRITE_STORAGE_KEY = 'suitlabs_write_branch_id';
 export const ALL_BRANCHES_ID = '__all__';
 
+/**
+ * The shop a browser opens on before anyone picks one: Jimbaran, the first
+ * shop, then the first in the list. Once someone picks a shop, the browser
+ * keeps that one (persistBranchScope), across reloads and logins.
+ */
+export const DEFAULT_BRANCH_CODE = 'jimbaran';
+
+export function defaultBranch<T extends { code?: string }>(rows: T[]): T | undefined {
+  return rows.find((branch) => (branch.code || '').trim().toLowerCase() === DEFAULT_BRANCH_CODE) ?? rows[0];
+}
+
 export function readStoredBranchId(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(BRANCH_STORAGE_KEY);
