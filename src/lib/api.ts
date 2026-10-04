@@ -25,6 +25,9 @@ import {
   TransactionFeeRuleInput,
   PotBalances,
   PotTransfer,
+  DailyClose,
+  DailyCloseSummary,
+  TipMonth,
   Category,
   ItemFacets,
   PackagePricing,
@@ -968,6 +971,43 @@ class APIClient {
       input,
     );
     return response.data.data?.transfers || [];
+  }
+
+  // Daily Close: Admin counts the Cash Drawer of the shop in the header at the
+  // end of a day. It locks nothing.
+  async getDailyClose(date?: string): Promise<DailyCloseSummary> {
+    const response = await this.client.get<APIResponse<DailyCloseSummary>>(
+      `/api/v1/admin/daily-close${date ? `?date=${date}` : ''}`,
+    );
+    return response.data.data!;
+  }
+
+  async closeDay(input: {
+    date?: string;
+    counted_cash: number;
+    start_cash?: number;
+    tips_cash?: number;
+    tips_bca?: number;
+    tips_bni?: number;
+    note?: string;
+  }): Promise<DailyCloseSummary> {
+    const response = await this.client.post<APIResponse<DailyCloseSummary>>('/api/v1/admin/daily-close', input);
+    return response.data.data!;
+  }
+
+  async shareTips(input: { month: string; note?: string }): Promise<TipMonth> {
+    const response = await this.client.post<APIResponse<TipMonth>>('/api/v1/admin/daily-close/tips/share', input);
+    return response.data.data!;
+  }
+
+  async getDailyCloses(startDate?: string, endDate?: string): Promise<DailyClose[]> {
+    const search = new URLSearchParams();
+    if (startDate) search.set('start_date', startDate);
+    if (endDate) search.set('end_date', endDate);
+    const response = await this.client.get<APIResponse<{ closes: DailyClose[] }>>(
+      `/api/v1/admin/daily-closes${search.toString() ? `?${search}` : ''}`,
+    );
+    return response.data.data?.closes || [];
   }
 
   // Transaction Fee Rules. Staff gets the active rules; Admin may ask for all.

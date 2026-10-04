@@ -38,6 +38,7 @@ import {
   PackageCheck,
   Percent,
   ArrowLeftRight,
+  CalendarCheck,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CashierChromeProvider, useCashierChrome } from '@/components/cashier/CashierChromeContext';
@@ -86,6 +87,7 @@ const navigationSections: NavigationSection[] = [
   {
     title: 'Admin',
     items: [
+      { name: 'Daily Close', href: '/dashboard/admin/daily-close', icon: CalendarCheck, roles: ['admin'] },
       { name: 'Bulk Input Sync', href: '/dashboard/admin/bulk-input-sync', icon: FileSpreadsheet, roles: ['admin'] },
       { name: 'WA Reminders', href: '/dashboard/admin/wa-reminders', icon: MessageCircle, roles: ['admin'] },
       { name: 'Transaction Fees', href: '/dashboard/admin/transaction-fees', icon: Percent, roles: ['admin'] },
