@@ -29,6 +29,7 @@ import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { TRANSACTION_FEE_LABEL, isQrisMethod, transactionFee } from '@/lib/transaction-fee';
 import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
+import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useToast } from '@/contexts/ToastContext';
@@ -189,6 +190,7 @@ export function CashierPOS() {
   const [notes, setNotes] = useState('');
   const [guarantee, setGuarantee] = useState('KTP');
   const [takeDeposit, setTakeDeposit] = useState(true);
+  const { enabled: depositEnabled } = useDepositSettings();
   const [occasion, setOccasion] = useState<BookingInstitution>('wedding');
   const [submitting, setSubmitting] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -552,7 +554,7 @@ export function CashierPOS() {
           booking_date: new Date(rentalDate).toISOString(),
           appointment_date: returnDate ? new Date(returnDate).toISOString() : undefined,
           booking_guarantee: guarantee,
-          security_deposit_waived: !takeDeposit,
+          security_deposit_waived: depositEnabled ? !takeDeposit : undefined,
           institution: occasion,
           notes,
           status: paidAmount > 0 ? 'confirmed' : 'pending',
@@ -800,10 +802,12 @@ export function CashierPOS() {
                 </Chip>
               ))}
             </div>
-            <label className="mt-2 flex min-h-11 items-center gap-2 text-sm text-slate-600">
-              <input type="checkbox" checked={takeDeposit} onChange={(e) => setTakeDeposit(e.target.checked)} />
-              Take security deposit at Pickup
-            </label>
+            {depositEnabled && (
+              <label className="mt-2 flex min-h-11 items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" checked={takeDeposit} onChange={(e) => setTakeDeposit(e.target.checked)} />
+                Take security deposit at Pickup
+              </label>
+            )}
           </div>
         )}
 
@@ -987,17 +991,19 @@ export function CashierPOS() {
                     suppressHydrationWarning
                   />
                 </div>
-                <div
-                  className="flex h-11 shrink-0 items-center gap-1.5 rounded-2xl glass-control px-3 text-sm text-slate-700"
-                  title="Security deposits released today"
-                  data-testid="pos-deposit-releases-today"
-                >
-                  <HandCoins className="h-4 w-4 text-teal-600" />
-                  <span className="tabular-nums font-semibold text-slate-900">
-                    {todayDepositReleases === null ? '—' : todayDepositReleases}
-                  </span>
-                  <span className="hidden text-xs text-slate-500 xl:inline">releases today</span>
-                </div>
+                {depositEnabled && (
+                  <div
+                    className="flex h-11 shrink-0 items-center gap-1.5 rounded-2xl glass-control px-3 text-sm text-slate-700"
+                    title="Security deposits released today"
+                    data-testid="pos-deposit-releases-today"
+                  >
+                    <HandCoins className="h-4 w-4 text-teal-600" />
+                    <span className="tabular-nums font-semibold text-slate-900">
+                      {todayDepositReleases === null ? '—' : todayDepositReleases}
+                    </span>
+                    <span className="hidden text-xs text-slate-500 xl:inline">releases today</span>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setScannerOpen(true)}
@@ -1011,7 +1017,7 @@ export function CashierPOS() {
             )}
           </div>
 
-          {isPhone && todayDepositReleases !== null && (
+          {isPhone && depositEnabled && todayDepositReleases !== null && (
             <div
               className="flex items-center gap-1.5 text-xs text-slate-600"
               data-testid="pos-deposit-releases-today"

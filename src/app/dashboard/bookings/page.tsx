@@ -19,6 +19,7 @@ import { formatCurrency } from '@/lib/currency';
 import { discountAmountFor, discountOptionLabel } from '@/lib/discount';
 import { TRANSACTION_FEE_LABEL, transactionFee } from '@/lib/transaction-fee';
 import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
+import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { formatDateShort } from '@/lib/date';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
@@ -94,6 +95,7 @@ function bookingRentalCaption(booking: Booking) {
 
 export default function BookingsPage() {
   const { user } = useAuth();
+  const { enabled: depositEnabled } = useDepositSettings();
   const { warning, success, error: toastError } = useToast();
   const [filters, setFilters] = useState<BookingFilters>({});
   const [searchInput, setSearchInput] = useState('');
@@ -363,7 +365,7 @@ export default function BookingsPage() {
         booking_date: new Date(bookingForm.booking_date).toISOString(),
         appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
         booking_guarantee: bookingGuarantee,
-        security_deposit_waived: !bookingForm.take_deposit,
+        security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
         institution: bookingForm.institution,
         notes: bookingForm.notes,
         status: bookingForm.status,
@@ -480,7 +482,7 @@ export default function BookingsPage() {
             notes: bookingForm.notes,
             appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
             booking_guarantee: bookingGuarantee,
-            security_deposit_waived: !bookingForm.take_deposit,
+            security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
             institution: bookingForm.institution || undefined,
           }
         : {
@@ -488,7 +490,7 @@ export default function BookingsPage() {
             booking_date: new Date(bookingForm.booking_date).toISOString(),
             appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
             booking_guarantee: bookingGuarantee,
-            security_deposit_waived: !bookingForm.take_deposit,
+            security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
             institution: bookingForm.institution || undefined,
             notes: bookingForm.notes,
             status: bookingForm.status,
@@ -1172,6 +1174,7 @@ function BookingFormFields({
   setDiscountId: (id: string) => void;
   setDiscountCode: (code: string) => void;
 }) {
+  const { enabled: depositEnabled } = useDepositSettings();
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [createdCustomerOption, setCreatedCustomerOption] = useState<{ value: string; label: string } | null>(null);
 
@@ -1415,14 +1418,16 @@ function BookingFormFields({
               placeholder="Enter guarantee type"
             />
           )}
-          <label className="flex min-h-11 items-center gap-2 text-sm text-slate-600 sm:col-span-2">
-            <input
-              type="checkbox"
-              checked={bookingForm.take_deposit}
-              onChange={(e) => updateBookingField('take_deposit', e.target.checked)}
-            />
-            Take security deposit at Pickup
-          </label>
+          {depositEnabled && (
+            <label className="flex min-h-11 items-center gap-2 text-sm text-slate-600 sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={bookingForm.take_deposit}
+                onChange={(e) => updateBookingField('take_deposit', e.target.checked)}
+              />
+              Take security deposit at Pickup
+            </label>
+          )}
           <Select
             searchable={false}
             label="Occasion"

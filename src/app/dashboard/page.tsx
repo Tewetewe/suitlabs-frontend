@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
 import { Booking, DashboardStats, AssetReport, AccountingReport, Rental } from '@/types';
 import { Package, Users, Calendar, DollarSign, AlertTriangle, Wrench, ArrowRight, Wallet, TrendingUp, Landmark, Store, HandCoins } from 'lucide-react';
+import { useDepositSettings } from '@/hooks/useDepositSettings';
 
 const quickActions = [
   { label: 'Open Cashier',  href: '/dashboard/cashier',  variant: 'primary'   as const, icon: Store },
@@ -42,6 +43,7 @@ function timeAgo(iso?: string) {
 export default function DashboardPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const { enabled: depositEnabled } = useDepositSettings();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -154,7 +156,7 @@ export default function DashboardPage() {
     { label: 'Total Bookings',   key: 'totalBookings'         as keyof DashboardStats, icon: <Calendar />,      iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
     { label: 'Active Rentals',   key: 'activeRentals'         as keyof DashboardStats, icon: <Users />,         iconBg: 'bg-sky-50',     iconColor: 'text-sky-600' },
     { label: "Today's Revenue",  key: 'todayRevenue'          as keyof DashboardStats, icon: <DollarSign />,    iconBg: 'bg-amber-50',   iconColor: 'text-amber-600', format: 'currency' },
-    { label: 'Releases Today', key: 'todayDepositReleases'  as keyof DashboardStats, icon: <HandCoins />,     iconBg: 'bg-teal-50',    iconColor: 'text-teal-600' },
+    ...(depositEnabled ? [{ label: 'Releases Today', key: 'todayDepositReleases'  as keyof DashboardStats, icon: <HandCoins />,     iconBg: 'bg-teal-50',    iconColor: 'text-teal-600' }] : []),
     { label: 'Low Stock',        key: 'lowStockItems'         as keyof DashboardStats, icon: <AlertTriangle />, iconBg: 'bg-red-50',     iconColor: 'text-red-600' },
     { label: 'Maintenance',      key: 'maintenanceItems'      as keyof DashboardStats, icon: <Wrench />,        iconBg: 'bg-orange-50',  iconColor: 'text-orange-600' },
   ];

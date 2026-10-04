@@ -7,6 +7,7 @@ import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { apiClient } from '@/lib/api';
 import { Rental } from '@/types';
+import { useDepositSettings } from '@/hooks/useDepositSettings';
 
 interface EditRentalModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface EditRentalModalProps {
 }
 
 export function EditRentalModal({ isOpen, onClose, onSuccess, rental }: EditRentalModalProps) {
+  const { enabled: depositEnabled } = useDepositSettings();
   const [form, setForm] = useState({
     rental_date: '',
     return_date: '',
@@ -128,14 +130,18 @@ export function EditRentalModal({ isOpen, onClose, onSuccess, rental }: EditRent
           />
         </div>
 
-        <CurrencyInput
-          label="Security deposit"
-          value={form.security_deposit}
-          onChange={(n) => setForm({ ...form, security_deposit: n })}
-          placeholder="0"
-          disabled={rental.status !== 'pending'}
-          error={errors.security_deposit}
-        />
+        {!depositEnabled && !(rental.security_deposit || 0) ? null : rental.booking?.security_deposit_waived ? (
+          <p className="text-sm text-slate-500">No security deposit. It was waived on the booking.</p>
+        ) : (
+          <CurrencyInput
+            label="Security deposit"
+            value={form.security_deposit}
+            onChange={(n) => setForm({ ...form, security_deposit: n })}
+            placeholder="0"
+            disabled={rental.status !== 'pending'}
+            error={errors.security_deposit}
+          />
+        )}
 
         <Textarea
           label="Notes"

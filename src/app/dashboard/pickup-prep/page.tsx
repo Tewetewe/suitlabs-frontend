@@ -13,6 +13,7 @@ import { Badge, EmptyState } from '@/components/ui/DataDisplay';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { useDepositSettings } from '@/hooks/useDepositSettings';
 import apiClient from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
@@ -334,6 +335,7 @@ function RentalChecklist({
   onSaveAddons: (rental: PickupPrep, ready: boolean) => Promise<void>;
   onSendAgreement: (rental: PickupPrep) => Promise<void>;
 }) {
+  const { enabled: depositEnabled } = useDepositSettings();
   const agreementAccepted = Boolean(rental.agreement_accepted_at);
 
   return (
@@ -458,28 +460,30 @@ function RentalChecklist({
             <div className="text-slate-500">No add-ons</div>
           )}
 
-          <div>
-            {!rental.deposit_required ? (
-              <span className="text-slate-500">Deposit not required</span>
-            ) : agreementAccepted ? (
-              <span className="text-emerald-700">Deposit Agreement accepted</span>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-amber-700">
-                  {rental.agreement_sent_at ? 'Agreement sent, not accepted' : 'Agreement not sent'}
-                </span>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={Boolean(saving[`${rental.rental_id}:agreement`])}
-                  onClick={() => void onSendAgreement(rental)}
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  {rental.agreement_sent_at ? 'Resend' : 'Send'}
-                </Button>
-              </div>
-            )}
-          </div>
+          {depositEnabled && (
+            <div>
+              {!rental.deposit_required ? (
+                <span className="text-slate-500">Deposit not required</span>
+              ) : agreementAccepted ? (
+                <span className="text-emerald-700">Deposit Agreement accepted</span>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-amber-700">
+                    {rental.agreement_sent_at ? 'Agreement sent, not accepted' : 'Agreement not sent'}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={Boolean(saving[`${rental.rental_id}:agreement`])}
+                    onClick={() => void onSendAgreement(rental)}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {rental.agreement_sent_at ? 'Resend' : 'Send'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className={rental.remaining_amount > 0.009 ? 'font-medium text-amber-700' : 'text-slate-500'}>
             {rental.remaining_amount > 0.009

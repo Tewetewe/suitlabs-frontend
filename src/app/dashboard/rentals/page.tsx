@@ -32,6 +32,7 @@ import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, Over
 import { useToast } from '@/contexts/ToastContext';
 import { SALE_PAYMENT_METHOD_OPTIONS, DEPOSIT_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 
 /** Whole days since the suit came back, or null when it has not. */
@@ -72,7 +73,7 @@ export default function RentalsPage() {
   const [newReturnDate, setNewReturnDate] = useState('');
   const [cancellationReason, setCancellationReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [depositEnabled, setDepositEnabled] = useState(false);
+  const { enabled: depositEnabled } = useDepositSettings();
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [depositState, setDepositState] = useState<'' | 'held' | 'awaiting_check' | 'released' | 'auto_released'>('');
   const [sendingAgreementId, setSendingAgreementId] = useState<string | null>(null);
@@ -88,12 +89,6 @@ export default function RentalsPage() {
     if (deposit === 'held' || deposit === 'awaiting_check' || deposit === 'released' || deposit === 'auto_released') {
       setDepositState(deposit);
     }
-  }, []);
-
-  useEffect(() => {
-    void apiClient.getDepositSettings()
-      .then((settings) => setDepositEnabled(Boolean(settings.enabled)))
-      .catch(() => setDepositEnabled(false));
   }, []);
 
   const agreementBadge = (rental: Rental): { label: string; variant: 'success' | 'warning' | 'default' | 'danger' } | null => {
@@ -115,6 +110,8 @@ export default function RentalsPage() {
       return { text: `Deposit ${formatCurrency(amount)} ${how} ${formatDateShort(rental.deposit_refunded_at)}`, warn: false };
     }
     if (!rental.deposit_collected_at) {
+      // A deposit waived on the Booking is never collected, so it is not owed.
+      if (!depositEnabled || rental.booking?.security_deposit_waived) return null;
       return { text: `Deposit ${formatCurrency(amount)} not collected`, warn: false };
     }
     if (rental.status !== 'completed') {

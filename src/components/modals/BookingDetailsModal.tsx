@@ -23,6 +23,7 @@ import { formatPaymentMethod } from '@/lib/payment-methods';
 import { occasionLabel, customerLanguageLabel } from '@/lib/select-options';
 import { Booking } from '@/types';
 import { CreditCard, FileText, Printer, ShoppingBag } from 'lucide-react';
+import { useDepositSettings } from '@/hooks/useDepositSettings';
 
 interface BookingDetailsModalProps {
   isOpen: boolean;
@@ -68,6 +69,7 @@ export function BookingDetailsModal({
   onInvoice,
   onCollectBalance,
 }: BookingDetailsModalProps) {
+  const { enabled: depositEnabled } = useDepositSettings();
   if (!booking) return null;
 
   const items = booking.items || [];
@@ -213,6 +215,7 @@ export function BookingDetailsModal({
             booking.institution ? occasionLabel(booking.institution) : null,
             booking.booking_guarantee,
             booking.payment_method ? formatPaymentMethod(booking.payment_method) : null,
+            depositEnabled && booking.security_deposit_waived ? 'No security deposit' : null,
           ]}
         />
 
