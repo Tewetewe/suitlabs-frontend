@@ -188,6 +188,7 @@ export function CashierPOS() {
   const [discount, setDiscount] = useState('');
   const [notes, setNotes] = useState('');
   const [guarantee, setGuarantee] = useState('KTP');
+  const [takeDeposit, setTakeDeposit] = useState(true);
   const [occasion, setOccasion] = useState<BookingInstitution>('wedding');
   const [submitting, setSubmitting] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -422,6 +423,7 @@ export function CashierPOS() {
     setFeeRuleId('');
     setPot('');
     setGuarantee('KTP');
+    setTakeDeposit(true);
     setCartOpen(false);
     setDone(null);
     setInvoiceData(null);
@@ -550,6 +552,7 @@ export function CashierPOS() {
           booking_date: new Date(rentalDate).toISOString(),
           appointment_date: returnDate ? new Date(returnDate).toISOString() : undefined,
           booking_guarantee: guarantee,
+          security_deposit_waived: !takeDeposit,
           institution: occasion,
           notes,
           status: paidAmount > 0 ? 'confirmed' : 'pending',
@@ -797,6 +800,10 @@ export function CashierPOS() {
                 </Chip>
               ))}
             </div>
+            <label className="mt-2 flex min-h-11 items-center gap-2 text-sm text-slate-600">
+              <input type="checkbox" checked={takeDeposit} onChange={(e) => setTakeDeposit(e.target.checked)} />
+              Take security deposit at Pickup
+            </label>
           </div>
         )}
 

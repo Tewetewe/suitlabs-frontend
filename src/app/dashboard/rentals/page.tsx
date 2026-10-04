@@ -98,6 +98,7 @@ export default function RentalsPage() {
 
   const agreementBadge = (rental: Rental): { label: string; variant: 'success' | 'warning' | 'default' | 'danger' } | null => {
     if (!depositEnabled || rental.status !== 'pending') return null;
+    if (rental.booking?.security_deposit_waived) return { label: 'No deposit', variant: 'default' };
     if (rental.agreement_accepted_at) return { label: 'Agreement accepted', variant: 'success' };
     if (rental.agreement_sent_at) return { label: 'Agreement sent', variant: 'warning' };
     return { label: 'Needs agreement', variant: 'danger' };
@@ -529,7 +530,7 @@ export default function RentalsPage() {
                       })()}
                     </button>
                     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:justify-end">
-                      {rental.status === 'pending' && depositEnabled && !rental.agreement_accepted_at && (
+                      {rental.status === 'pending' && depositEnabled && !rental.booking?.security_deposit_waived && !rental.agreement_accepted_at && (
                         <Button
                           size="sm"
                           variant="secondary"
@@ -820,7 +821,7 @@ export default function RentalsPage() {
             if (paidBookingId) void openPickupInvoice(paidBookingId);
           }}
           rental={selectedRental}
-          depositEnabled={depositEnabled}
+          depositEnabled={depositEnabled && !selectedRental?.booking?.security_deposit_waived}
           onSendAgreement={handleSendAgreement}
         />
       </PageShell>
