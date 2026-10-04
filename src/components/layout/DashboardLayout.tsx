@@ -34,6 +34,7 @@ import {
   BookOpen,
   TrendingUp,
   MessageCircle,
+  ClipboardCheck,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CashierChromeProvider, useCashierChrome } from '@/components/cashier/CashierChromeContext';
@@ -61,6 +62,7 @@ const navigationSections: NavigationSection[] = [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'staff'] },
       { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar, roles: ['admin', 'staff'] },
       { name: 'Rentals', href: '/dashboard/rentals', icon: FileText, roles: ['admin', 'staff'] },
+      { name: 'Pickup Prep', href: '/dashboard/pickup-prep', icon: ClipboardCheck, roles: ['admin', 'staff'] },
       { name: 'Expenses', href: '/dashboard/expenses', icon: Wallet, roles: ['admin', 'staff'] },
       { name: 'Sales', href: '/dashboard/sales', icon: ShoppingBag, roles: ['admin', 'staff'] },
     ],

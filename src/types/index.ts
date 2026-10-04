@@ -57,6 +57,74 @@ export interface WAReminder {
   updated_at: string;
 }
 
+// H-1 Pickup checklist (align with backend usecase/pickup_prep_usecase.go)
+export type PickupPrepStatus = 'not_started' | 'in_progress' | 'ready' | 'problem';
+export type PickupPrepProblem = '' | 'damaged' | 'not_found';
+
+export interface PickupPrepItem {
+  item_id: string;
+  code: string;
+  barcode?: string;
+  name: string;
+  type: string;
+  size: string;
+  color: string;
+  quantity: number;
+  is_addon: boolean;
+  item_status: string;
+  found: boolean;
+  clean: boolean;
+  undamaged: boolean;
+  size_ok: boolean;
+  problem: PickupPrepProblem;
+  problem_note: string;
+  sent_to_maintenance: boolean;
+  checked_by?: string;
+  checked_at?: string;
+  passed: boolean;
+}
+
+export interface PickupPrep {
+  rental_id: string;
+  booking_id?: string;
+  invoice_number?: string;
+  branch_id: string;
+  branch_name?: string;
+  customer_name: string;
+  customer_phone?: string;
+  pickup_date: string;
+  return_date: string;
+  notes?: string;
+  status: PickupPrepStatus;
+  items_passed: number;
+  items_total: number;
+  items: PickupPrepItem[];
+  has_addons: boolean;
+  addons_ready: boolean;
+  deposit_required: boolean;
+  agreement_sent_at?: string;
+  agreement_accepted_at?: string;
+  remaining_amount: number;
+  warning?: string;
+}
+
+export interface PickupPrepDay {
+  date: string;
+  total: number;
+  ready: number;
+  problem: number;
+  rentals: PickupPrep[];
+}
+
+export interface PickupPrepItemCheck {
+  found: boolean;
+  clean: boolean;
+  undamaged: boolean;
+  size_ok: boolean;
+  problem: PickupPrepProblem;
+  problem_note: string;
+}
+
 export interface WAReminderStatusInfo {
   configured: boolean;
   timezone: string;
