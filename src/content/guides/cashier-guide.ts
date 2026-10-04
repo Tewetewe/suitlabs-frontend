@@ -192,7 +192,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
         <!-- dates -->
         <rect x="196" y="116" width="170" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
-        <text x="208" y="136" font-size="12" fill="currentColor" opacity=".8">Rental date</text>
+        <text x="208" y="136" font-size="12" fill="currentColor" opacity=".8">Pickup date</text>
         <rect x="376" y="116" width="170" height="30" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
         <text x="388" y="136" font-size="12" fill="currentColor" opacity=".8">Return date</text>
 
@@ -292,7 +292,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
   <h3>Taking a rental booking</h3>
   <ol class="steps">
-    <li><b>Set the rental date and the return date first.</b><span>The rental date starts on today; the return date starts empty. Only when <b>both</b> are set does the grid filter by availability — until then it shows everything, including suits already promised to someone else.</span></li>
+    <li><b>Set the event day and the rental length first.</b><span>The event day is the day the customer wears the suit. Pick <b>3 days</b> or <b>4 hours</b>. The pickup and return dates fill in: 3 days is pickup the day before the event and return the day after; 4 hours is pickup and return on the event day. You can still change either date by hand. The length also sets the price of each item: the 3-day price or the 4-hour price. An item with no 4-hour price shows "No 4-hour price: 3-day price used" in the ticket. Only when both dates are set does the grid filter by availability — until then it shows everything, including suits already promised to someone else.</span></li>
     <li><b>Fill the ticket.</b><span>Tap tiles, or hit the scan button and scan the tag. Adjust quantity with − and + in the ticket. Same-day rentals are fine — return date can equal rental date.</span></li>
     <li><b>Attach the customer.</b><span>Search by name or phone. If they are new, tap <b>New</b>: first name, last name and phone, plus Instagram and TikTok if they offer them. Phone is what you will search on next time, so get it right.</span></li>
     <li><b>Pick the guarantee.</b><span>KTP, Passport, Student ID, or <b>Existing Customer</b> for returning customers who do not need to leave an ID. Existing Customer skips the ID photo at pickup.</span></li>

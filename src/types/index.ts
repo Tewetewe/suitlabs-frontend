@@ -833,8 +833,14 @@ export interface Booking {
   id: string;
   customer_id: string;
   customer?: Customer;
+  /** The Pickup date. */
   booking_date: string;
+  /** The Return date. */
   appointment_date?: string;
+  /** The day the Customer wears the Items. */
+  event_date?: string;
+  /** '3d' or '4h'; empty on a Booking from before. */
+  rental_length?: '3d' | '4h' | '';
   booking_guarantee: string;
   /** True when Staff or Admin decided this Customer pays no Security Deposit at Pickup. */
   security_deposit_waived?: boolean;
@@ -1597,8 +1603,11 @@ export interface CreateItemRequest {
 
 export interface CreateBookingRequest {
   customer_id: string;
-  booking_date: string; // ISO string
-  appointment_date?: string; // ISO string
+  booking_date: string; // ISO string, the Pickup date
+  appointment_date?: string; // ISO string, the Return date
+  /** The day the Customer wears the Items. Fills empty Pickup and Return dates. */
+  event_date?: string;
+  rental_length?: '3d' | '4h';
   booking_guarantee: string;
   /** True when Staff or Admin decided this Customer pays no Security Deposit at Pickup. */
   security_deposit_waived?: boolean;

@@ -131,8 +131,14 @@ export function BookingDetailsModal({
           <p className="text-sm text-slate-500">Out on rental</p>
         )}
 
+        {booking.event_date && (
+          <p className="text-sm text-slate-600" data-testid="booking-event">
+            Event day <b className="text-slate-900">{formatDateShort(booking.event_date)}</b>
+            {booking.rental_length ? ` · ${booking.rental_length === '4h' ? '4 hours' : '3 days'}` : ''}
+          </p>
+        )}
         <DateRange
-          startLabel="Booking"
+          startLabel="Pickup"
           start={formatDateShort(booking.booking_date)}
           endLabel="Return"
           end={booking.appointment_date ? formatDateShort(booking.appointment_date) : '—'}
