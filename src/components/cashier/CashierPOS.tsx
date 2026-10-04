@@ -32,6 +32,7 @@ import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { RENTAL_LENGTHS, type RentalLength, missingFourHourPrice, rentalPrice, rentalWindow } from '@/lib/rental-window';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { SafeImage } from '@/components/ui/SafeImage';
@@ -113,9 +114,9 @@ function shortDate(iso: string) {
   return `${parts[2]}/${parts[1]}`;
 }
 
-function catalogPrice(item: Item, mode: PosMode) {
+function catalogPrice(item: Item, mode: PosMode, length: RentalLength = '3d') {
   if (mode === 'sale') return item.selling_price || item.standard_price || 0;
-  return item.standard_price || 0;
+  return rentalPrice(item, length);
 }
 
 function stockQty(item: Item) {
@@ -162,6 +163,10 @@ export function CashierPOS() {
   const [typeOptions, setTypeOptions] = useState<Array<{ value: string; label: string }>>([
     { value: '', label: 'All types' },
   ]);
+  // The Event Date and the Rental Length fill the Pickup (rentalDate) and
+  // Return dates. Staff may still change those two by hand.
+  const [eventDate, setEventDate] = useState('');
+  const [rentalLength, setRentalLength] = useState<RentalLength>('3d');
   const [rentalDate, setRentalDate] = useState(todayISO);
   const [returnDate, setReturnDate] = useState('');
   const [items, setItems] = useState<Item[]>([]);
@@ -393,14 +398,35 @@ export function CashierPOS() {
           key: `${item.id}-${Date.now()}`,
           item,
           quantity: 1,
-          unit_price: catalogPrice(item, mode),
+          unit_price: catalogPrice(item, mode, rentalLength),
           is_addon: false,
         },
       ];
     });
     setFlashId(item.id);
     window.setTimeout(() => setFlashId(null), 450);
-  }, [mode, error]);
+  }, [mode, rentalLength, error]);
+
+  const pickEventDate = (value: string) => {
+    setEventDate(value);
+    if (!value) return;
+    const { pickup, ret } = rentalWindow(value, rentalLength);
+    setRentalDate(pickup);
+    setReturnDate(ret);
+  };
+
+  // A new length moves the dates and prices every rental line again.
+  const pickRentalLength = (length: RentalLength) => {
+    setRentalLength(length);
+    if (eventDate) {
+      const { pickup, ret } = rentalWindow(eventDate, length);
+      setRentalDate(pickup);
+      setReturnDate(ret);
+    }
+    if (mode === 'rental') {
+      setCart((prev) => prev.map((line) => ({ ...line, unit_price: catalogPrice(line.item, 'rental', length) })));
+    }
+  };
 
   const setQty = (key: string, quantity: number) => {
     if (quantity < 1) {
@@ -553,6 +579,8 @@ export function CashierPOS() {
           customer_id: customer!.id,
           booking_date: new Date(rentalDate).toISOString(),
           appointment_date: returnDate ? new Date(returnDate).toISOString() : undefined,
+          event_date: eventDate ? new Date(eventDate).toISOString() : undefined,
+          rental_length: rentalLength,
           booking_guarantee: guarantee,
           security_deposit_waived: depositEnabled ? !takeDeposit : undefined,
           institution: occasion,
@@ -675,6 +703,9 @@ export function CashierPOS() {
                       <div className="text-xs text-slate-500">
                         {[line.item.code, line.item.size?.label ? `Size ${line.item.size.label}` : null].filter(Boolean).join(' · ') || 'Item'}
                       </div>
+                      {mode === 'rental' && !packageId && missingFourHourPrice(line.item, rentalLength) && (
+                        <div className="text-[11px] font-medium text-amber-700" data-testid="pos-no-4h-price">No 4-hour price: 3-day price used</div>
+                      )}
                       {mode === 'rental' && !!packageId && (
                         <button
                           type="button"
@@ -1079,17 +1110,51 @@ export function CashierPOS() {
               >
                 <span className="flex items-center gap-2 text-sm font-medium text-slate-800">
                   <Calendar className="h-4 w-4 text-slate-400" />
-                  {shortDate(rentalDate)} → {shortDate(returnDate)}
+                  {eventDate ? `Event ${shortDate(eventDate)} · ` : ''}
+                  {RENTAL_LENGTHS.find((l) => l.value === rentalLength)?.label} · {shortDate(rentalDate)} → {shortDate(returnDate)}
                 </span>
                 <ChevronDown className="h-4 w-4 text-slate-400" />
               </button>
             ) : (
+              <div className="space-y-2">
+              <div className="flex flex-wrap items-stretch gap-2">
+                <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-2xl glass-control px-3">
+                  <Calendar className="h-4 w-4 shrink-0 text-indigo-500" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Event day</div>
+                    <input
+                      type="date"
+                      value={eventDate}
+                      data-testid="pos-event-date"
+                      onChange={(e) => pickEventDate(e.target.value)}
+                      className="w-full bg-transparent text-base text-slate-900 outline-none"
+                    />
+                  </div>
+                </label>
+                <div className="flex shrink-0 items-center rounded-2xl glass-control p-1" role="group" aria-label="Rental length">
+                  {RENTAL_LENGTHS.map((length) => (
+                    <button
+                      key={length.value}
+                      type="button"
+                      onClick={() => pickRentalLength(length.value)}
+                      data-testid={`pos-length-${length.value}`}
+                      aria-pressed={rentalLength === length.value}
+                      className={clsx(
+                        'min-h-9 rounded-xl px-3 text-sm font-semibold touch-manipulation',
+                        rentalLength === length.value ? 'bg-indigo-600 text-white' : 'text-slate-600'
+                      )}
+                    >
+                      {length.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className={clsx('flex gap-2', !isPhone && 'items-stretch')}>
                 <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
                   <label className="flex min-h-11 items-center gap-2 rounded-2xl glass-control px-3">
                     <Calendar className="h-4 w-4 shrink-0 text-slate-400" />
                     <div className="min-w-0 flex-1">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Rental</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Pickup</div>
                       <input
                         type="date"
                         value={rentalDate}
@@ -1126,6 +1191,7 @@ export function CashierPOS() {
                     />
                   </div>
                 )}
+              </div>
               </div>
             )
           )}
@@ -1211,7 +1277,7 @@ export function CashierPOS() {
                             {[item.code, item.size?.label].filter(Boolean).join(' · ') || item.color || item.brand}
                           </span>
                           <span className="text-sm font-bold tabular-nums text-slate-900">
-                            {formatCurrency(catalogPrice(item, mode))}
+                            {formatCurrency(catalogPrice(item, mode, rentalLength))}
                           </span>
                         </div>
                       </div>

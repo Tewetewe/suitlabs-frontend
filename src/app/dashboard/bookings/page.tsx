@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FieldGroup, Input, NumberInput, Textarea } from '@/components/ui/Input';
+import { fieldLabelClass } from '@/components/ui/field';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { InvoiceSearchField } from '@/components/ui/InvoiceSearchField';
@@ -22,6 +23,7 @@ import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { formatDateShort } from '@/lib/date';
+import { RENTAL_LENGTHS, type RentalLength, rentalPrice, rentalWindow } from '@/lib/rental-window';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
 import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS } from '@/lib/select-options';
 import { Booking, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing } from '@/types';
@@ -135,6 +137,8 @@ export default function BookingsPage() {
     customer_id: string;
     booking_date: string;
     appointment_date?: string;
+    event_date?: string;
+    rental_length: RentalLength;
     booking_guarantee: string;
     booking_guarantee_other?: string;
     take_deposit: boolean;
@@ -147,6 +151,7 @@ export default function BookingsPage() {
   }>({
     customer_id: '',
     booking_date: new Date().toISOString().slice(0, 10),
+    rental_length: '3d',
     booking_guarantee: 'KTP',
     take_deposit: true,
     institution: 'wedding',
@@ -194,6 +199,29 @@ export default function BookingsPage() {
     if (formErrors[field]) setFormErrors(prev => ({ ...prev, [field]: '' }));
   };
 
+  // The Event Date and the Rental Length fill the Pickup and Return dates. A
+  // new length also moves each line still at the old length's price.
+  const pickRentalDates = (eventDate: string, length: RentalLength) => {
+    setBookingForm(prev => {
+      const next = { ...prev, event_date: eventDate || undefined, rental_length: length };
+      if (eventDate) {
+        const { pickup, ret } = rentalWindow(eventDate, length);
+        next.booking_date = pickup;
+        next.appointment_date = ret;
+      }
+      if (length !== prev.rental_length) {
+        next.items = prev.items.map(it => {
+          const item = itemCacheRef.current.get(it.item_id);
+          return item && it.unit_price === rentalPrice(item, prev.rental_length)
+            ? { ...it, unit_price: rentalPrice(item, length) }
+            : it;
+        });
+      }
+      return next;
+    });
+    if (formErrors.booking_date) setFormErrors(prev => ({ ...prev, booking_date: '' }));
+  };
+
   const updateItemField = (index: number, field: keyof BookingFormItem, value: string | number | boolean) => {
     setBookingForm(prev => {
       const items = prev.items.map((it, i) => {
@@ -236,7 +264,7 @@ export default function BookingsPage() {
         }
         setBookingForm(prev => {
           let items = prev.items.map(it => it.item_id && (!it.unit_price || it.unit_price === 0)
-            ? { ...it, unit_price: itemCacheRef.current.get(it.item_id)?.standard_price ?? 0 }
+            ? { ...it, unit_price: rentalPrice(itemCacheRef.current.get(it.item_id) ?? {}, prev.rental_length) }
             : it);
           for (const trousers of pairedTrousers) {
             if (items.some(it => it.item_id === trousers.id)) continue;
@@ -244,7 +272,7 @@ export default function BookingsPage() {
             const line = {
               item_id: trousers.id,
               quantity: 1,
-              unit_price: trousers.standard_price ?? 0,
+              unit_price: rentalPrice(trousers, prev.rental_length),
               discount_amount: 0,
               catalogue: 'trousers' as const,
               is_addon: false,
@@ -333,7 +361,7 @@ export default function BookingsPage() {
     // basic validation
     const errs: Record<string, string> = {};
     if (!bookingForm.customer_id) errs.customer_id = 'Customer ID is required';
-    if (!bookingForm.booking_date) errs.booking_date = 'Booking date is required';
+    if (!bookingForm.booking_date) errs.booking_date = 'Pickup date is required';
     if (chargeNow > 0 && potMissing(bookingForm.payment_method, bookingPot)) errs.submit = POT_MISSING_MESSAGE;
     const bookingGuarantee = bookingForm.booking_guarantee === 'Other'
       ? bookingForm.booking_guarantee_other?.trim()
@@ -364,6 +392,8 @@ export default function BookingsPage() {
         customer_id: bookingForm.customer_id,
         booking_date: new Date(bookingForm.booking_date).toISOString(),
         appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
+        event_date: bookingForm.event_date ? new Date(bookingForm.event_date).toISOString() : undefined,
+        rental_length: bookingForm.rental_length,
         booking_guarantee: bookingGuarantee,
         security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
         institution: bookingForm.institution,
@@ -396,6 +426,7 @@ export default function BookingsPage() {
       setBookingForm({
         customer_id: '',
         booking_date: new Date().toISOString().slice(0, 10),
+        rental_length: '3d',
         booking_guarantee: 'KTP',
         take_deposit: true,
         institution: 'wedding',
@@ -430,6 +461,8 @@ export default function BookingsPage() {
       customer_id: booking.customer_id,
       booking_date: booking.booking_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
       appointment_date: booking.appointment_date?.slice(0, 10),
+      event_date: booking.event_date?.slice(0, 10),
+      rental_length: booking.rental_length || '3d',
       booking_guarantee: isStandardGuarantee ? booking.booking_guarantee : 'Other',
       booking_guarantee_other: isStandardGuarantee ? '' : booking.booking_guarantee,
       take_deposit: !booking.security_deposit_waived,
@@ -458,7 +491,7 @@ export default function BookingsPage() {
     if (!activeBooking) return;
     const errs: Record<string, string> = {};
     if (!bookingForm.customer_id) errs.customer_id = 'Customer ID is required';
-    if (!bookingForm.booking_date) errs.booking_date = 'Booking date is required';
+    if (!bookingForm.booking_date) errs.booking_date = 'Pickup date is required';
     if (chargeNow > 0 && potMissing(bookingForm.payment_method, bookingPot)) errs.submit = POT_MISSING_MESSAGE;
     const bookingGuarantee = bookingForm.booking_guarantee === 'Other'
       ? bookingForm.booking_guarantee_other?.trim()
@@ -489,6 +522,8 @@ export default function BookingsPage() {
             customer_id: bookingForm.customer_id,
             booking_date: new Date(bookingForm.booking_date).toISOString(),
             appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
+            event_date: bookingForm.event_date ? new Date(bookingForm.event_date).toISOString() : undefined,
+            rental_length: bookingForm.rental_length,
             booking_guarantee: bookingGuarantee,
             security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
             institution: bookingForm.institution || undefined,
@@ -936,6 +971,7 @@ export default function BookingsPage() {
             fetchItemOptions={fetchItemOptions}
             fetchTrousersOptions={fetchTrousersOptions}
             updateBookingField={updateBookingField}
+            pickRentalDates={pickRentalDates}
             updateItemField={updateItemField}
             addItemLine={addItemLine}
             removeItemLine={removeItemLine}
@@ -992,6 +1028,7 @@ export default function BookingsPage() {
             fetchItemOptions={fetchItemOptions}
             fetchTrousersOptions={fetchTrousersOptions}
             updateBookingField={updateBookingField}
+            pickRentalDates={pickRentalDates}
             updateItemField={updateItemField}
             addItemLine={addItemLine}
             removeItemLine={removeItemLine}
@@ -1112,6 +1149,8 @@ type BookingFormState = {
   customer_id: string;
   booking_date: string;
   appointment_date?: string;
+  event_date?: string;
+  rental_length: RentalLength;
   booking_guarantee: string;
   booking_guarantee_other?: string;
   take_deposit: boolean;
@@ -1142,6 +1181,7 @@ function BookingFormFields({
   fetchItemOptions,
   fetchTrousersOptions,
   updateBookingField,
+  pickRentalDates,
   updateItemField,
   addItemLine,
   removeItemLine,
@@ -1167,6 +1207,7 @@ function BookingFormFields({
   fetchItemOptions: (query: string) => Promise<{ value: string; label: string }[]>;
   fetchTrousersOptions: (query: string) => Promise<{ value: string; label: string }[]>;
   updateBookingField: (field: keyof BookingFormState, value: string | boolean) => void;
+  pickRentalDates: (eventDate: string, length: RentalLength) => void;
   updateItemField: (index: number, field: keyof BookingFormItem, value: string | number | boolean) => void;
   addItemLine: (catalogue?: 'any' | 'trousers', isAddon?: boolean) => void;
   removeItemLine: (index: number) => void;
@@ -1249,19 +1290,49 @@ function BookingFormFields({
       <FieldGroup title="Dates">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
-            label="Booking date"
+            label="Event day"
+            type="date"
+            value={bookingForm.event_date || ''}
+            onChange={(e) => pickRentalDates(e.target.value, bookingForm.rental_length)}
+            data-testid="booking-event-date"
+          />
+          <div>
+            <span className={fieldLabelClass()}>Rental length</span>
+            <div className="flex gap-2" role="group" aria-label="Rental length">
+              {RENTAL_LENGTHS.map((length) => (
+                <Button
+                  key={length.value}
+                  size="sm"
+                  variant={bookingForm.rental_length === length.value ? 'primary' : 'secondary'}
+                  aria-pressed={bookingForm.rental_length === length.value}
+                  onClick={() => pickRentalDates(bookingForm.event_date || '', length.value)}
+                  disabled={locked}
+                  data-testid={`booking-length-${length.value}`}
+                >
+                  {length.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <Input
+            label="Pickup date"
             type="date"
             value={bookingForm.booking_date}
             onChange={(e) => updateBookingField('booking_date', e.target.value)}
             error={formErrors.booking_date}
+            data-testid="booking-pickup-date"
           />
           <Input
-            label="Appointment date"
+            label="Return date"
             type="date"
             value={bookingForm.appointment_date || ''}
             onChange={(e) => updateBookingField('appointment_date', e.target.value)}
+            data-testid="booking-return-date"
           />
         </div>
+        <p className="text-xs text-slate-500">
+          The event day fills the dates: 3 days is pickup the day before and return the day after; 4 hours is both on the event day. You can still change them.
+        </p>
       </FieldGroup>
 
       <FieldGroup title="Items">
