@@ -8,6 +8,10 @@ describe('receiptSendFailure', () => {
     assert.equal(receiptSendFailure('CUSTOMER_WA_OPT_OUT: The customer opted out'), 'opt_out');
     assert.equal(receiptSendFailure('RECEIPT_COOLDOWN: This receipt was just sent'), 'cooldown');
     assert.equal(receiptSendFailure('RECEIPT_IMAGE_UNREACHABLE: The receipt image link does not open'), 'image');
+    assert.equal(
+      receiptSendFailure('business error [WABLAS_SEND_FAILED]: wablas v2 rejected: your package not support; v1 fallback: wablas v1 rejected: your package not support'),
+      'package',
+    );
   });
 
   it('opens the number field for a number problem or a refused send', () => {
