@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Camera } from 'lucide-react';
+import { AlertTriangle, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { FilePick, Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -14,7 +14,7 @@ import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { DEPOSIT_PAYMENT_METHOD_OPTIONS, SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { isExistingCustomerGuarantee } from '@/lib/select-options';
-import { Rental } from '@/types';
+import { PickupPrep, Rental } from '@/types';
 
 function rentalsFromUserResponse(payload: unknown): Rental[] {
   if (!payload || typeof payload !== 'object') return [];
@@ -67,6 +67,7 @@ export function PickupRentalModal({
   const [depositProofFile, setDepositProofFile] = useState<File | null>(null);
   const [remainingProofFile, setRemainingProofFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [prep, setPrep] = useState<PickupPrep | null>(null);
 
   const previewUrl = useMemo(
     () => (identityCardFile ? URL.createObjectURL(identityCardFile) : null),
@@ -100,11 +101,21 @@ export function PickupRentalModal({
     setDepositProofFile(null);
     setRemainingProofFile(null);
     setErrors({});
+    setPrep(null);
 
     const customerId = rental.user_id || rental.customer?.id;
     if (!customerId) return;
 
     let cancelled = false;
+    // The H-1 checklist only warns. Walk-in and same-day Bookings have no H-1,
+    // so a missing checklist must not stop Pickup.
+    apiClient
+      .getPickupPrep(rental.id)
+      .then((row) => {
+        if (!cancelled) setPrep(row);
+      })
+      .catch((error) => console.warn('Could not load pickup checklist', error));
+
     setLoadingPriorId(true);
     (async () => {
       try {
@@ -280,6 +291,26 @@ export function PickupRentalModal({
                   {needsRemaining ? ` · Remaining booking ${formatCurrency(remainingAmount)}` : ''}
                 </p>
               </div>
+
+              {prep && prep.status !== 'ready' && (
+                <div
+                  className={`flex gap-2 rounded-2xl px-4 py-3 text-sm ${
+                    prep.status === 'problem' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'
+                  }`}
+                  data-testid="pickup-prep-warning"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    {prep.status === 'problem'
+                      ? 'The H-1 check found a problem: '
+                      : `H-1 check not finished (${prep.items_passed}/${prep.items_total} Items). `}
+                    {prep.items
+                      .filter((item) => item.problem)
+                      .map((item) => `${item.code} ${item.problem === 'damaged' ? 'damaged' : 'not found'}${item.problem_note ? ` (${item.problem_note})` : ''}`)
+                      .join(', ') || 'Check the Items before you hand them over.'}
+                  </div>
+                </div>
+              )}
 
               {needsRemaining && (
                 <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/50 px-4 py-3">

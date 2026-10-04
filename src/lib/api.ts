@@ -15,6 +15,9 @@ import {
   Customer, 
   Booking, 
   Rental, 
+  PickupPrep,
+  PickupPrepDay,
+  PickupPrepItemCheck,
   Category,
   ItemFacets,
   PackagePricing,
@@ -879,6 +882,34 @@ class APIClient {
   async sendRentalWAReminder(rentalId: string): Promise<WAReminder> {
     const response = await this.client.post<APIResponse<{ reminder: WAReminder }>>(`/api/v1/rentals/${rentalId}/wa-reminder`, {});
     return response.data.data!.reminder;
+  }
+
+  // H-1 Pickup checklist. With no date the backend returns tomorrow.
+  async getPickupPrepDay(date?: string): Promise<PickupPrepDay> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const response = await this.client.get<APIResponse<PickupPrepDay>>(`/api/v1/rentals/pickup-prep${query}`);
+    return response.data.data!;
+  }
+
+  async getPickupPrep(rentalId: string): Promise<PickupPrep> {
+    const response = await this.client.get<APIResponse<{ prep: PickupPrep }>>(`/api/v1/rentals/${rentalId}/pickup-prep`);
+    return response.data.data!.prep;
+  }
+
+  async checkPickupPrepItem(rentalId: string, itemId: string, check: PickupPrepItemCheck): Promise<PickupPrep> {
+    const response = await this.client.put<APIResponse<{ prep: PickupPrep }>>(
+      `/api/v1/rentals/${rentalId}/pickup-prep/items/${itemId}`,
+      check,
+    );
+    return response.data.data!.prep;
+  }
+
+  async setPickupPrepAddons(rentalId: string, ready: boolean): Promise<PickupPrep> {
+    const response = await this.client.put<APIResponse<{ prep: PickupPrep }>>(
+      `/api/v1/rentals/${rentalId}/pickup-prep/addons`,
+      { ready },
+    );
+    return response.data.data!.prep;
   }
 
   async getPublicDepositAgreement(token: string): Promise<DepositAgreementView> {
