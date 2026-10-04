@@ -1694,7 +1694,8 @@ export interface InvoiceData {
   /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */
   transaction_fee?: number;
   invoice_type: string;
-  due_date: string;
+  /** The Pickup date while money is owed; absent once paid in full. */
+  due_date?: string;
   items: InvoiceItem[];
   company: CompanyInfo;
   generated_at: string;

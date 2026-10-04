@@ -7,7 +7,7 @@ import { printSaleInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue, saleInvoiceNumber } from '@/lib/barcode';
 import { formatCurrency } from '@/lib/currency';
-import { TRANSACTION_FEE_LABEL } from '@/lib/transaction-fee';
+import { receiptTotals } from '@/lib/receipt-totals';
 import { InvoicePrintActions } from '@/components/print/InvoicePrintActions';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
@@ -29,6 +29,13 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
   if (!isOpen || !sale) return null;
 
   const invoiceNumber = saleInvoiceNumber(sale);
+  const totals = receiptTotals({
+    subtotal: sale.subtotal || 0,
+    discount: sale.discount_amount,
+    fee: sale.transaction_fee,
+    paid: sale.paid_amount || 0,
+    owed: sale.total_amount || 0,
+  });
   const shopSubtitle = receiptSubtitle(sale.branch?.receipt_subtitle);
   const shopAddress = receiptAddress(sale.branch?.address);
   const shopPhone = receiptPhone(sale.branch?.phone);
@@ -134,18 +141,14 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
                 )}
 
                 <div className="receipt-divider"></div>
-                <div className="receipt-line">Subtotal: {formatCurrency(sale.subtotal || 0)}</div>
-                {(sale.discount_amount || 0) > 0 && (
-                  <div className="receipt-line receipt-discount">Discount: ({formatCurrency(sale.discount_amount || 0)})</div>
-                )}
-                <div className="receipt-total">TOTAL: {formatCurrency(sale.total_amount || 0)}</div>
-                <div className="receipt-line">Paid: {formatCurrency(sale.paid_amount || 0)}</div>
-                {(sale.transaction_fee || 0) > 0 && (
-                  <>
-                    <div className="receipt-line">{TRANSACTION_FEE_LABEL}: {formatCurrency(sale.transaction_fee || 0)}</div>
-                    <div className="receipt-line">Total paid: {formatCurrency((sale.paid_amount || 0) + (sale.transaction_fee || 0))}</div>
-                  </>
-                )}
+                {totals.map((line) => (
+                  <div
+                    key={line.label}
+                    className={line.kind === 'total' ? 'receipt-total' : line.kind === 'discount' ? 'receipt-line receipt-discount' : 'receipt-line'}
+                  >
+                    {line.label}: {line.kind === 'discount' ? `(${formatCurrency(line.amount)})` : formatCurrency(line.amount)}
+                  </div>
+                ))}
 
                 <div className="receipt-divider"></div>
                 <div className="receipt-center">

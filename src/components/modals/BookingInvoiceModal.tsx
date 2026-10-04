@@ -7,7 +7,7 @@ import { printBookingInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue } from '@/lib/barcode';
 import { formatCurrency } from '@/lib/currency';
-import { TRANSACTION_FEE_LABEL } from '@/lib/transaction-fee';
+import { receiptTotals } from '@/lib/receipt-totals';
 import { InvoicePrintActions } from '@/components/print/InvoicePrintActions';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
@@ -41,6 +41,15 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
     invoice.items.every((item) => (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) &&
     (invoice.total_amount || 0) > 0
   );
+
+  const owing = (invoice.final_amount || invoice.total_amount || 0) - (invoice.paid_amount || 0) > 0.009;
+  const totals = receiptTotals({
+    subtotal: invoice.total_amount || 0,
+    discount: invoice.discount_amount,
+    fee: invoice.transaction_fee,
+    paid: invoice.paid_amount || 0,
+    owed: invoice.final_amount || invoice.total_amount || 0,
+  });
 
   // Bprint-style date formats (match backend bprint)
   const bprintDate = (d: string | Date) =>
@@ -106,7 +115,8 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
                   <div className="receipt-line">Date: {bprintDateTime(invoice.generated_at || new Date())}</div>
                   <div className="receipt-line">Booking ID: {invoice.booking_id.slice(-8)}</div>
                   <div className="receipt-line">Type: {invoice.invoice_type?.toUpperCase() || 'FULL'}</div>
-                  {invoice.due_date && <div className="receipt-line">Due: {bprintDate(invoice.due_date)}</div>}
+                  {/* Due is the day the rest must be paid, the Pickup date, so it shows only while money is owed. */}
+                  {owing && invoice.booking_date && <div className="receipt-line">Due: {bprintDate(invoice.booking_date)}</div>}
                   <div className="receipt-line">Status: {invoice.payment_status?.toUpperCase() || 'PENDING'}</div>
                   {invoice.booking_date && <div className="receipt-line">Booking: {bprintDate(invoice.booking_date)}</div>}
                   {invoice.invoice_number && (
@@ -159,25 +169,14 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
 
                   <div className="receipt-divider"></div>
 
-                  <div className="receipt-line">Subtotal: {formatCurrency(invoice.total_amount || 0)}</div>
-                  {(invoice.discount_amount || 0) > 0 && (
-                    <div className="receipt-line receipt-discount">Discount: ({formatCurrency(invoice.discount_amount || 0)})</div>
-                  )}
-                  <div className="receipt-total">TOTAL: {formatCurrency(invoice.final_amount || invoice.total_amount || 0)}</div>
-                  {invoice.invoice_type === 'dp' ? (
-                    <>
-                      <div className="receipt-line">DP: {formatCurrency(invoice.due_amount || 0)}</div>
-                      <div className="receipt-line">Remaining: {formatCurrency((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}</div>
-                    </>
-                  ) : (
-                    <div className="receipt-line">Due: {formatCurrency(invoice.due_amount || 0)}</div>
-                  )}
-                  {(invoice.transaction_fee || 0) > 0 && (
-                    <>
-                      <div className="receipt-line">{TRANSACTION_FEE_LABEL}: {formatCurrency(invoice.transaction_fee || 0)}</div>
-                      <div className="receipt-line">Total paid: {formatCurrency((invoice.paid_amount || 0) + (invoice.transaction_fee || 0))}</div>
-                    </>
-                  )}
+                  {totals.map((line) => (
+                    <div
+                      key={line.label}
+                      className={line.kind === 'total' ? 'receipt-total' : line.kind === 'discount' ? 'receipt-line receipt-discount' : 'receipt-line'}
+                    >
+                      {line.label}: {line.kind === 'discount' ? `(${formatCurrency(line.amount)})` : formatCurrency(line.amount)}
+                    </div>
+                  ))}
 
                   <div className="receipt-divider"></div>
                   <div className="receipt-center">
