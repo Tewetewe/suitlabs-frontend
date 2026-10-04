@@ -7,6 +7,7 @@ export type ReceiptSendFailure =
   | 'opt_out' // the customer asked for no WhatsApp
   | 'cooldown' // the same receipt went to the same number a moment ago
   | 'image' // the receipt image link does not open
+  | 'package' // the Wablas package does not send this kind of message
   | 'number'; // the number is missing, wrong, or WhatsApp refused it
 
 export function receiptSendFailure(message: string): ReceiptSendFailure {
@@ -14,6 +15,8 @@ export function receiptSendFailure(message: string): ReceiptSendFailure {
   if (message.includes('CUSTOMER_WA_OPT_OUT')) return 'opt_out';
   if (message.includes('RECEIPT_COOLDOWN')) return 'cooldown';
   if (message.includes('RECEIPT_IMAGE_UNREACHABLE')) return 'image';
+  // Wablas: "your package not support". It is the Wablas account, not the number.
+  if (/package/i.test(message) && /not support/i.test(message)) return 'package';
   return 'number';
 }
 

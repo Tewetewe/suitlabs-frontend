@@ -87,6 +87,10 @@ export function SendReceiptWhatsApp({ target }: { target: ReceiptWhatsAppTarget 
         case 'image':
           toastError('Could not send receipt', message);
           break;
+        case 'package':
+          // The Wablas account cannot send this message; a new number fixes nothing.
+          toastError('Receipt not sent', "The shop's Wablas package does not allow image messages. The number is fine.");
+          break;
         default:
           // Only a number problem opens the number field.
           setFailure(message);
