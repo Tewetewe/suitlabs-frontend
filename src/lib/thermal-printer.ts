@@ -16,6 +16,7 @@ import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 import { receiptAddress, receiptPhone, receiptSubtitle } from './branch-scope';
 import { TRANSACTION_FEE_LABEL } from './transaction-fee';
+import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -61,6 +62,16 @@ const BARCODE_BOTTOM_MARGIN_LINES = 2;
  * wide for 58 mm paper, or a thrown error. The slip then carried no number at
  * all, so nobody could scan it or type it in.
  */
+/** Prints the totals block of a Booking or Sale receipt (receiptTotals). */
+function printTotals(generator: ESCPOSGenerator, lines: ReceiptTotalLine[]): void {
+  for (const line of lines) {
+    const amount = line.kind === 'discount' ? `(${formatCurrencyForPrint(line.amount)})` : formatCurrencyForPrint(line.amount);
+    if (line.kind === 'total') generator.setBold(true);
+    generator.text(`${line.label}: ${amount}`).lineFeed();
+    if (line.kind === 'total') generator.setBold(false);
+  }
+}
+
 function appendInvoiceBarcode(generator: ESCPOSGenerator, invoiceNumber: string): void {
   const barcodeData = invoiceBarcodeValue(invoiceNumber);
   if (!barcodeData) {
@@ -416,8 +427,11 @@ export class ThermalPrinterService {
       .text(`Type: ${invoice.invoice_type?.toUpperCase() || 'FULL'}`)
       .lineFeed();
 
-    if (invoice.due_date) {
-      generator.text(`Due Date: ${formatDateForPrint(invoice.due_date)}`).lineFeed();
+    // Due is the day the rest must be paid, the Pickup date, so it prints only
+    // while money is owed.
+    const owing = (invoice.final_amount || invoice.total_amount || 0) - (invoice.paid_amount || 0) > 0.009;
+    if (owing && invoice.booking_date) {
+      generator.text(`Due: ${formatDateForPrint(invoice.booking_date)}`).lineFeed();
     }
 
     generator.lineFeed();
@@ -467,36 +481,16 @@ export class ThermalPrinterService {
     }
 
     generator.separator();
-    generator.text(`Subtotal: ${formatCurrencyForPrint(invoice.total_amount || 0)}`).lineFeed();
-    if ((invoice.discount_amount || 0) > 0) {
-      generator.text(`Discount: (${formatCurrencyForPrint(invoice.discount_amount || 0)})`).lineFeed();
-    }
-    generator
-      .setBold(true)
-      .text(`TOTAL: ${formatCurrencyForPrint(invoice.final_amount || invoice.total_amount || 0)}`)
-      .lineFeed()
-      .setBold(false);
-
-    if (invoice.invoice_type === 'dp') {
-      generator
-        .text(`DP: ${formatCurrencyForPrint(invoice.due_amount || 0)}`)
-        .lineFeed()
-        .text(
-          `Remaining: ${formatCurrencyForPrint(
-            (invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0)
-          )}`
-        )
-        .lineFeed();
-    } else {
-      generator.text(`Due: ${formatCurrencyForPrint(invoice.due_amount || 0)}`).lineFeed();
-    }
-    if ((invoice.transaction_fee || 0) > 0) {
-      generator
-        .text(`${TRANSACTION_FEE_LABEL}: ${formatCurrencyForPrint(invoice.transaction_fee || 0)}`)
-        .lineFeed()
-        .text(`Total paid: ${formatCurrencyForPrint((invoice.paid_amount || 0) + (invoice.transaction_fee || 0))}`)
-        .lineFeed();
-    }
+    printTotals(
+      generator,
+      receiptTotals({
+        subtotal: invoice.total_amount || 0,
+        discount: invoice.discount_amount,
+        fee: invoice.transaction_fee,
+        paid: invoice.paid_amount || 0,
+        owed: invoice.final_amount || invoice.total_amount || 0,
+      }),
+    );
 
     generator.separator();
     generator
@@ -748,19 +742,16 @@ export class ThermalPrinterService {
     }
 
     generator.separator();
-    generator.text(`Subtotal: ${formatCurrencyForPrint(sale.subtotal || 0)}`).lineFeed();
-    if ((sale.discount_amount || 0) > 0) {
-      generator.text(`Discount: (${formatCurrencyForPrint(sale.discount_amount || 0)})`).lineFeed();
-    }
-    generator.setBold(true).text(`TOTAL: ${formatCurrencyForPrint(sale.total_amount || 0)}`).lineFeed().setBold(false);
-    generator.text(`Paid: ${formatCurrencyForPrint(sale.paid_amount || 0)}`).lineFeed();
-    if ((sale.transaction_fee || 0) > 0) {
-      generator
-        .text(`${TRANSACTION_FEE_LABEL}: ${formatCurrencyForPrint(sale.transaction_fee || 0)}`)
-        .lineFeed()
-        .text(`Total paid: ${formatCurrencyForPrint((sale.paid_amount || 0) + (sale.transaction_fee || 0))}`)
-        .lineFeed();
-    }
+    printTotals(
+      generator,
+      receiptTotals({
+        subtotal: sale.subtotal || 0,
+        discount: sale.discount_amount,
+        fee: sale.transaction_fee,
+        paid: sale.paid_amount || 0,
+        owed: sale.total_amount || 0,
+      }),
+    );
 
     generator.separator();
     generator

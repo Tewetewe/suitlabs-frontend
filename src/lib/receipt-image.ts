@@ -8,52 +8,60 @@ import jsPDF from 'jspdf';
 
 async function renderReceiptCanvas(): Promise<HTMLCanvasElement> {
   const receiptContainer = document.querySelector('.thermal-receipt-container') as HTMLElement | null;
-  if (!receiptContainer) {
+  const receipt = receiptContainer?.querySelector('.thermal-receipt') as HTMLElement | null;
+  if (!receiptContainer || !receipt) {
     throw new Error('Invoice not ready. Please try again.');
   }
 
-  // Clone the entire container to preserve all styles
-  const clone = receiptContainer.cloneNode(true) as HTMLElement;
+  // Copy the receipt at once, so the render still works if the modal closes.
+  // cloneNode copies a <canvas> blank, so each canvas (the barcode) is drawn
+  // into its copy by hand.
+  const clone = receipt.cloneNode(true) as HTMLElement;
+  const sourceCanvases = receipt.querySelectorAll('canvas');
+  clone.querySelectorAll('canvas').forEach((copy, i) => {
+    const source = sourceCanvases[i];
+    if (!source) return;
+    copy.width = source.width;
+    copy.height = source.height;
+    copy.getContext('2d')?.drawImage(source, 0, 0);
+  });
 
-  // Create a temporary visible container for html2canvas
-  const tempContainer = document.createElement('div');
-  tempContainer.style.position = 'fixed';
-  tempContainer.style.left = '-9999px';
-  tempContainer.style.top = '0';
-  tempContainer.style.width = '58mm';
-  tempContainer.style.maxWidth = '58mm';
-  tempContainer.style.backgroundColor = '#ffffff';
-  tempContainer.style.zIndex = '99999';
-  tempContainer.style.visibility = 'visible';
-  tempContainer.style.display = 'block';
+  // html2canvas draws Courier text a few pixels lower than the browser, so a
+  // rule right under a line touches it. The copy gets a little more room above
+  // each rule; the screen and the print keep the shared stylesheet.
+  clone.querySelectorAll<HTMLElement>('.receipt-divider').forEach((rule) => {
+    rule.style.marginTop = '10px';
+  });
+  clone.querySelectorAll<HTMLElement>('.receipt-total').forEach((total) => {
+    total.style.marginTop = '8px';
+  });
 
-  // Copy computed styles to ensure proper rendering
-  const computedStyle = window.getComputedStyle(receiptContainer);
-  tempContainer.style.fontFamily = computedStyle.fontFamily || "'Courier New', monospace";
-
-  tempContainer.appendChild(clone);
-  document.body.appendChild(tempContainer);
+  // The copy sits outside the modal, so it lays out at the receipt's own
+  // 58 mm width with the same receipt stylesheet, not at the modal width.
+  const holder = document.createElement('div');
+  holder.className = 'thermal-receipt-container';
+  holder.style.position = 'fixed';
+  holder.style.left = '-10000px';
+  holder.style.top = '0';
+  holder.style.width = 'auto';
+  holder.style.display = 'block';
+  holder.style.background = '#ffffff';
+  holder.appendChild(clone);
+  document.body.appendChild(holder);
 
   try {
-    // Wait for the clone to be fully rendered
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (document.fonts?.ready) await document.fonts.ready;
+    const width = Math.ceil(clone.getBoundingClientRect().width) || 219; // 58mm ≈ 219px at 96dpi
+    const height = Math.ceil(clone.scrollHeight) || 800;
 
-    const clonedReceipt = tempContainer.querySelector('.thermal-receipt') as HTMLElement | null;
-    if (!clonedReceipt) {
-      throw new Error('Cloned receipt element not found');
-    }
-
-    // Get dimensions from the original or use defaults
-    const width = receiptContainer.offsetWidth || 219; // 58mm ≈ 219px at 96dpi
-    const height = clonedReceipt.scrollHeight || clonedReceipt.offsetHeight || 800;
-
-    const canvas = await html2canvas(clonedReceipt, {
-      scale: 1.8,
+    const canvas = await html2canvas(clone, {
+      scale: 2,
       backgroundColor: '#ffffff',
       useCORS: true,
       logging: false,
       width,
       height,
+      windowWidth: width,
       allowTaint: false,
     });
     if (!canvas || canvas.width === 0 || canvas.height === 0) {
@@ -61,9 +69,7 @@ async function renderReceiptCanvas(): Promise<HTMLCanvasElement> {
     }
     return canvas;
   } finally {
-    if (tempContainer.parentNode) {
-      document.body.removeChild(tempContainer);
-    }
+    holder.remove();
   }
 }
 
