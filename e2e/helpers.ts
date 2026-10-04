@@ -364,7 +364,6 @@ export async function createPosBooking(
     await page.getByTestId('pos-pay-full').click();
   } else {
     await page.getByTestId('pos-pay-dp').click();
-    await page.getByRole('button', { name: '50%' }).click();
   }
   if (opts.payMethod === 'qris') await page.getByTestId('pos-pay-qris').click();
   else if (opts.payMethod === 'transfer') await page.getByTestId('pos-pay-transfer').click();

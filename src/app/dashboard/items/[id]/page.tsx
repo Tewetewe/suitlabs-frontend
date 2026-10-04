@@ -446,8 +446,13 @@ export default function ItemDetailPage() {
                 <h2 className="mb-3 text-sm font-semibold text-slate-900">Pricing</h2>
                 <div className="space-y-2">
                   <MoneyRow label="3-day" value={formatCurrency(item.standard_price)} />
-                  <MoneyRow label="1 day" value={formatCurrency(item.one_day_price)} />
                   <MoneyRow label="4 hours" value={formatCurrency(item.four_hour_price)} />
+                  {item.type === 'suit' && (
+                    <>
+                      <MoneyRow label="Set 3-day" value={formatCurrency(item.set_standard_price || 0)} />
+                      <MoneyRow label="Set 4 hours" value={formatCurrency(item.set_four_hour_price || 0)} />
+                    </>
+                  )}
                   {isAdmin && typeof item.purchase_price === 'number' && (
                     <MoneyRow label="Buying price" value={formatCurrency(item.purchase_price)} />
                   )}

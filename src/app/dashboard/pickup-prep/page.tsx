@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { Badge, EmptyState } from '@/components/ui/DataDisplay';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import apiClient from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
@@ -71,6 +72,8 @@ export default function PickupPrepPage() {
   const canUse = user?.role === 'admin' || user?.role === 'staff';
 
   const [date, setDate] = useState('');
+  // False while the page follows tomorrow. A date picked by hand stays put.
+  const [pinned, setPinned] = useState(false);
   const [day, setDay] = useState<PickupPrepDay | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,8 +82,9 @@ export default function PickupPrepPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [scan, setScan] = useState('');
 
-  const load = useCallback(async (forDate: string) => {
-    setLoading(true);
+  // A quiet load keeps the list on screen for the timed refresh.
+  const load = useCallback(async (forDate: string, quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const result = await apiClient.getPickupPrepDay(forDate || undefined);
@@ -89,9 +93,9 @@ export default function PickupPrepPage() {
       if (!forDate) setDate(result.date);
     } catch (e: unknown) {
       setError(errorMessage(e, 'Failed to load the pickup checklist'));
-      setDay(null);
+      if (!quiet) setDay(null);
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
@@ -105,6 +109,9 @@ export default function PickupPrepPage() {
     if (!canUse) return;
     void load('');
   }, [canUse, load]);
+
+  // Every 5 minutes: after midnight the H-1 list moves to the new tomorrow.
+  useAutoRefresh(() => void load(pinned ? date : '', true), 5 * 60_000, canUse);
 
   const replaceRental = useCallback((prep: PickupPrep) => {
     setDay((current) => {
@@ -224,6 +231,7 @@ export default function PickupPrepPage() {
               value={date}
               onChange={(e) => {
                 setDate(e.target.value);
+                setPinned(Boolean(e.target.value));
                 if (e.target.value) void load(e.target.value);
               }}
               data-testid="pickup-prep-date"

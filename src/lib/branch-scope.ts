@@ -51,7 +51,7 @@ export function headerBranchId(method?: string): string | undefined {
 export const RECEIPT_BRAND_NAME = 'SUITLABS BALI';
 export const RECEIPT_FALLBACK_SUBTITLE = 'Sewa Jas Jimbaran';
 export const RECEIPT_FALLBACK_ADDRESS =
-  'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362';
+  'Jl. Bukit Sari No.2, Jimbaran, Kec. Kuta Sel., Kabupaten Badung, Bali 80361';
 
 export function receiptSubtitle(subtitle?: string | null): string {
   return subtitle?.trim() || RECEIPT_FALLBACK_SUBTITLE;

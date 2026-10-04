@@ -15,6 +15,8 @@ import { AlertTriangle, Plus, Trash2, UserPlus } from 'lucide-react';
 import clsx from 'clsx';
 import { Badge } from '@/components/ui/DataDisplay';
 import NewCustomerModal from '@/components/modals/NewCustomerModal';
+import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 
 export type CartLine = {
   key: string;
@@ -78,6 +80,8 @@ export function SaleComposer({
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [createdCustomerOption, setCreatedCustomerOption] = useState<{ value: string; label: string } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>('cash');
+  const [feeRuleId, setFeeRuleId] = useState('');
+  const [pot, setPot] = useState('');
   const [discount, setDiscount] = useState('');
   const [notes, setNotes] = useState('');
   const [lostFees, setLostFees] = useState<Record<string, string>>({});
@@ -201,7 +205,9 @@ export function SaleComposer({
         ? 'The discount is larger than the subtotal.'
         : feelessLost.length > 0
           ? `Type a replacement fee for ${feelessLost.map((line) => line.item.name).join(', ')}.`
-          : null;
+          : potMissing(paymentMethod, pot)
+            ? POT_MISSING_MESSAGE
+            : null;
 
   /** What tapping Complete will do, counted out before it happens. */
   const outcome = [
@@ -219,6 +225,8 @@ export function SaleComposer({
       discount_amount: discountAmount,
       paid_amount: total,
       payment_method: paymentMethod,
+      fee_rule_id: feeRuleId || undefined,
+      pot: potForRequest(paymentMethod, pot),
       notes,
       items: allLines.map((line) => ({
         item_id: line.item.id,
@@ -525,6 +533,7 @@ export function SaleComposer({
             <span>Total</span>
             <span className="tabular-nums">{formatCurrency(total)}</span>
           </div>
+          <TransactionFeeLines amount={total} method={paymentMethod} pot={pot} onPotChange={setPot} ruleId={feeRuleId} onRuleIdChange={setFeeRuleId} className="text-sm text-slate-500" />
 
           {/* Marking an item lost changes stock, so the cashier reads what the
               button is about to do before pressing it. */}

@@ -22,11 +22,13 @@ import {
 } from '@/components/ui/DataDisplay';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { PotPicker } from '@/components/payments/PotPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { apiClient } from '@/lib/api';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import { groupRows } from '@/lib/group-rows';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import type {
   AssetReport,
   CreateFixedAssetRequest,
@@ -59,6 +61,7 @@ const emptyForm = (): CreateFixedAssetRequest => ({
   vendor: '',
   notes: '',
   payment_method: 'cash',
+  pot: '',
   on_credit: false,
 });
 
@@ -144,6 +147,7 @@ export default function AssetsPage() {
       vendor: asset.vendor || '',
       notes: asset.notes || '',
       payment_method: 'cash',
+      pot: '',
       on_credit: false,
     });
     setModalOpen(true);
@@ -155,10 +159,17 @@ export default function AssetsPage() {
       error('Check the form', 'Name, quantity, and buying price are required.');
       return;
     }
+    // No money leaves a Pot when the price is 0 or the asset is bought on credit.
+    const paysNow = form.purchase_price > 0 && !form.on_credit;
+    if (paysNow && potMissing(form.payment_method, form.pot)) {
+      error('Pick a bank', POT_MISSING_MESSAGE);
+      return;
+    }
     try {
       setSaving(true);
       const payload: CreateFixedAssetRequest = {
         ...form,
+        pot: paysNow ? potForRequest(form.payment_method, form.pot) : undefined,
         name: form.name.trim(),
         vendor: form.vendor?.trim() || undefined,
         notes: form.notes?.trim() || undefined,
@@ -479,6 +490,14 @@ export default function AssetsPage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, payment_method: e.target.value as CreateFixedAssetRequest['payment_method'] }))}
                 disabled={form.on_credit}
               />
+              {!form.on_credit && (
+                <PotPicker
+                  label="Paid from"
+                  method={form.payment_method}
+                  pot={form.pot}
+                  onChange={(pot) => setForm((prev) => ({ ...prev, pot }))}
+                />
+              )}
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"

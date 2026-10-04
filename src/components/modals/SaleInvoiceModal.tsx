@@ -2,12 +2,12 @@
 
 import React from 'react';
 import { Sale } from '@/types';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { downloadReceiptPdf } from '@/lib/receipt-image';
 import { printSaleInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue, saleInvoiceNumber } from '@/lib/barcode';
 import { formatCurrency } from '@/lib/currency';
+import { TRANSACTION_FEE_LABEL } from '@/lib/transaction-fee';
 import { InvoicePrintActions } from '@/components/print/InvoicePrintActions';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
@@ -19,9 +19,11 @@ interface SaleInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   sale: Sale | null;
+  /** Sends the receipt to the customer's WhatsApp on open. Set it right after a payment. */
+  autoSendWhatsApp?: boolean;
 }
 
-export function SaleInvoiceModal({ isOpen, onClose, sale }: SaleInvoiceModalProps) {
+export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = false }: SaleInvoiceModalProps) {
   const { error: toastError } = useToast();
 
   if (!isOpen || !sale) return null;
@@ -46,67 +48,9 @@ export function SaleInvoiceModal({ isOpen, onClose, sale }: SaleInvoiceModalProp
   }));
 
   const downloadInvoice = async () => {
-    const receiptContainer = document.querySelector('.thermal-receipt-container') as HTMLElement;
-    if (!receiptContainer) {
-      toastError('Invoice not ready', 'Please try again.');
-      return;
-    }
-
-    const clone = receiptContainer.cloneNode(true) as HTMLElement;
-    const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'fixed';
-    tempContainer.style.left = '-9999px';
-    tempContainer.style.top = '0';
-    tempContainer.style.width = '58mm';
-    tempContainer.style.maxWidth = '58mm';
-    tempContainer.style.backgroundColor = '#ffffff';
-    tempContainer.style.zIndex = '99999';
-    tempContainer.style.visibility = 'visible';
-    tempContainer.style.display = 'block';
-    const computedStyle = window.getComputedStyle(receiptContainer);
-    tempContainer.style.fontFamily = computedStyle.fontFamily || "'Courier New', monospace";
-    tempContainer.appendChild(clone);
-    document.body.appendChild(tempContainer);
-
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      const clonedReceipt = tempContainer.querySelector('.thermal-receipt') as HTMLElement;
-      if (!clonedReceipt) {
-        throw new Error('Cloned receipt element not found');
-      }
-      const width = receiptContainer.offsetWidth || 219;
-      const height = clonedReceipt.scrollHeight || clonedReceipt.offsetHeight || 800;
-      const canvas = await html2canvas(clonedReceipt, {
-        scale: 1.8,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        logging: false,
-        width,
-        height,
-        allowTaint: false,
-      });
-      document.body.removeChild(tempContainer);
-      if (!canvas || canvas.width === 0 || canvas.height === 0) {
-        throw new Error('Canvas is empty or invalid. Please ensure the invoice is visible.');
-      }
-      const imgWidth = 58;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [imgWidth, imgHeight],
-        compress: true,
-      });
-      const imgData = canvas.toDataURL('image/jpeg', 0.92);
-      if (!imgData || !imgData.startsWith('data:image/jpeg;base64,')) {
-        throw new Error('Invalid image data generated');
-      }
-      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
-      pdf.save(`invoice_${invoiceNumber}.pdf`);
+      await downloadReceiptPdf(`invoice_${invoiceNumber}.pdf`);
     } catch (error) {
-      if (tempContainer.parentNode) {
-        document.body.removeChild(tempContainer);
-      }
       toastError('Could not generate PDF', error instanceof Error ? error.message : 'Please try again.');
     }
   };
@@ -125,6 +69,13 @@ export function SaleInvoiceModal({ isOpen, onClose, sale }: SaleInvoiceModalProp
             onDownload={downloadInvoice}
             printInvoice={() => printSaleInvoice(sale)}
             printBarcode={() => printSaleInvoice(sale, { barcodeOnly: true })}
+            whatsapp={{
+              kind: 'sale',
+              id: sale.id,
+              invoiceNumber,
+              customerPhone: sale.customer?.phone,
+              autoSend: autoSendWhatsApp,
+            }}
           />
         }
       >
@@ -188,6 +139,12 @@ export function SaleInvoiceModal({ isOpen, onClose, sale }: SaleInvoiceModalProp
                 )}
                 <div className="receipt-total">TOTAL: {formatCurrency(sale.total_amount || 0)}</div>
                 <div className="receipt-line">Paid: {formatCurrency(sale.paid_amount || 0)}</div>
+                {(sale.transaction_fee || 0) > 0 && (
+                  <>
+                    <div className="receipt-line">{TRANSACTION_FEE_LABEL}: {formatCurrency(sale.transaction_fee || 0)}</div>
+                    <div className="receipt-line">Total paid: {formatCurrency((sale.paid_amount || 0) + (sale.transaction_fee || 0))}</div>
+                  </>
+                )}
 
                 <div className="receipt-divider"></div>
                 <div className="receipt-center">

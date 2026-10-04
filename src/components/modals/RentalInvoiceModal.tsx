@@ -2,12 +2,12 @@
 
 import React from 'react';
 import { Rental } from '@/types';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { downloadReceiptPdf } from '@/lib/receipt-image';
 import { printRentalInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue, rentalInvoiceNumber } from '@/lib/barcode';
 import { formatCurrency } from '@/lib/currency';
+import { TRANSACTION_FEE_LABEL } from '@/lib/transaction-fee';
 import { InvoicePrintActions } from '@/components/print/InvoicePrintActions';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
@@ -19,9 +19,11 @@ interface RentalInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   rental: Rental | null;
+  /** Sends the receipt to the customer's WhatsApp on open. Set it right after a payment. */
+  autoSendWhatsApp?: boolean;
 }
 
-export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceModalProps) {
+export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp = false }: RentalInvoiceModalProps) {
   const { error: toastError } = useToast();
 
   if (!isOpen || !rental) return null;
@@ -63,100 +65,9 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
 
   const downloadInvoice = async () => {
     if (!rental) return;
-
-    const receiptContainer = document.querySelector('.thermal-receipt-container') as HTMLElement;
-
-    if (!receiptContainer) {
-      toastError('Invoice not ready', 'Please try again.');
-      return;
-    }
-
-    // Clone the entire container to preserve all styles
-    const clone = receiptContainer.cloneNode(true) as HTMLElement;
-
-    // Create a temporary visible container for html2canvas
-    const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'fixed';
-    tempContainer.style.left = '-9999px';
-    tempContainer.style.top = '0';
-    tempContainer.style.width = '58mm';
-    tempContainer.style.maxWidth = '58mm';
-    tempContainer.style.backgroundColor = '#ffffff';
-    tempContainer.style.zIndex = '99999';
-    tempContainer.style.visibility = 'visible';
-    tempContainer.style.display = 'block';
-
-    // Copy computed styles to ensure proper rendering
-    const computedStyle = window.getComputedStyle(receiptContainer);
-    tempContainer.style.fontFamily = computedStyle.fontFamily || "'Courier New', monospace";
-
-    tempContainer.appendChild(clone);
-    document.body.appendChild(tempContainer);
-
     try {
-      // Wait for the clone to be fully rendered
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Get the cloned receipt element
-      const clonedReceipt = tempContainer.querySelector('.thermal-receipt') as HTMLElement;
-      if (!clonedReceipt) {
-        throw new Error('Cloned receipt element not found');
-      }
-
-      // Get dimensions from the original or use defaults
-      const width = receiptContainer.offsetWidth || 219; // 58mm ≈ 219px at 96dpi
-      const height = clonedReceipt.scrollHeight || clonedReceipt.offsetHeight || 800;
-
-      // Convert HTML to canvas with optimized settings for quality
-      const canvas = await html2canvas(clonedReceipt, {
-        scale: 1.8,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        logging: false,
-        width: width,
-        height: height,
-        allowTaint: false,
-      });
-
-      // Remove temporary container
-      document.body.removeChild(tempContainer);
-
-      // Validate canvas
-      if (!canvas || canvas.width === 0 || canvas.height === 0) {
-        throw new Error('Canvas is empty or invalid. Please ensure the invoice is visible.');
-      }
-
-      // Calculate PDF dimensions (58mm width)
-      const imgWidth = 58;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      // Create PDF
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [imgWidth, imgHeight],
-        compress: true,
-      });
-
-      // Convert canvas to JPEG with optimized quality
-      const imgData = canvas.toDataURL('image/jpeg', 0.92);
-
-      // Validate data URL
-      if (!imgData || !imgData.startsWith('data:image/jpeg;base64,')) {
-        throw new Error('Invalid image data generated');
-      }
-
-      // Add image to PDF
-      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
-
-      // Save PDF with invoice number as filename
-      pdf.save(`invoice_${invoiceNumber}.pdf`);
+      await downloadReceiptPdf(`invoice_${invoiceNumber}.pdf`);
     } catch (error) {
-      // Clean up temp container if it still exists
-      if (tempContainer.parentNode) {
-        document.body.removeChild(tempContainer);
-      }
-      console.error('Error generating PDF:', error);
       toastError('Could not generate PDF', error instanceof Error ? error.message : 'Please try again.');
     }
   };
@@ -175,6 +86,13 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
             onDownload={downloadInvoice}
             printInvoice={() => printRentalInvoice(rental)}
             printBarcode={() => printRentalInvoice(rental, { barcodeOnly: true })}
+            whatsapp={{
+              kind: 'rental',
+              id: rental.id,
+              invoiceNumber,
+              customerPhone: rental.customer?.phone,
+              autoSend: autoSendWhatsApp,
+            }}
           />
         }
       >
@@ -260,6 +178,9 @@ export function RentalInvoiceModal({ isOpen, onClose, rental }: RentalInvoiceMod
                 <div className="receipt-line">Damage: {formatCurrency(rental.damage_charges || 0)}</div>
               )}
               <div className="receipt-total">GRAND TOTAL: {formatCurrency(total)}</div>
+              {(rental.transaction_fee || 0) > 0 && (
+                <div className="receipt-line">{TRANSACTION_FEE_LABEL}: {formatCurrency(rental.transaction_fee || 0)}</div>
+              )}
               {(rental.security_deposit || 0) > 0 && (
                 <>
                   <div className="receipt-line">Deposit: {formatCurrency(rental.security_deposit || 0)}</div>

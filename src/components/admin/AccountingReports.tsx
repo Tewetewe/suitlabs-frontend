@@ -11,11 +11,13 @@ import { Input } from '@/components/ui/Input';
 import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { PotPicker } from '@/components/payments/PotPicker';
 import { useToast } from '@/contexts/ToastContext';
 import { apiClient } from '@/lib/api';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
-import type { AccountingReport, Dividend, Loan, OpeningBalance, Payable } from '@/types';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
+import type { AccountingReport, BankPots, Dividend, Loan, OpeningBalance, Payable } from '@/types';
 
 function dateLabel(value?: string | null) {
   if (!value) return '—';
@@ -24,6 +26,28 @@ function dateLabel(value?: string | null) {
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+const NO_BANK_POTS: BankPots = { bca: 0, bni: 0, unassigned: 0 };
+
+// Splits the Bank total above it into its Pots. Unassigned shows only when not 0.
+function BankPotRows({ pots, indent = 'pl-8' }: { pots?: BankPots; indent?: 'pl-8' | 'pl-12' }) {
+  const p = pots || NO_BANK_POTS;
+  return (
+    <>
+      <tr><td className={`${indent} pr-4 py-3 text-slate-600`}>Bank BCA</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(p.bca || 0)}</td></tr>
+      <tr><td className={`${indent} pr-4 py-3 text-slate-600`}>Bank BNI</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(p.bni || 0)}</td></tr>
+      {(p.unassigned || 0) !== 0 && (
+        <tr>
+          <td className={`${indent} pr-4 py-3 text-slate-600`}>
+            Bank (unassigned)
+            <div className="text-xs text-slate-500">Move it to BCA or BNI on Pot Transfers</div>
+          </td>
+          <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(p.unassigned)}</td>
+        </tr>
+      )}
+    </>
+  );
 }
 
 export function AccountingReports({
@@ -51,6 +75,7 @@ export function AccountingReports({
     dividend_date: endDate,
     amount: 0,
     shareholder: '',
+    pot: '',
     notes: '',
   });
   const [payableForm, setPayableForm] = useState({
@@ -65,6 +90,7 @@ export function AccountingReports({
     lender: '',
     principal: 0,
     payment_method: 'transfer',
+    pot: '',
   });
   const { success, error: toastError } = useToast();
   const [amountPrompt, setAmountPrompt] = useState<{
@@ -74,6 +100,7 @@ export function AccountingReports({
     title: string;
   } | null>(null);
   const [promptAmount, setPromptAmount] = useState(0);
+  const [promptPot, setPromptPot] = useState('');
   const [promptSaving, setPromptSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -113,12 +140,17 @@ export function AccountingReports({
 
   const submitAmountPrompt = async () => {
     if (!amountPrompt || promptAmount <= 0) return;
+    if (potMissing('transfer', promptPot)) {
+      toastError('Pick a bank', POT_MISSING_MESSAGE);
+      return;
+    }
     try {
       setPromptSaving(true);
       if (amountPrompt.kind === 'payable') {
         await apiClient.payPayable(amountPrompt.id, {
           amount: Number(promptAmount),
           payment_method: 'transfer',
+          pot: potForRequest('transfer', promptPot),
           paid_on: todayISO(),
         });
         success('Payable paid', formatCurrency(promptAmount));
@@ -126,6 +158,7 @@ export function AccountingReports({
         await apiClient.repayLoan(amountPrompt.id, {
           amount: Number(promptAmount),
           payment_method: 'transfer',
+          pot: potForRequest('transfer', promptPot),
           paid_on: todayISO(),
         });
         success('Loan repaid', formatCurrency(promptAmount));
@@ -160,15 +193,21 @@ export function AccountingReports({
 
   const handleDividend = async (event: FormEvent) => {
     event.preventDefault();
+    // Dividends are always paid by transfer, so a bank is always needed.
+    if (potMissing('transfer', dividendForm.pot)) {
+      setError(POT_MISSING_MESSAGE);
+      return;
+    }
     try {
       setSaving(true);
       await apiClient.createDividend({
         dividend_date: dividendForm.dividend_date,
         amount: Number(dividendForm.amount),
         shareholder: dividendForm.shareholder || undefined,
+        pot: potForRequest('transfer', dividendForm.pot),
         notes: dividendForm.notes || undefined,
       });
-      setDividendForm({ dividend_date: endDate, amount: 0, shareholder: '', notes: '' });
+      setDividendForm({ dividend_date: endDate, amount: 0, shareholder: '', pot: '', notes: '' });
       await load();
     } catch {
       setError('Could not save dividend');
@@ -199,6 +238,10 @@ export function AccountingReports({
 
   const handleLoan = async (event: FormEvent) => {
     event.preventDefault();
+    if (potMissing(loanForm.payment_method, loanForm.pot)) {
+      setError(POT_MISSING_MESSAGE);
+      return;
+    }
     try {
       setSaving(true);
       await apiClient.createLoan({
@@ -206,8 +249,9 @@ export function AccountingReports({
         lender: loanForm.lender,
         principal: Number(loanForm.principal),
         payment_method: loanForm.payment_method,
+        pot: potForRequest(loanForm.payment_method, loanForm.pot),
       });
-      setLoanForm({ loan_date: startDate, lender: '', principal: 0, payment_method: 'transfer' });
+      setLoanForm({ loan_date: startDate, lender: '', principal: 0, payment_method: 'transfer', pot: '' });
       await load();
     } catch {
       setError('Could not save loan');
@@ -265,7 +309,18 @@ export function AccountingReports({
               loading={loading}
               value={formatCurrencyCompact(report?.cash_on_hand || 0)}
               title={formatCurrency(report?.cash_on_hand || 0)}
-              sub={`Drawer ${formatCurrencyCompact(report?.cash_drawer || 0)} · Bank ${formatCurrencyCompact(report?.bank || 0)}`}
+              sub={
+                <>
+                  Drawer {formatCurrencyCompact(report?.cash_drawer || 0)} · Bank {formatCurrencyCompact(report?.bank || 0)}
+                  <span className="block pl-2">Bank BCA {formatCurrencyCompact(report?.bank_pots?.bca || 0)}</span>
+                  <span className="block pl-2">Bank BNI {formatCurrencyCompact(report?.bank_pots?.bni || 0)}</span>
+                  {(report?.bank_pots?.unassigned || 0) !== 0 && (
+                    <span className="block whitespace-normal pl-2">
+                      Bank (unassigned) {formatCurrencyCompact(report?.bank_pots?.unassigned || 0)} · Move it to BCA or BNI on Pot Transfers
+                    </span>
+                  )}
+                </>
+              }
             />
             <MetricTile
               label="Accounts Receivable"
@@ -304,6 +359,7 @@ export function AccountingReports({
                 <tbody className="divide-y divide-black/5 bg-white/30">
                   <tr><td className="px-4 py-3">Cash Drawer</td><td className="px-4 py-3 text-right">{formatCurrency(bs?.cash_drawer || 0)}</td></tr>
                   <tr><td className="px-4 py-3">Bank</td><td className="px-4 py-3 text-right">{formatCurrency(bs?.bank || 0)}</td></tr>
+                  <BankPotRows pots={bs?.bank_pots} />
                   <tr><td className="px-4 py-3">Accounts Receivable</td><td className="px-4 py-3 text-right">{formatCurrency(bs?.accounts_receivable || 0)}</td></tr>
                   <tr><td className="px-4 py-3">Inventory Assets</td><td className="px-4 py-3 text-right">{formatCurrency(bs?.inventory || 0)}</td></tr>
                   <tr><td className="px-4 py-3">Fixed Assets</td><td className="px-4 py-3 text-right">{formatCurrency(bs?.fixed_assets || 0)}</td></tr>
@@ -378,6 +434,9 @@ export function AccountingReports({
             <table className="min-w-full text-sm">
               <tbody className="divide-y divide-black/5 bg-white/30">
                 <tr><td className="px-4 py-3">Beginning cash</td><td className="px-4 py-3 text-right">{formatCurrency(cf?.beginning_cash || 0)}</td></tr>
+                <tr><td className="pl-8 pr-4 py-3 text-slate-600">Cash Drawer</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(cf?.beginning_cash_drawer || 0)}</td></tr>
+                <tr><td className="pl-8 pr-4 py-3 text-slate-600">Bank</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(cf?.beginning_bank || 0)}</td></tr>
+                <BankPotRows pots={cf?.beginning_bank_pots} indent="pl-12" />
                 <tr><td className="px-4 py-3">Booking collections</td><td className="px-4 py-3 text-right">{formatCurrency(cf?.booking_collections || 0)}</td></tr>
                 <tr><td className="px-4 py-3">Sale collections</td><td className="px-4 py-3 text-right">{formatCurrency(cf?.sale_collections || 0)}</td></tr>
                 <tr><td className="px-4 py-3">Rental charges</td><td className="px-4 py-3 text-right">{formatCurrency(cf?.rental_charges || 0)}</td></tr>
@@ -388,7 +447,19 @@ export function AccountingReports({
                 <tr><td className="px-4 py-3">Loan repayments</td><td className="px-4 py-3 text-right">{formatCurrency(cf?.loan_repayments || 0)}</td></tr>
                 <tr><td className="px-4 py-3">Payable payments</td><td className="px-4 py-3 text-right">{formatCurrency(cf?.payable_payments || 0)}</td></tr>
                 <tr><td className="px-4 py-3">Dividends</td><td className="px-4 py-3 text-right">{formatCurrency(cf?.dividends || 0)}</td></tr>
+                {(cf?.pot_transfers || 0) !== 0 && (
+                  <tr>
+                    <td className="px-4 py-3 text-slate-600">
+                      Moved between pots
+                      <div className="text-xs text-slate-500">Not income or spending; totals do not change.</div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(cf?.pot_transfers || 0)}</td>
+                  </tr>
+                )}
                 <tr><td className="px-4 py-3 font-semibold">Ending cash</td><td className="px-4 py-3 text-right font-semibold">{formatCurrency(cf?.ending_cash || 0)}</td></tr>
+                <tr><td className="pl-8 pr-4 py-3 text-slate-600">Cash Drawer</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(cf?.ending_cash_drawer || 0)}</td></tr>
+                <tr><td className="pl-8 pr-4 py-3 text-slate-600">Bank</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(cf?.ending_bank || 0)}</td></tr>
+                <BankPotRows pots={cf?.ending_bank_pots} indent="pl-12" />
               </tbody>
             </table>
           </div>
@@ -513,6 +584,7 @@ export function AccountingReports({
                                 title: `Pay ${row.description}`,
                               });
                               setPromptAmount(outstanding);
+                              setPromptPot('');
                             }}>Pay</Button>
                           )}
                           {row.paid_amount === 0 && (
@@ -538,7 +610,7 @@ export function AccountingReports({
             <div className="font-semibold text-slate-900">Loans</div>
             <div className="text-sm text-slate-600">Receiving a Loan increases Cash on Hand. It is not revenue. Repayment reduces cash and the outstanding Loan.</div>
           </div>
-          <form onSubmit={handleLoan} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
+          <form onSubmit={handleLoan} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-6">
             <Input label="Date" type="date" required value={loanForm.loan_date} onChange={(e) => setLoanForm((p) => ({ ...p, loan_date: e.target.value }))} />
             <Input label="Lender" required value={loanForm.lender} onChange={(e) => setLoanForm((p) => ({ ...p, lender: e.target.value }))} />
             <CurrencyInput label="Principal" required value={loanForm.principal || ''} onChange={(n) => setLoanForm((p) => ({ ...p, principal: n }))} />
@@ -547,6 +619,12 @@ export function AccountingReports({
               value={loanForm.payment_method}
               onChange={(e) => setLoanForm((p) => ({ ...p, payment_method: e.target.value }))}
               options={[...SALE_PAYMENT_METHOD_OPTIONS]}
+            />
+            <PotPicker
+              label="Paid into"
+              method={loanForm.payment_method}
+              pot={loanForm.pot}
+              onChange={(pot) => setLoanForm((p) => ({ ...p, pot }))}
             />
             <div className="flex items-end">
               <Button type="submit" loading={saving}>Record loan</Button>
@@ -583,6 +661,7 @@ export function AccountingReports({
                               title: `Repay ${row.lender}`,
                             });
                             setPromptAmount(row.outstanding);
+                            setPromptPot('');
                           }}>Repay</Button>
                         )}
                         {row.outstanding === row.principal && (
@@ -607,10 +686,16 @@ export function AccountingReports({
             <div className="font-semibold text-slate-900">Dividends</div>
             <div className="text-sm text-slate-600">Yearly profit to shareholders. This reduces Cash on Hand and Equity; it is not an Expense.</div>
           </div>
-          <form onSubmit={handleDividend} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
+          <form onSubmit={handleDividend} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-6">
             <Input label="Date" type="date" required value={dividendForm.dividend_date} onChange={(e) => setDividendForm((p) => ({ ...p, dividend_date: e.target.value }))} />
             <CurrencyInput label="Amount" required value={dividendForm.amount || ''} onChange={(n) => setDividendForm((p) => ({ ...p, amount: n }))} />
             <Input label="Shareholder" placeholder="Optional" value={dividendForm.shareholder} onChange={(e) => setDividendForm((p) => ({ ...p, shareholder: e.target.value }))} />
+            <PotPicker
+              label="Paid from"
+              method="transfer"
+              pot={dividendForm.pot}
+              onChange={(pot) => setDividendForm((p) => ({ ...p, pot }))}
+            />
             <Input label="Notes" placeholder="Optional" value={dividendForm.notes} onChange={(e) => setDividendForm((p) => ({ ...p, notes: e.target.value }))} />
             <div className="flex items-end">
               <Button type="submit" loading={saving}>Record dividend</Button>
@@ -668,6 +753,13 @@ export function AccountingReports({
           label="Amount"
           value={promptAmount || ''}
           onChange={(n) => setPromptAmount(n)}
+        />
+        {/* Payables and Loans are paid back by transfer. */}
+        <PotPicker
+          label="Paid from"
+          method="transfer"
+          pot={promptPot}
+          onChange={setPromptPot}
         />
       </ConfirmModal>
     </>

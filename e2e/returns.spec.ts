@@ -24,7 +24,8 @@ test.describe('Return exceptions', () => {
     const rental = await pickupNamedRental(page, customer.fullName);
     await rental.getByTestId('rental-complete').click();
     await expect(page.getByRole('heading', { name: 'Complete rental' })).toBeVisible();
-    await page.getByLabel('Actual return date').fill(addDaysISO(customer.returnDate, 2));
+    // Two days after the return date, past 20:00 twice: two late days.
+    await page.getByLabel('Actual return time').fill(`${addDaysISO(customer.returnDate, 2)}T10:00`);
     await page.getByLabel('Damage notes').click();
     await page.getByTestId('confirm-complete').click();
     await expect(page.getByRole('heading', { name: 'Rental Invoice' })).toBeVisible();

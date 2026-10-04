@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
@@ -13,15 +12,20 @@ import { apiClient } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/api-utils';
 import { formatCurrency } from '@/lib/currency';
 import { formatDateShort } from '@/lib/date';
-import { Rental } from '@/types';
+import { InvoiceData, Rental } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Edit, FileText, Eye, Printer, ShoppingBag, Calendar, MessageCircle } from 'lucide-react';
 import { CreateRentalModal } from '@/components/modals/CreateRentalModal';
 import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
+import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { RentalDetailsModal } from '@/components/modals/RentalDetailsModal';
 import { EditRentalModal } from '@/components/modals/EditRentalModal';
 import { PickupRentalModal } from '@/components/modals/PickupRentalModal';
+import { CompleteRentalModal, DEPOSIT_GRACE_DAYS, isDepositHeld } from '@/components/modals/CompleteRentalModal';
 import { ProofPick } from '@/components/payments/ProofPick';
+import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
+import { PotPicker } from '@/components/payments/PotPicker';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
@@ -29,9 +33,6 @@ import { useToast } from '@/contexts/ToastContext';
 import { SALE_PAYMENT_METHOD_OPTIONS, DEPOSIT_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
-
-/** Matches usecase.DepositReleaseGraceDays on the backend. */
-const DEPOSIT_GRACE_DAYS = 7;
 
 /** Whole days since the suit came back, or null when it has not. */
 function daysSinceReturn(rental: Rental): number | null {
@@ -52,16 +53,21 @@ export default function RentalsPage() {
   const [showChangeDatesModal, setShowChangeDatesModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  /** True when the open rental invoice collected a Late Fee or Damage Charge, so it goes to WhatsApp. */
+  const [rentalInvoiceJustPaid, setRentalInvoiceJustPaid] = useState(false);
+  /** The full booking invoice after a Pickup collects the remaining amount. */
+  const [pickupInvoice, setPickupInvoice] = useState<InvoiceData | null>(null);
   const [showPickupModal, setShowPickupModal] = useState(false);
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [damageCharges, setDamageCharges] = useState<string>('');
   const [damageNotes, setDamageNotes] = useState<string>('');
   const [chargePaymentMethod, setChargePaymentMethod] = useState<string>('cash');
+  const [chargeFeeRuleId, setChargeFeeRuleId] = useState('');
+  const [chargePot, setChargePot] = useState('');
+  const [refundPot, setRefundPot] = useState('');
   const [depositRefundMethod, setDepositRefundMethod] = useState<string>('cash');
   const [refundProofFile, setRefundProofFile] = useState<File | null>(null);
-  const [actualReturnDate, setActualReturnDate] = useState<string>('');
-  const [sendToMaintenance, setSendToMaintenance] = useState<boolean>(false);
   const [newRentalDate, setNewRentalDate] = useState('');
   const [newReturnDate, setNewReturnDate] = useState('');
   const [cancellationReason, setCancellationReason] = useState('');
@@ -96,12 +102,6 @@ export default function RentalsPage() {
     if (rental.agreement_sent_at) return { label: 'Agreement sent', variant: 'warning' };
     return { label: 'Needs agreement', variant: 'danger' };
   };
-
-  // One line per rental saying whose money the shop is sitting on. Held is the
-  // detail behind the Customer Deposits balance, so the amount reads plainly
-  // rather than hiding in the Complete modal.
-  const isDepositHeld = (rental: Rental) =>
-    Boolean(rental.deposit_collected_at) && !rental.deposit_refunded_at && (rental.security_deposit || 0) > 0;
 
   // A returned rental keeps its deposit until somebody checks the item. That
   // wait is normal for DEPOSIT_GRACE_DAYS, so only an overdue check reads as a
@@ -219,6 +219,19 @@ export default function RentalsPage() {
     }
   };
 
+  // A Pickup that collects the remaining amount completes the Booking payment,
+  // so the customer gets the full invoice like any other payment.
+  const openPickupInvoice = async (bookingId: string) => {
+    try {
+      const invoice = await apiClient.generateInvoice(bookingId, 'full');
+      if (!invoice) return;
+      if (!Array.isArray(invoice.items)) invoice.items = [];
+      setPickupInvoice(invoice);
+    } catch {
+      toastError('Payment recorded, invoice failed', 'Print it from Bookings if the customer needs a copy.');
+    }
+  };
+
   const handlePickupRental = (rentalId: string) => {
     const rental = rentals.find(r => r.id === rentalId) || null;
     setSelectedRental(rental);
@@ -228,11 +241,6 @@ export default function RentalsPage() {
   const handleCompleteRental = (rentalId: string) => {
     const rental = rentals.find(r => r.id === rentalId) || null;
     setSelectedRental(rental);
-    setDamageCharges('');
-    setDamageNotes('');
-    setChargePaymentMethod('cash');
-    setDepositRefundMethod(rental?.deposit_payment_method === 'transfer' ? 'transfer' : 'cash');
-    setRefundProofFile(null);
     setShowCompleteModal(true);
   };
 
@@ -241,7 +249,11 @@ export default function RentalsPage() {
     setDamageCharges('');
     setDamageNotes('');
     setChargePaymentMethod('cash');
+    setChargeFeeRuleId('');
+    setChargePot('');
     setDepositRefundMethod(rental.deposit_payment_method === 'transfer' ? 'transfer' : 'cash');
+    // The refund goes back out of the bank the deposit came into.
+    setRefundPot(rental.deposit_pot === 'bca' || rental.deposit_pot === 'bni' ? rental.deposit_pot : '');
     setRefundProofFile(null);
     setShowReleaseModal(true);
   };
@@ -252,6 +264,12 @@ export default function RentalsPage() {
     try {
       const parsedCharge = damageCharges ? parseFloat(damageCharges) : 0;
       const refundable = Math.max((selectedRental.security_deposit || 0) - parsedCharge, 0);
+      const chargedAbove = parsedCharge > (selectedRental.security_deposit || 0);
+      if ((refundable > 0 && potMissing(depositRefundMethod, refundPot)) || (chargedAbove && potMissing(chargePaymentMethod, chargePot))) {
+        toastError('Pick the bank', POT_MISSING_MESSAGE);
+        setIsSubmitting(false);
+        return;
+      }
 
       // Proof is optional, so an upload failure never blocks the release.
       let refundProofUrl: string | undefined;
@@ -267,6 +285,9 @@ export default function RentalsPage() {
         damage_charges: parsedCharge || undefined,
         damage_notes: damageNotes || undefined,
         payment_method: chargePaymentMethod,
+        fee_rule_id: chargeFeeRuleId || undefined,
+        pot: chargedAbove ? potForRequest(chargePaymentMethod, chargePot) : undefined,
+        refund_pot: refundable > 0 ? potForRequest(depositRefundMethod, refundPot) : undefined,
         deposit_refund_method: refundable > 0 ? depositRefundMethod : undefined,
         deposit_refund_proof_url: refundProofUrl,
       });
@@ -281,54 +302,14 @@ export default function RentalsPage() {
     }
   };
 
-  const submitCompleteRental = async () => {
-    if (!selectedRental) return;
-    try {
-      const parsedCharge = damageCharges ? parseFloat(damageCharges) : undefined;
-      let isoActual: string | undefined = undefined;
-      if (actualReturnDate) {
-        const dt = new Date(actualReturnDate);
-        if (!isNaN(dt.getTime())) isoActual = dt.toISOString();
-      }
-      if (!user?.id) {
-        toastError('Please sign in again', 'Your session expired.');
-        return;
-      }
-      // A held deposit settles at the item check, so Complete sends no damage
-      // charge and no refund. The backend refuses one anyway.
-      const depositHeld = isDepositHeld(selectedRental);
-      await apiClient.completeRental(
-        selectedRental.id,
-        user.id,
-        isoActual,
-        depositHeld ? undefined : parsedCharge,
-        damageNotes || undefined,
-        chargePaymentMethod,
-      );
-      // Optionally send all rented items to maintenance
-      if (sendToMaintenance && Array.isArray(selectedRental.items)) {
-        for (const it of selectedRental.items) {
-          try {
-            await apiClient.sendToMaintenance(it.item_id, damageNotes || 'Maintenance after return', it.quantity || 1);
-          } catch (e) {
-            console.warn('Failed to send item to maintenance', it.item_id, e);
-          }
-        }
-      }
-      await reload();
-      setShowCompleteModal(false);
-      setShowDetailsModal(false);
-      setRefundProofFile(null);
-      // Refresh selected rental to show updated totals, then show invoice
-      try {
-        const latest = await apiClient.getRental(selectedRental.id);
-        setSelectedRental(latest);
-      } catch {}
-      setShowInvoiceModal(true);
-    } catch (error) {
-      console.error('Failed to complete rental:', error);
-      toastError('Could not complete rental', 'Please try again.');
-    }
+  // Complete closes the details and opens the invoice with the Late Fee and
+  // damage on it.
+  const handleRentalCompleted = async (latest: Rental) => {
+    await reload();
+    setShowCompleteModal(false);
+    setShowDetailsModal(false);
+    setSelectedRental(latest);
+    setShowInvoiceModal(true);
   };
 
   const handleEditRental = (rental: Rental) => {
@@ -693,9 +674,18 @@ export default function RentalsPage() {
           isOpen={showInvoiceModal}
           onClose={() => {
             setShowInvoiceModal(false);
+            setRentalInvoiceJustPaid(false);
             setSelectedRental(null);
           }}
           rental={selectedRental}
+          autoSendWhatsApp={rentalInvoiceJustPaid}
+        />
+
+        <BookingInvoiceModal
+          isOpen={!!pickupInvoice}
+          onClose={() => setPickupInvoice(null)}
+          invoice={pickupInvoice}
+          autoSendWhatsApp
         />
 
         <SimpleModal
@@ -719,49 +709,12 @@ export default function RentalsPage() {
           </div>
         </SimpleModal>
 
-        <SimpleModal
-          isOpen={showCompleteModal && Boolean(selectedRental)}
-          title="Complete rental"
+        <CompleteRentalModal
+          isOpen={showCompleteModal}
+          rental={selectedRental}
           onClose={() => setShowCompleteModal(false)}
-          size="md"
-          footer={
-            <>
-              <Button variant="ghost" onClick={() => setShowCompleteModal(false)}>Cancel</Button>
-              <Button onClick={submitCompleteRental} data-testid="confirm-complete">Complete</Button>
-            </>
-          }
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-slate-600">If anything is missing, record lost items or add-ons first.</p>
-            {selectedRental && (
-              <Link href={`/dashboard/sales?rental_id=${selectedRental.id}&customer_id=${selectedRental.user_id}`} className="inline-flex">
-                <Button variant="secondary" size="sm"><ShoppingBag className="h-4 w-4" /> Lost items / add-ons</Button>
-              </Link>
-            )}
-            <Input label="Actual return date" type="date" value={actualReturnDate} onChange={(e) => setActualReturnDate(e.target.value)} helperText="Leave empty to use now." />
-            <Textarea label="Damage notes" rows={3} value={damageNotes} onChange={(e) => setDamageNotes(e.target.value)} placeholder="Optional" />
-            {selectedRental && isDepositHeld(selectedRental) ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-sm font-medium text-slate-800">
-                  Deposit {formatCurrency(selectedRental.security_deposit || 0)} stays held
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Check the item first, then tap <b>Release deposit</b> on this rental to charge damage and pay the rest back.
-                  If nobody checks it within {DEPOSIT_GRACE_DAYS} days, the whole deposit goes back automatically.
-                </p>
-              </div>
-            ) : (
-              <>
-                <CurrencyInput label="Damage charge" value={damageCharges} onChange={(n) => setDamageCharges(n ? String(n) : '')} helperText="Leave 0 if none." />
-                <Select searchable={false} label="Charges paid with" options={[...SALE_PAYMENT_METHOD_OPTIONS]} value={chargePaymentMethod} onChange={(e) => setChargePaymentMethod(e.target.value)} helperText="Late fee and damage." />
-              </>
-            )}
-            <label className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
-              <input id="send-maintenance" type="checkbox" className="h-4 w-4" checked={sendToMaintenance} onChange={(e) => setSendToMaintenance(e.target.checked)} />
-              Send rented items to maintenance
-            </label>
-          </div>
-        </SimpleModal>
+          onCompleted={(latest) => void handleRentalCompleted(latest)}
+        />
 
         <SimpleModal
           isOpen={showReleaseModal && Boolean(selectedRental)}
@@ -804,6 +757,7 @@ export default function RentalsPage() {
                   value={depositRefundMethod}
                   onChange={(e) => setDepositRefundMethod(e.target.value)}
                 />
+                <PotPicker method={depositRefundMethod} pot={refundPot} onChange={setRefundPot} label="Refund paid from" />
                 <Select
                   searchable={false}
                   label="Charges paid with"
@@ -811,6 +765,15 @@ export default function RentalsPage() {
                   value={chargePaymentMethod}
                   onChange={(e) => setChargePaymentMethod(e.target.value)}
                   helperText="Only used when damage runs past the deposit."
+                />
+                <TransactionFeeLines
+                  amount={(damageCharges ? parseFloat(damageCharges) || 0 : 0) - (selectedRental.security_deposit || 0)}
+                  method={chargePaymentMethod}
+                  pot={chargePot}
+                  onPotChange={setChargePot}
+                  ruleId={chargeFeeRuleId}
+                  onRuleIdChange={setChargeFeeRuleId}
+                  className="text-xs text-slate-600"
                 />
                 <ProofPick
                   id="release-refund-proof"
@@ -852,7 +815,10 @@ export default function RentalsPage() {
             setShowPickupModal(false);
             setSelectedRental(null);
           }}
-          onSuccess={() => { void reload(); }}
+          onSuccess={(paidBookingId) => {
+            void reload();
+            if (paidBookingId) void openPickupInvoice(paidBookingId);
+          }}
           rental={selectedRental}
           depositEnabled={depositEnabled}
           onSendAgreement={handleSendAgreement}

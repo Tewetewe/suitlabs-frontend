@@ -3,6 +3,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/Button';
 import { ThermalPrinterButton } from '@/components/print/ThermalPrinterButton';
+import { SendReceiptWhatsApp, type ReceiptWhatsAppTarget } from '@/components/print/SendReceiptWhatsApp';
 import { useToast } from '@/contexts/ToastContext';
 import type { PrintOutcome } from '@/lib/print-router';
 
@@ -11,11 +12,14 @@ export function InvoicePrintActions({
   onDownload,
   printInvoice,
   printBarcode,
+  whatsapp,
 }: {
   onClose: () => void;
   onDownload: () => void;
   printInvoice: () => Promise<PrintOutcome>;
   printBarcode: () => Promise<PrintOutcome>;
+  /** The record to send the receipt for. Without it, no WhatsApp button shows. */
+  whatsapp?: ReceiptWhatsAppTarget;
 }) {
   const { error: toastError, success } = useToast();
 
@@ -39,6 +43,7 @@ export function InvoicePrintActions({
       <Button variant="outline" onClick={onDownload} className="w-full sm:w-auto">
         Download
       </Button>
+      {whatsapp && <SendReceiptWhatsApp target={whatsapp} />}
       <Button
         variant="outline"
         onClick={() => runPrint(printBarcode)}

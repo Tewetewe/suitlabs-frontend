@@ -27,6 +27,9 @@ import {
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
+import { TRANSACTION_FEE_LABEL, isQrisMethod, transactionFee } from '@/lib/transaction-fee';
+import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,6 +41,7 @@ import { Select } from '@/components/ui/Select';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
 import NewCustomerModal from '@/components/modals/NewCustomerModal';
 import { ProofPick } from '@/components/payments/ProofPick';
+import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { SaleInvoiceModal } from '@/components/modals/SaleInvoiceModal';
 import { useCashierChrome } from '@/components/cashier/CashierChromeContext';
@@ -81,6 +85,10 @@ type DoneReceipt = {
   title: string;
   subtitle: string;
   amount: number;
+  /** Transaction Fee the customer paid on top of `amount`. */
+  fee: number;
+  /** Where the total was charged: QRIS or the EDC. */
+  via: string;
 };
 
 const PAY_CHANNELS: Array<{ value: PayChannel; label: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -105,8 +113,8 @@ function shortDate(iso: string) {
 }
 
 function catalogPrice(item: Item, mode: PosMode) {
-  if (mode === 'sale') return item.selling_price || item.standard_price || item.one_day_price || 0;
-  return item.standard_price || item.one_day_price || 0;
+  if (mode === 'sale') return item.selling_price || item.standard_price || 0;
+  return item.standard_price || 0;
 }
 
 function stockQty(item: Item) {
@@ -120,6 +128,23 @@ function canSell(item: Item, mode: PosMode) {
 
 function toBookingPayment(coverage: PayCoverage, channel: PayChannel): BookingPaymentMethod {
   return `${coverage}_${channel}` as BookingPaymentMethod;
+}
+
+/**
+ * Spreads a booking discount across the lines in proportion to their totals,
+ * as the backend does. The backend reads the discount only from the lines.
+ */
+function spreadDiscount(lineTotals: number[], discount: number): number[] {
+  const sum = lineTotals.reduce((acc, line) => acc + line, 0);
+  let left = Math.min(Math.max(discount, 0), sum);
+  return lineTotals.map((line, index) => {
+    const share = index === lineTotals.length - 1 || sum <= 0
+      ? left
+      : Math.round(discount * (line / sum));
+    const taken = Math.min(share, line, left);
+    left -= taken;
+    return taken;
+  });
 }
 
 export function CashierPOS() {
@@ -155,9 +180,11 @@ export function CashierPOS() {
   const [packageId, setPackageId] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [payChannel, setPayChannel] = useState<PayChannel>('cash');
+  const [feeRuleId, setFeeRuleId] = useState('');
+  const [pot, setPot] = useState('');
+  const feeRules = useTransactionFeeRules();
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [payCoverage, setPayCoverage] = useState<PayCoverage>('dp');
-  const [paidInput, setPaidInput] = useState('');
   const [discount, setDiscount] = useState('');
   const [notes, setNotes] = useState('');
   const [guarantee, setGuarantee] = useState('KTP');
@@ -182,8 +209,14 @@ export function CashierPOS() {
   const discountAmount = Number(discount) || 0;
   const gross = mode === 'rental' && packagePrice > 0 ? packagePrice + addonTotal : subtotal;
   const total = Math.max(0, gross - (mode === 'rental' && packagePrice > 0 ? 0 : discountAmount));
-  const paidAmount = mode === 'rental' && payCoverage === 'full' ? total : Number(paidInput) || 0;
+  // A down payment takes half of the total and a full payment takes all of it.
+  // The remaining amount is paid in full at pickup.
+  const paidAmount = payCoverage === 'full' ? total : Math.min(Math.ceil(total * 0.5), total);
   const remaining = Math.max(0, total - paidAmount);
+  // What is charged now and with which method. A large QRIS payment adds a
+  // fee the customer pays on top; the backend works it out on its own.
+  const chargeNow = mode === 'rental' ? paidAmount : total;
+  const chargeMethod = mode === 'rental' ? toBookingPayment(payCoverage, payChannel) : payChannel;
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
 
   const loadItems = useCallback(async (nextPage: number, append: boolean) => {
@@ -382,11 +415,12 @@ export function CashierPOS() {
     setCart([]);
     setCustomer(null);
     setPackageId('');
-    setPaidInput('');
     setDiscount('');
     setNotes('');
     setPayCoverage('dp');
     setPayChannel('cash');
+    setFeeRuleId('');
+    setPot('');
     setGuarantee('KTP');
     setCartOpen(false);
     setDone(null);
@@ -449,6 +483,10 @@ export function CashierPOS() {
 
   const handleCharge = async () => {
     if (cart.length === 0) return;
+    if (potMissing(chargeMethod, pot) && (mode !== 'rental' || chargeNow > 0)) {
+      error('Pick the bank', POT_MISSING_MESSAGE);
+      return;
+    }
     if (mode === 'rental' && !customer) {
       error('Customer required', 'Pick or add a customer before charging a rental.');
       setCartOpen(true);
@@ -473,6 +511,8 @@ export function CashierPOS() {
           discount_amount: discountAmount,
           paid_amount: total,
           payment_method: payChannel,
+          fee_rule_id: feeRuleId || undefined,
+          pot: potForRequest(chargeMethod, pot),
           notes,
           items: cart.map((line) => ({
             item_id: line.item.id,
@@ -486,6 +526,8 @@ export function CashierPOS() {
           title: 'Sale complete',
           subtitle: sale.sale_number,
           amount: total,
+          fee: sale.transaction_fee ?? transactionFee(total, payChannel, feeRules, feeRuleId),
+          via: isQrisMethod(payChannel) ? 'QRIS' : 'EDC',
         });
         setSaleInvoice(sale);
         success('Sale recorded', sale.sale_number);
@@ -499,6 +541,10 @@ export function CashierPOS() {
             error('Proof upload failed', 'The booking is still charged. Attach the proof from Bookings.');
           }
         }
+        const lineDiscounts = spreadDiscount(
+          cart.map((line) => line.unit_price * line.quantity),
+          packageId ? 0 : discountAmount,
+        );
         const payload = {
           customer_id: customer!.id,
           booking_date: new Date(rentalDate).toISOString(),
@@ -509,6 +555,8 @@ export function CashierPOS() {
           status: paidAmount > 0 ? 'confirmed' : 'pending',
           payment_status: paymentStatus,
           payment_method: toBookingPayment(payCoverage, payChannel),
+          fee_rule_id: feeRuleId || undefined,
+          pot: potForRequest(chargeMethod, pot),
           package_pricing_id: packageId || undefined,
           ...(packageId ? {} : { total_amount: gross }),
           paid_amount: paidAmount,
@@ -516,12 +564,12 @@ export function CashierPOS() {
           discount_amount: packageId ? 0 : discountAmount,
           remaining_amount: remaining,
           created_by: user?.id,
-          items: cart.map((line) => ({
+          items: cart.map((line, index) => ({
             item_id: line.item.id,
             quantity: line.quantity,
             unit_price: line.unit_price,
             total_price: line.unit_price * line.quantity,
-            discount_amount: 0,
+            discount_amount: lineDiscounts[index],
             is_addon: !!packageId && !!line.is_addon,
           })),
         } as unknown as CreateBookingRequest;
@@ -532,6 +580,8 @@ export function CashierPOS() {
           title: 'Booking charged',
           subtitle: `Pickup is on Rentals · #${bookingId.slice(-8)}`,
           amount: paidAmount || total,
+          fee: booking.transaction_fee ?? transactionFee(paidAmount, toBookingPayment(payCoverage, payChannel), feeRules, feeRuleId),
+          via: isQrisMethod(payChannel) ? 'QRIS' : 'EDC',
         });
         success('Booking created', 'Rental is waiting for pickup');
         if (paidAmount > 0) {
@@ -771,14 +821,11 @@ export function CashierPOS() {
           <div>
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Pay</div>
             <div className="mb-2 grid grid-cols-2 gap-2">
-              <Chip selected={payCoverage === 'dp'} onClick={() => setPayCoverage('dp')} block testId="pos-pay-dp">DP</Chip>
+              <Chip selected={payCoverage === 'dp'} onClick={() => setPayCoverage('dp')} block testId="pos-pay-dp">DP 50%</Chip>
               <Chip
                 selected={payCoverage === 'full'}
                 testId="pos-pay-full"
-                onClick={() => {
-                  setPayCoverage('full');
-                  setPaidInput(String(total));
-                }}
+                onClick={() => setPayCoverage('full')}
                 block
               >
                 Full
@@ -821,18 +868,9 @@ export function CashierPOS() {
         )}
 
         {mode === 'rental' && payCoverage === 'dp' && (
-          <div>
-            <CurrencyInput
-              label="Down payment"
-              value={paidInput}
-              onChange={(n) => setPaidInput(n ? String(n) : '')}
-            />
-            <div className="mt-2 flex gap-2">
-              <Chip onClick={() => setPaidInput('0')}>{formatCurrency(0)}</Chip>
-              <Chip onClick={() => setPaidInput(String(Math.round(total / 2)))}>50%</Chip>
-              <Chip onClick={() => { setPayCoverage('full'); setPaidInput(String(total)); }}>100%</Chip>
-            </div>
-          </div>
+          <p className="text-sm text-slate-500">
+            The customer pays {formatCurrency(paidAmount)} now and {formatCurrency(remaining)} in full at pickup.
+          </p>
         )}
 
         {!(mode === 'rental' && packageId) && (
@@ -874,7 +912,7 @@ export function CashierPOS() {
           )}
           {mode === 'rental' && (
             <div className="flex justify-between text-slate-500">
-              <span>Remaining</span>
+              <span>Remaining at pickup</span>
               <span className="tabular-nums">{formatCurrency(remaining)}</span>
             </div>
           )}
@@ -882,6 +920,7 @@ export function CashierPOS() {
             <span>{mode === 'rental' && payCoverage === 'dp' ? 'To charge' : 'Total'}</span>
             <span className="tabular-nums">{formatCurrency(mode === 'rental' && payCoverage === 'dp' ? paidAmount : total)}</span>
           </div>
+          <TransactionFeeLines amount={chargeNow} method={chargeMethod} pot={pot} onPotChange={setPot} ruleId={feeRuleId} onRuleIdChange={setFeeRuleId} className="text-slate-500" />
         </div>
         <Button
           size="xl"
@@ -1237,6 +1276,11 @@ export function CashierPOS() {
             <h2 className="text-2xl font-semibold text-slate-900">{done.title}</h2>
             <p className="mt-1 text-sm text-slate-500" data-testid="pos-done-subtitle">{done.subtitle}</p>
             <p className="mt-3 text-3xl font-bold tabular-nums text-slate-900">{formatCurrency(done.amount)}</p>
+            {done.fee > 0 && (
+              <p className="mt-1 text-sm text-slate-500" data-testid="pos-done-fee">
+                + {TRANSACTION_FEE_LABEL} {formatCurrency(done.fee)} · Charged by {done.via} {formatCurrency(done.amount + done.fee)}
+              </p>
+            )}
             <Button size="xl" className="mt-8 w-full min-h-14" onClick={resetTicket}>
               New transaction
             </Button>
@@ -1255,11 +1299,13 @@ export function CashierPOS() {
         isOpen={!!invoiceData}
         invoice={invoiceData}
         onClose={() => setInvoiceData(null)}
+        autoSendWhatsApp
       />
       <SaleInvoiceModal
         isOpen={!!saleInvoice}
         sale={saleInvoice}
         onClose={() => setSaleInvoice(null)}
+        autoSendWhatsApp
       />
     </div>
   );

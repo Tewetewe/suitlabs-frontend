@@ -32,4 +32,4 @@ The frontend reads the API base URL from `NEXT_PUBLIC_API_URL` (defaults to `htt
 
 ## Notes
 - Dates are sent as ISO strings. The UI normalizes date inputs to full timestamps.
-- Late fee follows a fixed schedule in the backend: 50% of the rental for a return one day late, the whole rental beyond that. Days are whole 24-hour days. Invoices show the amount charged.
+- Late fee is priced by the backend: due back by 20:00 on the return date, then 50% of the rental for each 20:00 that passes, with no cap. Invoices show the amount charged.

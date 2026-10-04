@@ -14,8 +14,12 @@ import { apiErrorMessage } from '@/lib/api-utils';
 import SimpleModal from '@/components/modals/SimpleModal';
 import NewCustomerModal from '@/components/modals/NewCustomerModal';
 import { ProofPick } from '@/components/payments/ProofPick';
+import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
 import { formatCurrency } from '@/lib/currency';
 import { discountAmountFor, discountOptionLabel } from '@/lib/discount';
+import { TRANSACTION_FEE_LABEL, transactionFee } from '@/lib/transaction-fee';
+import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { formatDateShort } from '@/lib/date';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
 import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS } from '@/lib/select-options';
@@ -107,12 +111,21 @@ export default function BookingsPage() {
   const [discountCode, setDiscountCode] = useState('');
   const [eligibleDiscounts, setEligibleDiscounts] = useState<Discount[]>([]);
   const [loadingDiscounts, setLoadingDiscounts] = useState(false);
-  const [downPayment, setDownPayment] = useState(0);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  /** True when the open invoice is for a payment just taken, so it goes to WhatsApp. */
+  const [invoiceJustPaid, setInvoiceJustPaid] = useState(false);
   const [payingBooking, setPayingBooking] = useState<Booking | null>(null);
   const [paying, setPaying] = useState(false);
   const [payProofFile, setPayProofFile] = useState<File | null>(null);
+  // The EDC terminal and card Staff picked, for the booking form and for the
+  // remaining-balance payment. Each opener clears it, so a pick never carries
+  // over to another Booking.
+  const [bookingFeeRuleId, setBookingFeeRuleId] = useState('');
+  const [payFeeRuleId, setPayFeeRuleId] = useState('');
+  const [bookingPot, setBookingPot] = useState('');
+  const [payPot, setPayPot] = useState('');
+  const feeRules = useTransactionFeeRules();
   const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
   const [cancelling, setCancelling] = useState(false);
   // Previous static options states no longer used; keeping for future caching if needed
@@ -153,8 +166,24 @@ export default function BookingsPage() {
     .reduce((sum, it) => sum + (it.discount_amount || 0), 0);
   const bookingTotal = packagePrice > 0 ? packagePrice + addonSubtotal : itemsSubtotal;
   const bookingDiscount = packagePrice > 0 ? addonDiscount : itemsDiscount;
-  const bookingFinal = bookingTotal - bookingDiscount;
-  const remainingAmount = bookingFinal - downPayment;
+  const itemsFinal = bookingTotal - bookingDiscount;
+  // The picked discount is applied on save, before the payment is taken.
+  const pickedDiscount = eligibleDiscounts.find((discount) => discount.id === discountId);
+  const pickedDiscountAmount = pickedDiscount
+    ? Math.min(discountAmountFor(pickedDiscount, bookingTotal), itemsFinal)
+    : 0;
+  const bookingFinal = itemsFinal - pickedDiscountAmount;
+  // Mirrors Booking.TakeBookingPayment: a down payment takes half of the amount
+  // due, a full payment takes all of it, and an edit never lowers money taken.
+  const isDownPayment = bookingForm.payment_method.startsWith('dp_');
+  const paymentDue = isDownPayment ? Math.min(Math.ceil(bookingFinal * 0.5), bookingFinal) : bookingFinal;
+  const alreadyPaid = isEditModalOpen ? activeBooking?.paid_amount || 0 : 0;
+  const payNow = Math.max(0, Math.min(Math.max(paymentDue, alreadyPaid), bookingFinal));
+  const remainingAmount = bookingFinal - payNow;
+  // Only the money taken on this save is charged now, so an edit counts the
+  // Transaction Fee on the top-up alone.
+  const chargeNow = Math.max(0, payNow - alreadyPaid);
+  const chargeNowFee = transactionFee(chargeNow, bookingForm.payment_method, feeRules, bookingFeeRuleId, bookingPot);
 
   const updateBookingField = (field: keyof typeof bookingForm, value: string) => {
     setBookingForm(prev => ({ ...prev, [field]: value }));
@@ -203,7 +232,7 @@ export default function BookingsPage() {
         }
         setBookingForm(prev => {
           let items = prev.items.map(it => it.item_id && (!it.unit_price || it.unit_price === 0)
-            ? { ...it, unit_price: itemCacheRef.current.get(it.item_id)?.standard_price ?? itemCacheRef.current.get(it.item_id)?.one_day_price ?? 0 }
+            ? { ...it, unit_price: itemCacheRef.current.get(it.item_id)?.standard_price ?? 0 }
             : it);
           for (const trousers of pairedTrousers) {
             if (items.some(it => it.item_id === trousers.id)) continue;
@@ -211,7 +240,7 @@ export default function BookingsPage() {
             const line = {
               item_id: trousers.id,
               quantity: 1,
-              unit_price: trousers.standard_price ?? trousers.one_day_price ?? 0,
+              unit_price: trousers.standard_price ?? 0,
               discount_amount: 0,
               catalogue: 'trousers' as const,
               is_addon: false,
@@ -301,6 +330,7 @@ export default function BookingsPage() {
     const errs: Record<string, string> = {};
     if (!bookingForm.customer_id) errs.customer_id = 'Customer ID is required';
     if (!bookingForm.booking_date) errs.booking_date = 'Booking date is required';
+    if (chargeNow > 0 && potMissing(bookingForm.payment_method, bookingPot)) errs.submit = POT_MISSING_MESSAGE;
     const bookingGuarantee = bookingForm.booking_guarantee === 'Other'
       ? bookingForm.booking_guarantee_other?.trim()
       : bookingForm.booking_guarantee;
@@ -336,12 +366,15 @@ export default function BookingsPage() {
         status: bookingForm.status,
         payment_status: bookingForm.payment_status,
         payment_method: bookingForm.payment_method,
+        fee_rule_id: bookingFeeRuleId || undefined,
+        pot: potForRequest(bookingForm.payment_method, bookingPot),
         package_pricing_id: selectedPackageId || undefined,
         // Don't send total_amount when package pricing is used - let backend calculate it
         ...(selectedPackageId ? {} : { total_amount: bookingTotal }),
-        paid_amount: downPayment,
+        paid_amount: payNow,
         discount_amount: bookingDiscount,
         remaining_amount: remainingAmount,
+        discount_id: discountId || undefined,
         created_by: user.id, // Add the current user ID
         items: validItems.map(it => ({
           item_id: it.item_id,
@@ -354,13 +387,6 @@ export default function BookingsPage() {
       } as unknown as import('@/types').CreateBookingRequest;
 
       const created = await apiClient.createBooking(payload as unknown as import('@/types').CreateBookingRequest);
-      if (created?.id && discountId) {
-        try {
-          await apiClient.applyDiscountToBooking(discountId, created.id);
-        } catch (err) {
-          warning('Discount not applied', apiErrorMessage(err, 'This discount is not available for this customer.'));
-        }
-      }
       setIsCreateModalOpen(false);
       setBookingForm({
         customer_id: '',
@@ -374,13 +400,12 @@ export default function BookingsPage() {
       });
       setDiscountId('');
       setDiscountCode('');
-      setDownPayment(0);
       await reload();
-      if (created?.id && (created.paid_amount || downPayment) > 0) {
+      if (created?.id && (created.paid_amount || payNow) > 0) {
         await openIssuedInvoice({
           id: created.id,
           payment_status: created.payment_status,
-          paid_amount: created.paid_amount ?? downPayment,
+          paid_amount: created.paid_amount ?? payNow,
         });
       }
     } catch (e) {
@@ -416,9 +441,9 @@ export default function BookingsPage() {
       }))
     });
     setSelectedPackageId(booking.package_pricing_id || '');
-    setDownPayment(booking.paid_amount || 0);
     setDiscountId('');
     setDiscountCode('');
+    setBookingFeeRuleId(''); setBookingPot('');
     setIsEditModalOpen(true);
   };
 
@@ -427,6 +452,7 @@ export default function BookingsPage() {
     const errs: Record<string, string> = {};
     if (!bookingForm.customer_id) errs.customer_id = 'Customer ID is required';
     if (!bookingForm.booking_date) errs.booking_date = 'Booking date is required';
+    if (chargeNow > 0 && potMissing(bookingForm.payment_method, bookingPot)) errs.submit = POT_MISSING_MESSAGE;
     const bookingGuarantee = bookingForm.booking_guarantee === 'Other'
       ? bookingForm.booking_guarantee_other?.trim()
       : bookingForm.booking_guarantee;
@@ -461,13 +487,16 @@ export default function BookingsPage() {
             status: bookingForm.status,
             payment_status: bookingForm.payment_status,
             payment_method: bookingForm.payment_method,
+            fee_rule_id: bookingFeeRuleId || undefined,
+        pot: potForRequest(bookingForm.payment_method, bookingPot),
             // To remove package, send empty string (backend treats it as clear)
             package_pricing_id: selectedPackageId ? selectedPackageId : '',
             // Don't send total_amount when package pricing is used - let backend calculate it
             ...(selectedPackageId ? {} : { total_amount: bookingTotal }),
-            paid_amount: downPayment,
+            paid_amount: payNow,
             discount_amount: bookingDiscount,
             remaining_amount: remainingAmount,
+            discount_id: discountId || undefined,
             items: validItems.map(it => ({
               item_id: it.item_id,
               quantity: it.quantity,
@@ -482,20 +511,12 @@ export default function BookingsPage() {
       await apiClient.updateBooking(activeBooking.id, payload as unknown as Partial<import('@/types').CreateBookingRequest>);
       const previousPaid = activeBooking.paid_amount || 0;
       const issuedId = activeBooking.id;
-      const paidNow = downPayment;
+      const paidNow = payNow;
       const issuedStatus = remainingAmount <= 0 ? 'completed' : paidNow > 0 ? 'partial' : 'pending';
-      if (activeBooking.id && discountId) {
-        try {
-          await apiClient.applyDiscountToBooking(discountId, activeBooking.id);
-        } catch (err) {
-          warning('Discount not applied', apiErrorMessage(err, 'This discount is not available for this customer.'));
-        }
-      }
       setIsEditModalOpen(false);
       setActiveBooking(null);
       setDiscountId('');
       setDiscountCode('');
-      setDownPayment(0);
       await reload();
       if (paidNow > previousPaid) {
         await openIssuedInvoice({
@@ -650,6 +671,7 @@ export default function BookingsPage() {
       if (!invoice.items || !Array.isArray(invoice.items)) {
         invoice.items = [];
       }
+      setInvoiceJustPaid(false);
       setInvoiceData(invoice);
       setShowInvoiceModal(true);
     } catch (error) {
@@ -662,6 +684,7 @@ export default function BookingsPage() {
     try {
       const invoice = await issueBookingInvoice(booking);
       if (!invoice) return;
+      setInvoiceJustPaid(true);
       setInvoiceData(invoice);
       setShowInvoiceModal(true);
     } catch {
@@ -680,6 +703,10 @@ export default function BookingsPage() {
       setPayingBooking(null);
       return;
     }
+    if (potMissing(payingBooking.payment_method, payPot)) {
+      toastError('Pick the bank', POT_MISSING_MESSAGE);
+      return;
+    }
     try {
       setPaying(true);
       let proofUrl: string | undefined;
@@ -696,6 +723,8 @@ export default function BookingsPage() {
         payingBooking.payment_method || 'cash',
         new Date().toISOString().slice(0, 10),
         proofUrl,
+        payFeeRuleId || undefined,
+        potForRequest(payingBooking.payment_method, payPot),
       );
       const paidBooking = {
         id: payingBooking.id,
@@ -742,7 +771,7 @@ export default function BookingsPage() {
             <Link href="/dashboard/cashier">
               <Button size="md" variant="secondary">Cashier POS</Button>
             </Link>
-            <Button size="md" onClick={() => { setDiscountId(''); setDiscountCode(''); setIsCreateModalOpen(true); }}>
+            <Button size="md" onClick={() => { setDiscountId(''); setDiscountCode(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}>
               <Plus className="h-4 w-4" />
               New Booking
             </Button>
@@ -784,7 +813,7 @@ export default function BookingsPage() {
               icon={<Calendar className="h-10 w-10" />}
               title="No bookings found"
               description={Object.values(filters).some(v => v) ? 'Try adjusting your filters' : 'Get started by creating your first booking'}
-              action={<Button onClick={() => { setDiscountId(''); setDiscountCode(''); setIsCreateModalOpen(true); }}><Plus className="h-4 w-4" /> New Booking</Button>}
+              action={<Button onClick={() => { setDiscountId(''); setDiscountCode(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}><Plus className="h-4 w-4" /> New Booking</Button>}
             />
           ) : (
             (Array.isArray(bookings) ? bookings : []).map((booking) => {
@@ -843,7 +872,7 @@ export default function BookingsPage() {
                           </OverflowMenuItem>
                         )}
                         {booking.payment_status === 'partial' && booking.remaining_amount > 0 && (
-                          <OverflowMenuItem icon={<CreditCard className="h-4 w-4 text-slate-400" />} onClick={() => setPayingBooking(booking)}>
+                          <OverflowMenuItem icon={<CreditCard className="h-4 w-4 text-slate-400" />} onClick={() => { setPayFeeRuleId(''); setPayPot(''); setPayingBooking(booking); }}>
                             Collect balance
                           </OverflowMenuItem>
                         )}
@@ -889,7 +918,10 @@ export default function BookingsPage() {
             eligibleDiscounts={eligibleDiscounts}
             loadingDiscounts={loadingDiscounts}
             bookingTotal={bookingTotal}
-            downPayment={downPayment}
+            payNow={payNow}
+            isDownPayment={isDownPayment}
+            chargeNow={chargeNow}
+            chargeNowFee={chargeNowFee}
             locked={false}
             fetchCustomerOptions={fetchCustomerOptions}
             fetchItemOptions={fetchItemOptions}
@@ -901,16 +933,22 @@ export default function BookingsPage() {
             handleSelectPackage={handleSelectPackage}
             setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
-            setDownPayment={setDownPayment}
           />
           <BookingFormTotals
             selectedPackageId={selectedPackageId}
             packagePrice={packagePrice}
             addonSubtotal={addonSubtotal}
-            bookingDiscount={bookingDiscount}
+            bookingDiscount={bookingDiscount + pickedDiscountAmount}
             bookingTotal={bookingTotal}
             bookingFinal={bookingFinal}
-            downPayment={downPayment}
+            payNow={payNow}
+            isDownPayment={isDownPayment}
+            chargeNow={chargeNow}
+            paymentMethod={bookingForm.payment_method}
+            feeRuleId={bookingFeeRuleId}
+            onFeeRuleIdChange={setBookingFeeRuleId}
+            pot={bookingPot}
+            onPotChange={setBookingPot}
             remainingAmount={remainingAmount}
             submitError={formErrors.submit}
             loading={creating}
@@ -936,7 +974,10 @@ export default function BookingsPage() {
             eligibleDiscounts={eligibleDiscounts}
             loadingDiscounts={loadingDiscounts}
             bookingTotal={bookingTotal}
-            downPayment={downPayment}
+            payNow={payNow}
+            isDownPayment={isDownPayment}
+            chargeNow={chargeNow}
+            chargeNowFee={chargeNowFee}
             locked={activeBooking?.payment_status === 'completed'}
             fetchCustomerOptions={fetchCustomerOptions}
             fetchItemOptions={fetchItemOptions}
@@ -948,16 +989,22 @@ export default function BookingsPage() {
             handleSelectPackage={handleSelectPackage}
             setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
-            setDownPayment={setDownPayment}
           />
           <BookingFormTotals
             selectedPackageId={selectedPackageId}
             packagePrice={packagePrice}
             addonSubtotal={addonSubtotal}
-            bookingDiscount={bookingDiscount}
+            bookingDiscount={bookingDiscount + pickedDiscountAmount}
             bookingTotal={bookingTotal}
             bookingFinal={bookingFinal}
-            downPayment={downPayment}
+            payNow={payNow}
+            isDownPayment={isDownPayment}
+            chargeNow={chargeNow}
+            paymentMethod={bookingForm.payment_method}
+            feeRuleId={bookingFeeRuleId}
+            onFeeRuleIdChange={setBookingFeeRuleId}
+            pot={bookingPot}
+            onPotChange={setBookingPot}
             remainingAmount={remainingAmount}
             submitError={formErrors.submit}
             loading={creating}
@@ -986,7 +1033,7 @@ export default function BookingsPage() {
           }}
           onCollectBalance={
             activeBooking && activeBooking.payment_status === 'partial' && (activeBooking.remaining_amount || 0) > 0
-              ? () => setPayingBooking(activeBooking)
+              ? () => { setPayFeeRuleId(''); setPayPot(''); setPayingBooking(activeBooking); }
               : undefined
           }
         />
@@ -1007,6 +1054,7 @@ export default function BookingsPage() {
             setInvoiceData(null);
           }}
           invoice={invoiceData}
+          autoSendWhatsApp={invoiceJustPaid}
         />
         <ConfirmModal
           isOpen={!!cancellingBooking}
@@ -1033,6 +1081,7 @@ export default function BookingsPage() {
                 <div className="rounded-xl bg-slate-50 px-3 py-2">
                   <div className="flex justify-between"><span>Paid</span><span className="tabular-nums">{formatCurrency(payingBooking.paid_amount || 0)}</span></div>
                   <div className="flex justify-between font-semibold text-slate-900"><span>Remaining</span><span className="tabular-nums">{formatCurrency(payingRemaining)}</span></div>
+                  <TransactionFeeLines amount={payingRemaining} method={payingBooking.payment_method} pot={payPot} onPotChange={setPayPot} ruleId={payFeeRuleId} onRuleIdChange={setPayFeeRuleId} className="mt-1" />
                 </div>
                 <ProofPick
                   id="booking-payment-proof"
@@ -1074,7 +1123,10 @@ function BookingFormFields({
   eligibleDiscounts,
   loadingDiscounts,
   bookingTotal,
-  downPayment,
+  payNow,
+  isDownPayment,
+  chargeNow,
+  chargeNowFee,
   locked,
   fetchCustomerOptions,
   fetchItemOptions,
@@ -1086,7 +1138,6 @@ function BookingFormFields({
   handleSelectPackage,
   setDiscountId,
   setDiscountCode,
-  setDownPayment,
 }: {
   bookingForm: BookingFormState;
   formErrors: Record<string, string>;
@@ -1097,7 +1148,10 @@ function BookingFormFields({
   eligibleDiscounts: Discount[];
   loadingDiscounts: boolean;
   bookingTotal: number;
-  downPayment: number;
+  payNow: number;
+  isDownPayment: boolean;
+  chargeNow: number;
+  chargeNowFee: number;
   locked?: boolean;
   fetchCustomerOptions: (query: string) => Promise<{ value: string; label: string }[]>;
   fetchItemOptions: (query: string) => Promise<{ value: string; label: string }[]>;
@@ -1109,7 +1163,6 @@ function BookingFormFields({
   handleSelectPackage: (pkgId: string) => void;
   setDiscountId: (id: string) => void;
   setDiscountCode: (code: string) => void;
-  setDownPayment: (n: number) => void;
 }) {
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [createdCustomerOption, setCreatedCustomerOption] = useState<{ value: string; label: string } | null>(null);
@@ -1282,10 +1335,16 @@ function BookingFormFields({
             disabled={locked}
           />
           <CurrencyInput
-            label="Down payment"
-            value={downPayment}
-            onChange={setDownPayment}
-            disabled={locked}
+            label={isDownPayment ? 'Pay now (50%)' : 'Pay now (full)'}
+            value={payNow}
+            onChange={() => {}}
+            disabled
+            helperText={[
+              isDownPayment ? 'The remaining amount is paid in full at pickup.' : '',
+              chargeNowFee > 0
+                ? `${TRANSACTION_FEE_LABEL}: ${formatCurrency(chargeNowFee)}. Charge: ${formatCurrency(chargeNow + chargeNowFee)}.`
+                : '',
+            ].filter(Boolean).join(' ') || undefined}
           />
           <Select
             label="Package"
@@ -1405,7 +1464,14 @@ function BookingFormTotals({
   bookingDiscount,
   bookingTotal,
   bookingFinal,
-  downPayment,
+  payNow,
+  isDownPayment,
+  chargeNow,
+  paymentMethod,
+  feeRuleId,
+  onFeeRuleIdChange,
+  pot,
+  onPotChange,
   remainingAmount,
   submitError,
   loading,
@@ -1419,7 +1485,14 @@ function BookingFormTotals({
   bookingDiscount: number;
   bookingTotal: number;
   bookingFinal: number;
-  downPayment: number;
+  payNow: number;
+  isDownPayment: boolean;
+  chargeNow: number;
+  paymentMethod: string;
+  feeRuleId: string;
+  onFeeRuleIdChange: (ruleId: string) => void;
+  pot: string;
+  onPotChange: (pot: string) => void;
   remainingAmount: number;
   submitError?: string;
   loading: boolean;
@@ -1452,11 +1525,12 @@ function BookingFormTotals({
           <span className="tabular-nums">{formatCurrency(bookingFinal)}</span>
         </div>
         <div className="flex justify-between">
-          <span>Down payment</span>
-          <span className="tabular-nums">{formatCurrency(downPayment)}</span>
+          <span>{isDownPayment ? 'Pay now (50%)' : 'Pay now (full)'}</span>
+          <span className="tabular-nums">{formatCurrency(payNow)}</span>
         </div>
+        <TransactionFeeLines amount={chargeNow} method={paymentMethod} pot={pot} onPotChange={onPotChange} ruleId={feeRuleId} onRuleIdChange={onFeeRuleIdChange} />
         <div className="flex justify-between">
-          <span>Remaining</span>
+          <span>Remaining at pickup</span>
           <span className="tabular-nums">{formatCurrency(remainingAmount)}</span>
         </div>
       </div>
