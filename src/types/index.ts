@@ -112,6 +112,13 @@ export interface DailyClose {
   bni_out: number;
   unassigned_in: number;
   unassigned_out: number;
+  edc_bca_fees: number;
+  edc_bni_fees: number;
+  edc_bca_expected: number;
+  edc_bca_slip?: number | null;
+  edc_bni_expected: number;
+  edc_bni_slip?: number | null;
+  checked_lines: string[];
   tips_cash: number;
   tips_bca: number;
   tips_bni: number;
@@ -147,9 +154,25 @@ export interface DailyClosePot {
   out: number;
   net: number;
   balance: number;
+  /** QRIS, debit, and card money into a bank Pot; checked by the EDC slip. */
+  edc_in: number;
+  /** Transaction Fees paid on top of the EDC payments; the slip shows them. */
+  edc_fees: number;
+  /** EDC payments that two or more fee rules could price. */
+  fees_uncertain: number;
+  /** Other bank lines, ticked on the mutasi. */
+  to_check: number;
+  checked: number;
 }
 
+export type DailyCloseLineGroup = 'cash' | 'edc' | 'transfer';
+
 export interface DailyCloseLine {
+  key: string;
+  group: DailyCloseLineGroup;
+  checked: boolean;
+  fee?: number;
+  fee_uncertain?: boolean;
   entry_id: string;
   occurred_on: string;
   source: string;

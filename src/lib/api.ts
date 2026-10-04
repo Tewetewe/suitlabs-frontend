@@ -989,6 +989,9 @@ class APIClient {
     tips_cash?: number;
     tips_bca?: number;
     tips_bni?: number;
+    edc_slip_bca?: number | null;
+    edc_slip_bni?: number | null;
+    checked_lines?: string[];
     note?: string;
   }): Promise<DailyCloseSummary> {
     const response = await this.client.post<APIResponse<DailyCloseSummary>>('/api/v1/admin/daily-close', input);
