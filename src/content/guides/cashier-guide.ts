@@ -443,7 +443,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <div class="flag stop">
     <span class="flag-t">Do not tap Resend agreement repeatedly</span>
     <p>Each tap is a real WhatsApp message from the shop's number. Tapping it three times because the customer is slow does not make the link arrive faster — it makes the shop look like a spammer, and WhatsApp restricts numbers that behave that way. Send once, then <b>phone them</b>. A restricted number stops every reminder for every customer, at both shops.</p>
-    <p>If a customer replies <b>STOP</b>, or tells you they do not want messages, open their <b>Customer</b> record and tick <b>No WhatsApp</b>. That stops every reminder and every agreement to them. It protects the shop's number — someone who is ignored presses Block, and blocks are what get the number restricted.</p>
+    <p>If a customer tells you they do not want messages, open their <b>Customer</b> record and tick <b>No WhatsApp</b>. That stops every reminder and every agreement to them. It protects the shop's number — someone who is ignored presses Block, and blocks are what get the number restricted.</p>
   </div>
 
   <div class="flag care">
@@ -784,7 +784,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <tbody>
         <tr><td>Who still needs a reminder today?</td><td>Open <b>Return Check</b>. The <b>To remind</b> count and every card that reads <b>Not reminded</b>.</td></tr>
         <tr><td>Customer says the agreement never arrived</td><td>Resend <b>once</b>, then phone them. Never tap it repeatedly.</td></tr>
-        <tr><td>Customer replies STOP, or asks for no messages</td><td>Tick <b>No WhatsApp</b> on their Customer record. Do not send anything more.</td></tr>
+        <tr><td>Customer asks for no messages</td><td>Tick <b>No WhatsApp</b> on their Customer record. Do not send anything more.</td></tr>
         <tr><td>Customer has No WhatsApp ticked and needs the agreement</td><td>Ask them face to face. Only if they agree, untick it and send.</td></tr>
         <tr><td>Reminders stopped for everyone</td><td>Tell your admin at once. The shop's number may be restricted.</td></tr>
         <tr><td>Customer asks what the reminder said</td><td>It gives the date, the items, the shop address, the <b>opening hours</b>, and the shop phone. The return reminder also states the deadline and the late fee: back by 20:00 on the return date, then 50% of the rental for each day late.</td></tr>
