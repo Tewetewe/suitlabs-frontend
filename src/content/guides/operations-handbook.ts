@@ -94,7 +94,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
         <rect x="662" y="228" width="258" height="108" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
         <text x="791" y="252" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Scheduled jobs · inside the API</text>
-        <text x="676" y="274" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:05  mark rentals overdue</text>
+        <text x="676" y="274" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">20:05  mark rentals overdue</text>
         <text x="676" y="292" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:07  release unchecked deposits</text>
         <text x="676" y="310" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:10  post recurring expenses</text>
         <text x="676" y="328" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".8">00:20  1st only — export the month</text>
@@ -235,6 +235,8 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <tr><td><b>Dashboard</b></td><td>Today at a glance: item count, bookings, active rentals, today's revenue, low stock, maintenance. For an admin, also this month's accrual summary and the shop's asset value.</td><td>Today's revenue is accrual, not the cash in the drawer. Staff see only the six counts.</td></tr>
         <tr><td><b>Bookings</b></td><td>The full booking list. Edit, <b>Collect balance</b> (which issues the full invoice), reprint DP or full invoices, add a sale on top. The detail view lists every <b>payment proof</b> attached to the booking.</td><td>A booking with payment status <code>completed</code> is deliberately locked from editing. While its rental is still <code>pending</code>, editing the booking rewrites the rental to match; after pickup the two are independent.</td></tr>
         <tr><td><b>Rentals</b></td><td>Pickup the pending rental the POS created, change dates, complete, cancel with a reason. Pickup also sends the <b>deposit agreement</b>, collects the deposit and the remaining balance, and takes the customer's bank details for the refund. <b>Release deposit</b> settles a returned rental after the item is checked. The detail view lists the deposit and refund proofs.</td><td>Everything chargeable — lost items, damage, add-ons — must be recorded <b>before</b> Complete. Pickup is refused until the customer accepts the agreement, and there is no admin override. <b>New Rental</b> is only for legacy bookings that have no rental.</td></tr>
+        <tr><td><b>Pickup Prep</b></td><td>The H-1 list. It opens on tomorrow's Pickups. Staff checks each Item: found on rack, clean and steamed, no damage, size matches. Add-ons packed, Deposit Agreement sent, and the balance to collect show on each card.</td><td><b>Damaged</b> sends the Item to maintenance at once. <b>Not found</b> only flags it and posts no Write-off. The list warns at Pickup and never blocks it.</td></tr>
+        <tr><td><b>Return Check</b></td><td>The daily return list. It opens on today: the returns due today, every older rental that is still out, and today's Pickups. Each card shows the WhatsApp reminder state with a send button, the Item checks (received, no damage, no stain), and <b>Complete return</b>.</td><td>The check changes no Item status. Complete does that, and it starts with the problem notes and only the damaged Items ticked for maintenance. A missing Item still needs the lost-item Sale before Complete. <b>To remind</b> counts every open card with no reminder sent today.</td></tr>
         <tr><td><b>Sales</b></td><td>Walk-in retail, booking add-ons, and rental-return charges — including the lost-item replacement screen. Cancel a sale here.</td><td>Only items marked sellable appear. An ex-rental suit sells as clearance, not retail. A replacement line also marks the lost item <code>lost</code>.</td></tr>
         <tr><td><b>Expenses</b></td><td>Money out, by category, with the payment method. Monthly summary. Recurring templates (admin only).</td><td>Void, never delete. Record on the day the money actually moved.</td></tr>
         <tr><td><b>Items</b></td><td>Inventory. Search, filter by shop, barcode lookup, availability check for a date range, transfer to the other shop, generate and print labels. Staff and Admin both see stock at every Branch.</td><td>Availability depends on status <i>and</i> dates. Maintenance items are invisible to the catalogue — that is the point. For an admin, the buying price field here <b>posts a purchase or a write-off</b> to the books.</td></tr>
@@ -256,6 +258,8 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <tr><td><b>Assets</b></td><td>Inventory value plus fixed assets — racks, steamers, chairs — with buying price, purchase date, vendor, and how they were paid for. In use, or disposed.</td><td>Recording a purchase here moves real money. Paying by cash or bank reduces cash; on credit it creates a payable. Disposing an asset writes its remaining value off.</td></tr>
         <tr><td><b>Financial Report</b></td><td>P&amp;L, Balance Sheet, Cash Flow, per month or full year, per shop or the group. Opening Balance, Payables, Loans, Dividends. Excel export. Google Sheets export runs with retry. Lock month.</td><td>All of it is accrual. Reconcile before you lock, not after.</td></tr>
         <tr><td><b>Analytics</b></td><td>Owner decision board: booking value and outstanding, sales revenue, monthly volume, occasion and package mix, how money arrived, sales vs clearance, sizes and colours that move, hottest and idle stock, per shop — with advice cards.</td><td>This is operational demand and mix, not P&amp;L. Use Financial Report for the books. The sheet is a mirror, not the place to decide.</td></tr>
+        <tr><td><b>WA Reminders</b></td><td>The Wablas setup state, the recent reminder log, and <b>Send now</b> for the whole day's pickup and return reminders. The automatic run is at 10:00.</td><td>A row reads <code>sent</code> when Wablas takes the message, not when the customer gets it. Use Return Check for one customer; use Send now only when the 10:00 run did not go out.</td></tr>
+        <tr><td><b>Transaction Fees</b></td><td>The Transaction Fee rules for QRIS, debit and credit card.</td><td>The fee is not revenue and posts no Journal Entry. It covers the bank's MDR.</td></tr>
         <tr><td><b>Bulk Input Sync</b></td><td>Pull item changes in from the Google Sheet when someone has edited it in bulk.</td><td>The database is the source of truth. Blank cells in the sheet preserve the database value — they don't clear it.</td></tr>
       </tbody>
     </table>
@@ -317,7 +321,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <rect x="94" y="218" width="140" height="46" rx="23" fill="none" stroke="currentColor" opacity=".7"/>
         <text x="164" y="246" text-anchor="middle" font-size="12.5" fill="currentColor">overdue</text>
         <text x="88" y="238" text-anchor="end" font-size="10.5" fill="currentColor" opacity=".65">automatic</text>
-        <text x="88" y="253" text-anchor="end" font-size="10.5" fill="currentColor" opacity=".65">at 00:05</text>
+        <text x="88" y="253" text-anchor="end" font-size="10.5" fill="currentColor" opacity=".65">at 20:05</text>
 
         <line x1="374" y1="183" x2="442" y2="183" stroke="currentColor" stroke-width="2" marker-end="url(#lc-a)"/>
         <text x="408" y="175" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".8">Complete</text>
@@ -330,7 +334,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <line x1="598" y1="183" x2="666" y2="183" stroke="currentColor" marker-end="url(#lc-a)"/>
         <rect x="672" y="146" width="248" height="140" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
         <text x="796" y="170" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">Settled at completion</text>
-        <text x="686" y="192" font-size="11" fill="currentColor" opacity=".8">· late fee — 50% one day, 100% beyond</text>
+        <text x="686" y="192" font-size="11" fill="currentColor" opacity=".8">· late fee — 50% per day after 20:00</text>
         <text x="686" y="210" font-size="11" fill="currentColor" opacity=".8">· damage charge — typed, revenue</text>
         <text x="686" y="228" font-size="11" fill="currentColor" opacity=".8">· lost item — replacement sale, then</text>
         <text x="686" y="244" font-size="11" fill="currentColor" opacity=".8">  marked lost and off stock, automatically</text>
@@ -355,7 +359,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     </div>
     <div class="card">
       <h3>Late return</h3>
-      <p>A fixed schedule on the whole rental, not a rate on the daily. One day late costs <b>50%</b> of the rental; more than one day costs the <b>whole rental</b>, and it stops there. Days are whole days ending at midnight in the shop timezone, so the hour of the return never changes the price. If the customer actually returned earlier, backdate the actual return date — that is the only correct fix.</p>
+      <p>A share of the whole booking, not a rate on the daily. The suit is due back by <b>20:00</b> on the return date. Each 20:00 that passes after that adds one late day, and each late day costs <b>50%</b> of the booking amount. There is <b>no cap</b>: a suit that stays out keeps adding 50% every evening, so phone the customer the same evening. The overdue sweep runs at 20:05. If the customer actually returned earlier, backdate the actual return time — that is the only correct fix.</p>
     </div>
     <div class="card">
       <h3>Security deposit</h3>
@@ -470,7 +474,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   </div>
 
   <h3>What a reminder says</h3>
-  <p class="measure">Both reminders open with the customer's name, the shop, and today's date, then list the items, the branch name and address, the <b>opening hours</b> from the Branches page, and the branch phone. The return reminder adds the late fee schedule in plain numbers — 50% of the rental one day late, the whole rental beyond that — because a customer who reads a figure acts on it and a customer who reads "late fees apply" does not. A branch with no opening hours simply drops that line.</p>
+  <p class="measure">Both reminders open with the customer's name, the shop, and today's date, then list the items, the branch name and address, the <b>opening hours</b> from the Branches page, and the branch phone. The return reminder adds the deadline and the late fee in plain numbers — back by 20:00 on the return date, then 50% of the rental for each day late — because a customer who reads a figure acts on it and a customer who reads "late fees apply" does not. A branch with no opening hours simply drops that line.</p>
 
   <h3>Protecting the shop's WhatsApp number</h3>
   <p class="measure">Reminders and the deposit agreement go out through Wablas from <b>one</b> WhatsApp number. If WhatsApp restricts that number, every reminder at both shops stops at once, and Pickup stops with it because the agreement cannot be sent. These are the controls in place.</p>
@@ -651,13 +655,13 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <tbody>
         <tr>
           <td><b>Suit</b><br><span style="color:var(--ink-3);font-size:.85rem">items of type suit</span></td>
-          <td class="num"><code>A:T</code></td>
-          <td><code>GENDER</code> <code>COLOUR</code> <code>DETAIL</code> <code>MATERIAL</code> <code>CODE</code> <code>SIZE</code> <code>TROUSERS CODE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>CATEGORY</code> <code>SUBCATEGORY</code> <code>BUYING PRICE</code> <code>SELLING PRICE</code> <code>4H PRICE</code> <code>1D PRICE</code> <code>3D PRICE</code> <code>BRAND</code> <code>TYPE</code><br><span style="color:var(--ink-3);font-size:.85rem">GENDER is Mens, Women, Kids, Unisex (the old TYPE column). TYPE is the product kind — suit, shirt, tie, shoes — and maps to items.type. DETAIL is the item name. SIZE is written as "Jas &amp; Celana Size M". 3D PRICE is the standard rental rate. SUBCATEGORY is stored under CATEGORY. BRAND is column S; blank on import defaults to SuitLabs.</span></td>
+          <td class="num"><code>A:Y</code></td>
+          <td><code>GENDER</code> <code>COLOUR</code> <code>DETAIL</code> <code>MATERIAL</code> <code>CODE</code> <code>SIZE</code> <code>TROUSERS CODE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>BUYING PRICE</code> <code>BUYING PRICE TROUSER</code> <code>SELLING PRICE</code> <code>SELLING PRICE TROUSER</code> <code>Suit 4H PRICE</code> <code>Suit 3D PRICE</code> <code>Trouser 4H PRICE</code> <code>Trouser 3D PRICE</code> <code>Set 4H PRICE</code> <code>Set 3D PRICE</code> <code>BRAND</code> <code>TYPE</code> <code>CATEGORY</code> <code>SUBCATEGORY</code><br><span style="color:var(--ink-3);font-size:.85rem">GENDER is Mens, Women, Kids, Unisex. TYPE is the quality: Premium or Standard. DETAIL is the item name. SIZE is written as "Jas &amp; Celana Size M". 3D PRICE is the standard rental rate. The TROUSER columns are the prices of the paired Trousers item named in TROUSERS CODE. The Set prices are for the Suit rented with its paired Trousers. SUBCATEGORY is stored under CATEGORY. A blank BRAND on import becomes SuitLabs.</span></td>
         </tr>
         <tr>
           <td><b>Acc</b><br><span style="color:var(--ink-3);font-size:.85rem">everything else</span></td>
-          <td class="num"><code>A:Q</code></td>
-          <td><code>COLOUR</code> <code>BRAND</code> <code>DETAIL</code> <code>CODE</code> <code>SIZE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>CATEGORY</code> <code>SUBCATEGORY</code> <code>BUYING PRICE</code> <code>SELLING PRICE</code> <code>4H PRICE</code> <code>1D PRICE</code> <code>3D PRICE</code> <code>TYPE</code><br><span style="color:var(--ink-3);font-size:.85rem">SIZE is written as "Size M". TYPE is shirt, tie, shoes, vest, belt, accessory, retail. If TYPE is blank, it is inferred from DETAIL (Tuxedo Shirt → shirt).</span></td>
+          <td class="num"><code>A:P</code></td>
+          <td><code>COLOUR</code> <code>BRAND</code> <code>DETAIL</code> <code>CODE</code> <code>SIZE</code> <code>DETAIL SIZE</code> <code>QTY</code> <code>NOTE</code> <code>OWNER</code> <code>BUYING PRICE</code> <code>SELLING PRICE</code> <code>4H PRICE</code> <code>3D PRICE</code> <code>TYPE</code> <code>CATEGORY</code> <code>SUBCATEGORY</code><br><span style="color:var(--ink-3);font-size:.85rem">SIZE is written as "Size M". TYPE is shirt, tie, shoes, vest, belt, accessory, retail. If TYPE is blank, it is inferred from DETAIL (Tuxedo Shirt → shirt).</span></td>
         </tr>
         <tr>
           <td><b>Month</b><br><span style="color:var(--ink-3);font-size:.85rem">one per month, created automatically, named like <code>JAN 2026</code></span></td>
@@ -678,7 +682,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <div class="flag care">
     <span class="flag-t">The tab names and column widths live in configuration, not in the app</span>
-    <p>Which tabs are read, and how many columns of them, comes from the backend's environment — currently <code>'Suit Dev'!A:T</code> and <code>'Acc Dev'!A:Q</code>. Two consequences. Adding a column past that range puts it <b>outside</b> the synced range, where it will be ignored in both directions. And renaming a tab in the spreadsheet breaks the sync silently until someone updates the configuration to match — so rename in the config first, or not at all.</p>
+    <p>Which tabs are read, and how many columns of them, comes from the backend's environment — currently <code>'Suit Dev'!A:Z</code> and <code>'Acc Dev'!A:Z</code>. Two consequences. Adding a column past that range puts it <b>outside</b> the synced range, where it will be ignored in both directions. And renaming a tab in the spreadsheet breaks the sync silently until someone updates the configuration to match — so rename in the config first, or not at all.</p>
     <p>Those two ranges each grew by a column when TYPE and GENDER were separated. If a shop's spreadsheet still ends a column short, widen the range in the configuration <b>and</b> nothing else — the next export writes the new headers itself.</p>
   </div>
 
@@ -836,7 +840,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
         <line x1="120" y1="112" x2="120" y2="128" stroke="currentColor"/>
         <text x="120" y="146" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" opacity=".7">EVERY NIGHT</text>
-        <text x="120" y="94" text-anchor="middle" font-size="11.5" fill="currentColor" opacity=".85">00:05 overdue</text>
+        <text x="120" y="94" text-anchor="middle" font-size="11.5" fill="currentColor" opacity=".85">20:05 overdue</text>
         <text x="120" y="78" text-anchor="middle" font-size="11.5" fill="currentColor" opacity=".85">00:10 recurring</text>
         <text x="120" y="60" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".55">automatic</text>
 
@@ -897,9 +901,10 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <h3><span class="chip stf">Staff</span> <span class="chip day">Daily</span></h3>
   <ul class="plain">
     <li>Confirm the shop in the top bar before the first transaction.</li>
-    <li>Review today's pickups, today's returns, and the overdue list.</li>
+    <li>Open <b>Return Check</b>: clear <b>To remind</b> after the 10:00 run, and phone every late rental.</li>
+    <li>Fill <b>Pickup Prep</b> for tomorrow before close. Every card reads Ready, or has a note on the replacement Item.</li>
     <li>Run every transaction through the POS as it happens — no paper, no catching up later.</li>
-    <li>ID photo on every hand-over; full check on every return before completing.</li>
+    <li>ID photo on every hand-over; every return ticked on Return Check before <b>Complete return</b>.</li>
     <li>Record every expense the same day, with the correct payment method.</li>
     <li>Count the drawer at close and report any difference that night, in writing.</li>
   </ul>
@@ -923,7 +928,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <h3><span class="chip adm">Admin</span> <span class="chip day">Daily</span> <span style="font-size:.85rem;color:var(--ink-3);font-weight:400">— ten minutes</span></h3>
   <ul class="plain">
     <li>Dashboard: today's revenue, active rentals, low stock, maintenance count.</li>
-    <li>Overdue rentals — anything more than a day or two old needs a decision, not just a phone call.</li>
+    <li>Return Check: the <b>Problem</b> and <b>Overdue</b> counts. A late rental more than a day or two old needs a decision, not just a phone call.</li>
     <li>Yesterday's expenses: sensible categories, sensible amounts, correct methods.</li>
     <li>Any drawer discrepancy reported by the floor. Same day, while people still remember.</li>
   </ul>

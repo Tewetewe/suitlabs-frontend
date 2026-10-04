@@ -8,6 +8,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <a href="#pay">Payment</a>
     <a href="#pickup">Pickup</a>
     <a href="#return">Return</a>
+    <a href="#daily">Daily lists</a>
     <a href="#other">Other jobs</a>
     <a href="#rhythm">Your day</a>
     <a href="#care">Watch out</a>
@@ -359,6 +360,11 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <figcaption><b>Two pots, five buttons.</b> Pick the wrong button and the drawer count won't match the system that night — which becomes someone's problem at month end.</figcaption>
   </figure>
 
+  <div class="flag care">
+    <span class="flag-t">QRIS and card payments can add a fee</span>
+    <p>A QRIS, debit, or credit card payment can carry a <b>Transaction fee</b> on top. Admin sets the rate for each EDC and card. When the shop has two terminals for the same card, the screen asks <b>EDC terminal and card</b>: pick the BCA or BNI machine you will tap, and the kind of card. Then the screen shows <b>Charge by QRIS</b> or <b>Charge on EDC</b> — that is the amount to enter on the machine. The receipt prints the fee too. It is not shop revenue, so do not add it to any amount you type.</p>
+  </div>
+
   <div class="cols two">
     <div class="card">
       <h4 style="margin-top:0">Taking the rest of the money later</h4>
@@ -468,6 +474,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <span class="eyebrow">06 — The hardest five minutes of the day</span>
   <h2>Return and complete</h2>
   <p class="measure">Everything that costs the customer extra has to be recorded <b>before</b> you press Complete. After that, the rental is closed and the charge belongs to an admin to fix.</p>
+  <p class="measure">Start every return on <b>Return Check</b>, not on Rentals. Tick each Item, mark the problems, then tap <b>Complete return</b> on the same card. The problems you mark fill the damage note, and the damaged Items are already ticked for maintenance. See <a href="#daily">Daily lists</a>.</p>
 
   <div class="table-wrap">
     <table>
@@ -487,8 +494,8 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
         </tr>
         <tr>
           <td><b>They are late</b></td>
-          <td>Nothing — the system calculates it. If they actually returned on an earlier day, set <b>Actual return date</b> to that day. Leave it empty and it uses right now.</td>
-          <td>One day late costs <b>50% of the rental</b>. More than one day costs the <b>whole rental</b>, and it stops there — three days and three weeks cost the same. Days end at midnight, so the hour they walk in does not change it. Backdating is the only way to make a wrong day correct.</td>
+          <td>Nothing — the system calculates it. If they actually returned earlier, set <b>Actual return time</b> to the day and the hour they came in. Leave it empty and it uses right now.</td>
+          <td>The suit is due back by <b>20:00</b> on the return date. Each 20:00 that passes after that adds one late day, and each late day costs <b>50% of the booking amount</b>. There is no cap: back the next morning is 50%, back the next evening after 20:00 is 100%, three late days is 150%. Return Check shows the Late Fee so far on each late card. Backdating is the only way to correct a wrong time.</td>
         </tr>
         <tr>
           <td><b>They want to buy something too</b></td>
@@ -530,11 +537,60 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   </div>
 
   <h4>If they never come back</h4>
-  <p class="measure">Leave it. The overnight job marks any active rental past its return date as <code>overdue</code> at 00:05 every night, and it shows up red on the Rentals page and the dashboard. Chase it by phone; tell your admin if it goes past a few days.</p>
+  <p class="measure">Do not leave it. At <b>20:05</b> every evening the system marks any active rental that is not back by its 20:00 deadline as <code>overdue</code>, and it shows up red on the Rentals page, the dashboard and Return Check. Every evening adds another 50% of the booking amount, with no cap. Phone them the same evening; tell your admin if it goes past a day.</p>
+</section>
+
+<section id="daily">
+  <span class="eyebrow">07 — Every day</span>
+  <h2>Daily lists: Pickup Prep and Return Check</h2>
+  <p class="measure">Two screens hold the day's work. <b>Pickup Prep</b> is tomorrow's hand-overs. <b>Return Check</b> is today's returns and today's WhatsApp reminders. Open both at the start of the shift. A card that is not green is work that is still open.</p>
+
+  <h3>Pickup Prep — the day before Pickup</h3>
+  <ol class="steps">
+    <li><b>Open Pickup Prep.</b><span>It opens on <b>tomorrow</b>. Change the date to see another day.</span></li>
+    <li><b>Pull every Item from the rack.</b><span>Scan the code, or tick <b>Found on rack</b>. Then tick <b>Clean &amp; steamed</b>, <b>No damage</b> and <b>Size matches</b>. <b>All OK</b> ticks all four at once.</span></li>
+    <li><b>Mark a problem.</b><span><b>Damaged</b> sends the Item to maintenance at once, so nobody else books it. <b>Not found</b> only flags it. Write what is wrong and which Item replaces it.</span></li>
+    <li><b>Pack the add-ons and check the money.</b><span>Tick <b>Add-ons packed</b>. Send the Deposit Agreement if the card says it is not sent. The card also shows the balance to collect at Pickup.</span></li>
+  </ol>
+  <div class="flag">
+    <span class="flag-t">Pickup Prep warns, it does not block</span>
+    <p>Pickup still works when the card is not ready. Walk-in and same-day bookings have no H-1 check. The Pickup screen shows the warning so you look again.</p>
+  </div>
+
+  <h3>Return Check — every return, every day</h3>
+  <ol class="steps">
+    <li><b>Open Return Check.</b><span>It opens on <b>today</b>. Today's list also shows every older rental that is still not back, with a red <b>days late</b> badge.</span></li>
+    <li><b>Clear the reminders.</b><span><b>Pickups to remind</b> at the top lists today's Pickups. Each return card shows its WhatsApp state. After the 10:00 automatic run, tap <b>Send pickup WA</b> or <b>Send return WA</b> for each one that still reads <b>Not reminded</b>. The <b>To remind</b> count goes down as you work.</span></li>
+    <li><b>When the customer comes back, check each Item.</b><span>Scan the code or tick <b>Received</b>. Then tick <b>No damage</b> and <b>No stain</b>. <b>All OK</b> ticks all three at once.</span></li>
+    <li><b>Mark a problem.</b><span><b>Damaged</b> or <b>Missing</b>, with a note. The check changes no Item status. Complete does that.</span></li>
+    <li><b>Tap Complete return.</b><span>The Complete screen opens with your problem notes in <b>Damage notes</b>, and only the damaged Items ticked for maintenance. The invoice opens after Complete, the same as on Rentals.</span></li>
+  </ol>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:22%">Card says</th><th style="width:38%">Means</th><th>You do</th></tr></thead>
+      <tbody>
+        <tr><td><b>Not checked</b></td><td>Nobody ticked anything yet.</td><td>Wait for the customer. Send the return WA if it says Not reminded.</td></tr>
+        <tr><td><b>Checking</b></td><td>Some Items are ticked.</td><td>Finish the other Items.</td></tr>
+        <tr><td><b>Checked</b></td><td>Every Item passed all three checks.</td><td>Tap <b>Complete return</b>.</td></tr>
+        <tr><td><b>Problem</b></td><td>An Item is damaged or missing.</td><td>Missing: record it under <b>Lost items</b> first. Damaged: write the note, then Complete.</td></tr>
+        <tr><td><b>Returned</b></td><td>The rental is completed.</td><td>If the card says the deposit is held, tap <b>Release deposit</b> after the Item check.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="flag stop">
+    <span class="flag-t">One reminder is enough</span>
+    <p>At <b>10:00</b> the system sends a reminder for every Pickup and every return due that day. After 10:00, send by hand only when the card reads <b>Not reminded</b> or <b>Last send failed</b>. A late rental from an earlier day gets no automatic reminder, so its card reads Not reminded until you send one. A card that reads <b>WhatsApp sent</b> is done. The system makes you wait between two sends to the same customer and caps the sends per day.</p>
+  </div>
+  <div class="flag care">
+    <span class="flag-t">A missing Item is a Sale, not a damage charge</span>
+    <p>The card tells you to record the missing Item under <b>Lost items</b> before Complete. That Sale takes the Item off stock and records the replacement fee. A number typed into Damage charge does neither.</p>
+  </div>
 </section>
 
 <section id="other">
-  <span class="eyebrow">07 — The rest of the counter</span>
+  <span class="eyebrow">08 — The rest of the counter</span>
   <h2>Other things you'll be asked to do</h2>
 
   <div class="cols two">
@@ -581,14 +637,15 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 </section>
 
 <section id="rhythm">
-  <span class="eyebrow">08 — Cadence</span>
+  <span class="eyebrow">09 — Cadence</span>
   <h2>Your day, your week, your month</h2>
 
   <h3><span class="chip day">Every shift · open</span></h3>
   <ul class="plain">
     <li>Log in and <b>check the shop name in the top bar</b> is your shop.</li>
-    <li>Open <b>Rentals</b>. Note today's pickups (<code>pending</code>) and today's returns (<code>active</code>).</li>
-    <li>Scan the <code>overdue</code> list. Anything there is a phone call you owe someone.</li>
+    <li>Open <b>Return Check</b>. After 10:00, send a WhatsApp to every card that still reads <b>Not reminded</b>, until <b>To remind</b> is 0.</li>
+    <li>Look at the red <b>days late</b> cards on Return Check. Each one is a phone call you owe someone.</li>
+    <li>Open <b>Pickup Prep</b> and start pulling tomorrow's Items from the rack.</li>
     <li>Check the printer is paired and the drawer opens. Check the float in the drawer.</li>
     <li>Glance at the dashboard: low stock and maintenance counts.</li>
   </ul>
@@ -596,7 +653,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <h3><span class="chip day">Every shift · during</span></h3>
   <ul class="plain">
     <li>Every walk-in goes through the POS. No paper, no "I'll enter it later."</li>
-    <li>Every hand-over gets an ID photo. Every return gets checked before Complete.</li>
+    <li>Every hand-over gets an ID photo. Every return gets its Items ticked on <b>Return Check</b> before Complete.</li>
     <li>Every rupiah that leaves the drawer gets an expense record, same day, correct method.</li>
     <li>New customer? Get the phone number right — it is how you find them next time. Mark ID or EN so the next shift knows which language to use.</li>
   </ul>
@@ -605,7 +662,8 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <ul class="plain">
     <li><b>Count the drawer.</b> Compare it against the day's cash payments in the system.</li>
     <li>If it does not match, <b>report it tonight</b>, in writing, to your admin. Do not adjust anything yourself and do not wait until tomorrow.</li>
-    <li>Confirm every suit that came back today is completed — nothing left sitting on <code>active</code>.</li>
+    <li>Confirm every suit that came back today reads <b>Returned</b> on Return Check — nothing left sitting on <code>active</code>.</li>
+    <li>Confirm every card on Pickup Prep for tomorrow reads <b>Ready</b>, or has a note that says which Item replaces the problem one.</li>
     <li>Confirm nothing you handed over today is still on <code>pending</code>.</li>
   </ul>
 
@@ -626,7 +684,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 </section>
 
 <section id="care">
-  <span class="eyebrow">09 — Concerns</span>
+  <span class="eyebrow">10 — Concerns</span>
   <h2>What to watch out for</h2>
 
   <div class="flag stop">
@@ -672,7 +730,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 </section>
 
 <section id="ref">
-  <span class="eyebrow">10 — Keep this open</span>
+  <span class="eyebrow">11 — Keep this open</span>
   <h2>Cheat sheet</h2>
 
   <h4>Booking status</h4>
@@ -723,11 +781,12 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     <table>
       <thead><tr><th style="width:30%">Situation</th><th>What you do</th></tr></thead>
       <tbody>
+        <tr><td>Who still needs a reminder today?</td><td>Open <b>Return Check</b>. The <b>To remind</b> count and every card that reads <b>Not reminded</b>.</td></tr>
         <tr><td>Customer says the agreement never arrived</td><td>Resend <b>once</b>, then phone them. Never tap it repeatedly.</td></tr>
         <tr><td>Customer replies STOP, or asks for no messages</td><td>Tick <b>No WhatsApp</b> on their Customer record. Do not send anything more.</td></tr>
         <tr><td>Customer has No WhatsApp ticked and needs the agreement</td><td>Ask them face to face. Only if they agree, untick it and send.</td></tr>
         <tr><td>Reminders stopped for everyone</td><td>Tell your admin at once. The shop's number may be restricted.</td></tr>
-        <tr><td>Customer asks what the reminder said</td><td>It gives the date, the items, the shop address, the <b>opening hours</b>, and the shop phone. The return reminder also states the late fee: 50% of the rental one day late, the whole rental beyond that.</td></tr>
+        <tr><td>Customer asks what the reminder said</td><td>It gives the date, the items, the shop address, the <b>opening hours</b>, and the shop phone. The return reminder also states the deadline and the late fee: back by 20:00 on the return date, then 50% of the rental for each day late.</td></tr>
         <tr><td>The reminder shows the wrong opening hours</td><td>Tell your admin. Hours are edited per shop on <b>Admin &rarr; Branches</b>, not in the message.</td></tr>
       </tbody>
     </table>
@@ -740,7 +799,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <tbody>
         <tr><td><code>pending</code></td><td>Created with the booking, not handed over.</td><td>Pickup — agreement accepted, deposit taken, ID photo.</td></tr>
         <tr><td><code>active</code></td><td>Suit is with the customer.</td><td>Wait for the return date.</td></tr>
-        <tr><td><code>overdue</code></td><td>Past the return date. Set automatically at 00:05.</td><td>Phone them. Late fee is already accruing.</td></tr>
+        <tr><td><code>overdue</code></td><td>Not back by 20:00 on the return date. Set automatically at 20:05.</td><td>Phone them. Each 20:00 adds 50% of the booking amount.</td></tr>
         <tr><td><code>completed</code></td><td>Back, checked, settled.</td><td>Nothing.</td></tr>
         <tr><td><code>cancelled</code></td><td>Called off before hand-over.</td><td>Nothing.</td></tr>
       </tbody>
@@ -760,12 +819,12 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     </table>
   </div>
 
-  <h4>Automatic, every night — you don't do these</h4>
+  <h4>Automatic, every day — you don't do these</h4>
   <div class="table-wrap">
     <table>
       <thead><tr><th style="width:18%" class="num">Time</th><th>What happens</th></tr></thead>
       <tbody>
-        <tr><td class="num"><code>00:05</code></td><td>Active rentals past their return date become <code>overdue</code>.</td></tr>
+        <tr><td class="num"><code>20:05</code></td><td>Active rentals not back by 20:00 on their return date become <code>overdue</code>.</td></tr>
         <tr><td class="num"><code>00:10</code></td><td>Recurring expenses your admin set up (rent, salary) are posted.</td></tr>
         <tr><td class="num"><code>00:20</code></td><td>On the 1st only — last month's bookings are exported to the shop's Google Sheet.</td></tr>
       </tbody>

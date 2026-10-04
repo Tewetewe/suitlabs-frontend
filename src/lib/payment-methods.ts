@@ -1,13 +1,13 @@
 export const BOOKING_PAYMENT_METHOD_OPTIONS = [
-  { value: 'dp_cash', label: 'DP Cash' },
+  { value: 'dp_cash', label: 'DP 50% Cash' },
   { value: 'full_cash', label: 'Full Cash' },
-  { value: 'dp_transfer', label: 'DP Transfer' },
+  { value: 'dp_transfer', label: 'DP 50% Transfer' },
   { value: 'full_transfer', label: 'Full Transfer' },
-  { value: 'dp_qris', label: 'DP QRIS' },
+  { value: 'dp_qris', label: 'DP 50% QRIS' },
   { value: 'full_qris', label: 'Full QRIS' },
-  { value: 'dp_debit', label: 'DP Debit' },
+  { value: 'dp_debit', label: 'DP 50% Debit' },
   { value: 'full_debit', label: 'Full Debit' },
-  { value: 'dp_cc', label: 'DP Credit Card' },
+  { value: 'dp_cc', label: 'DP 50% Credit Card' },
   { value: 'full_cc', label: 'Full Credit Card' },
 ] as const;
 

@@ -11,6 +11,7 @@ import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { Badge, EmptyState, FilterBar, InfiniteScrollSentinel } from '@/components/ui/DataDisplay';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { PotPicker } from '@/components/payments/PotPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { BranchBadge } from '@/components/branch/BranchBadge';
@@ -19,6 +20,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { apiClient } from '@/lib/api';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import type {
   CreateExpenseRequest,
   Expense,
@@ -68,8 +70,20 @@ const emptyForm = (): CreateExpenseRequest => ({
   description: '',
   amount: 0,
   payment_method: 'cash',
+  pot: '',
   vendor: '',
   notes: '',
+});
+
+const emptyRecurringForm = () => ({
+  category: 'rent' as ExpenseCategory,
+  description: '',
+  amount: 0,
+  payment_method: 'transfer' as ExpensePaymentMethod,
+  pot: '',
+  vendor: '',
+  day_of_month: defaultDayOfMonth(),
+  start_date: localISODate(),
 });
 
 function monthBounds(year: number, month: number) {
@@ -114,15 +128,7 @@ export default function ExpensesPage() {
   const [recurring, setRecurring] = useState<RecurringExpense[]>([]);
   const [recurringOpen, setRecurringOpen] = useState(false);
   const [recurringSaving, setRecurringSaving] = useState(false);
-  const [recurringForm, setRecurringForm] = useState({
-    category: 'rent' as ExpenseCategory,
-    description: '',
-    amount: 0,
-    payment_method: 'transfer' as ExpensePaymentMethod,
-    vendor: '',
-    day_of_month: defaultDayOfMonth(),
-    start_date: localISODate(),
-  });
+  const [recurringForm, setRecurringForm] = useState(emptyRecurringForm);
 
   const range = useMemo(() => monthBounds(selectedYear, selectedMonth), [selectedYear, selectedMonth]);
 
@@ -204,6 +210,7 @@ export default function ExpensesPage() {
       description: expense.description,
       amount: expense.amount,
       payment_method: expense.payment_method || 'cash',
+      pot: expense.pot || '',
       vendor: expense.vendor || '',
       notes: expense.notes || '',
     });
@@ -226,14 +233,19 @@ export default function ExpensesPage() {
       error('Invalid amount', 'Amount must be greater than 0.');
       return;
     }
+    if (potMissing(form.payment_method, form.pot)) {
+      error('Pick a bank', POT_MISSING_MESSAGE);
+      return;
+    }
 
+    const payload = { ...form, pot: potForRequest(form.payment_method, form.pot) };
     try {
       setSaving(true);
       if (editing) {
-        await apiClient.updateExpense(editing.id, form);
+        await apiClient.updateExpense(editing.id, payload);
         success('Expense updated', editing.expense_number);
       } else {
-        const created = await apiClient.createExpense(form);
+        const created = await apiClient.createExpense(payload);
         success('Expense recorded', created.expense_number);
       }
       closeModal();
@@ -268,11 +280,19 @@ export default function ExpensesPage() {
       error('Incomplete form', 'Description and amount are required.');
       return;
     }
+    if (potMissing(recurringForm.payment_method, recurringForm.pot)) {
+      error('Pick a bank', POT_MISSING_MESSAGE);
+      return;
+    }
     try {
       setRecurringSaving(true);
-      await apiClient.createRecurringExpense(recurringForm);
+      await apiClient.createRecurringExpense({
+        ...recurringForm,
+        pot: potForRequest(recurringForm.payment_method, recurringForm.pot),
+      });
       success('Recurring expense saved', 'It will post automatically each month.');
       setRecurringOpen(false);
+      setRecurringForm(emptyRecurringForm());
       await refreshAll();
     } catch (err) {
       console.error(err);
@@ -586,6 +606,12 @@ export default function ExpensesPage() {
             value={form.payment_method || 'cash'}
             onChange={(e) => setForm((prev) => ({ ...prev, payment_method: e.target.value as ExpensePaymentMethod }))}
           />
+          <PotPicker
+            label="Paid from"
+            method={form.payment_method}
+            pot={form.pot}
+            onChange={(pot) => setForm((prev) => ({ ...prev, pot }))}
+          />
           <Input
             label="Vendor / payee"
             placeholder="Optional"
@@ -671,6 +697,12 @@ export default function ExpensesPage() {
             options={PAYMENT_OPTIONS}
             value={recurringForm.payment_method}
             onChange={(e) => setRecurringForm((prev) => ({ ...prev, payment_method: e.target.value as ExpensePaymentMethod }))}
+          />
+          <PotPicker
+            label="Paid from"
+            method={recurringForm.payment_method}
+            pot={recurringForm.pot}
+            onChange={(pot) => setRecurringForm((prev) => ({ ...prev, pot }))}
           />
           <Input
             label="Vendor / payee"

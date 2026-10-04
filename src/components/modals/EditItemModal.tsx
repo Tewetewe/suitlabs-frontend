@@ -8,9 +8,11 @@ import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Select } from '@/components/ui/Select';
 import { Item, CreateItemRequest, Category, ItemFacets } from '@/types';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { PotPicker } from '@/components/payments/PotPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import apiClient from '@/lib/api';
 import { facetOptions } from '@/lib/select-options';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { Switch } from '@/components/ui/Switch';
 
 const PURCHASE_PAYMENT_OPTIONS = [
@@ -43,14 +45,16 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
     condition: 'excellent',
     quantity: '',
     standard_price: '',
-    one_day_price: '',
     four_hour_price: '',
+    set_standard_price: '',
+    set_four_hour_price: '',
     purchase_price: '',
     selling_price: '',
     is_sellable: false,
     category_id: '',
     tags: '',
     payment_method: 'cash',
+    pot: '',
     on_credit: false,
   });
   const [loading, setLoading] = useState(false);
@@ -174,14 +178,16 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
         condition: item.condition || 'excellent',
         quantity: item.quantity?.toString() || '0',
         standard_price: item.standard_price ? item.standard_price.toString() : '0.00',
-        one_day_price: item.one_day_price ? item.one_day_price.toString() : '0.00',
         four_hour_price: item.four_hour_price ? item.four_hour_price.toString() : '0.00',
+        set_standard_price: item.set_standard_price ? item.set_standard_price.toString() : '0.00',
+        set_four_hour_price: item.set_four_hour_price ? item.set_four_hour_price.toString() : '0.00',
         purchase_price: item.purchase_price ? item.purchase_price.toString() : '0.00',
         selling_price: item.selling_price ? item.selling_price.toString() : '0.00',
         is_sellable: !!item.is_sellable,
         category_id: item.category?.id || item.category_id || '',
         tags: Array.isArray(item.tags) ? item.tags.join(', ') : '',
         payment_method: 'cash',
+        pot: '',
         on_credit: false,
       });
       console.log('Form data set with category_id:', item.category?.id || item.category_id || ''); // Debug log
@@ -216,6 +222,9 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
       if (!formData.code.trim()) newErrors.code = 'Code is required';
       if (!formData.name.trim()) newErrors.name = 'Name is required';
       if (!formData.type) newErrors.type = 'Type is required';
+      // On credit, nothing is paid now, so no bank is needed.
+      const paysNow = isAdmin && parseFloat(formData.purchase_price) > 0 && !formData.on_credit;
+      if (paysNow && potMissing(formData.payment_method, formData.pot)) newErrors.submit = POT_MISSING_MESSAGE;
 
       if (Object.keys(newErrors).length > 0) {
         setErrors(newErrors);
@@ -234,12 +243,18 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
         size: formData.size_label.trim() ? { label: formData.size_label.trim() } : undefined,
         condition: formData.condition as 'excellent' | 'good' | 'fair' | 'poor',
         standard_price: parseFloat(formData.standard_price) || 0,
-        one_day_price: parseFloat(formData.one_day_price) || 0,
         four_hour_price: parseFloat(formData.four_hour_price) || 0,
+        ...(formData.type === 'suit'
+          ? {
+              set_standard_price: parseFloat(formData.set_standard_price) || 0,
+              set_four_hour_price: parseFloat(formData.set_four_hour_price) || 0,
+            }
+          : {}),
         ...(isAdmin
           ? {
               purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : undefined,
               payment_method: formData.payment_method as CreateItemRequest['payment_method'],
+              pot: paysNow ? potForRequest(formData.payment_method, formData.pot) : undefined,
               on_credit: formData.on_credit,
             }
           : {}),
@@ -343,18 +358,26 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
             />
 
             <CurrencyInput
-              label="One Day Price *"
-              value={formData.one_day_price}
-              onChange={(n) => handleInputChange('one_day_price', n ? String(n) : '')}
-              error={errors.one_day_price}
-            />
-
-            <CurrencyInput
               label="Four Hour Price *"
               value={formData.four_hour_price}
               onChange={(n) => handleInputChange('four_hour_price', n ? String(n) : '')}
               error={errors.four_hour_price}
             />
+
+            {formData.type === 'suit' && (
+              <>
+                <CurrencyInput
+                  label="Set Price (3-day)"
+                  value={formData.set_standard_price}
+                  onChange={(n) => handleInputChange('set_standard_price', n ? String(n) : '')}
+                />
+                <CurrencyInput
+                  label="Set Price (4 hours)"
+                  value={formData.set_four_hour_price}
+                  onChange={(n) => handleInputChange('set_four_hour_price', n ? String(n) : '')}
+                />
+              </>
+            )}
 
             {isAdmin && (
               <CurrencyInput
@@ -374,6 +397,14 @@ export default function EditItemModal({ isOpen, onClose, onUpdate, item }: EditI
                   onChange={(e) => handleInputChange('payment_method', e.target.value)}
                   disabled={formData.on_credit}
                 />
+                {!formData.on_credit && (
+                  <PotPicker
+                    label="Paid from"
+                    method={formData.payment_method}
+                    pot={formData.pot}
+                    onChange={(pot) => setFormData((prev) => ({ ...prev, pot }))}
+                  />
+                )}
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"

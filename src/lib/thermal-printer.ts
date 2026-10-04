@@ -15,6 +15,7 @@ import {
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 import { receiptAddress, receiptPhone, receiptSubtitle } from './branch-scope';
+import { TRANSACTION_FEE_LABEL } from './transaction-fee';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -489,6 +490,13 @@ export class ThermalPrinterService {
     } else {
       generator.text(`Due: ${formatCurrencyForPrint(invoice.due_amount || 0)}`).lineFeed();
     }
+    if ((invoice.transaction_fee || 0) > 0) {
+      generator
+        .text(`${TRANSACTION_FEE_LABEL}: ${formatCurrencyForPrint(invoice.transaction_fee || 0)}`)
+        .lineFeed()
+        .text(`Total paid: ${formatCurrencyForPrint((invoice.paid_amount || 0) + (invoice.transaction_fee || 0))}`)
+        .lineFeed();
+    }
 
     generator.separator();
     generator
@@ -625,6 +633,9 @@ export class ThermalPrinterService {
       generator.text(`Damage: ${formatCurrencyForPrint(rental.damage_charges)}`).lineFeed();
     }
     generator.setBold(true).text(`GRAND TOTAL: ${formatCurrencyForPrint(total)}`).lineFeed().setBold(false);
+    if ((rental.transaction_fee || 0) > 0) {
+      generator.text(`${TRANSACTION_FEE_LABEL}: ${formatCurrencyForPrint(rental.transaction_fee || 0)}`).lineFeed();
+    }
 
     if ((rental.security_deposit || 0) > 0) {
       generator.text(`Deposit: ${formatCurrencyForPrint(rental.security_deposit)}`).lineFeed();
@@ -743,6 +754,13 @@ export class ThermalPrinterService {
     }
     generator.setBold(true).text(`TOTAL: ${formatCurrencyForPrint(sale.total_amount || 0)}`).lineFeed().setBold(false);
     generator.text(`Paid: ${formatCurrencyForPrint(sale.paid_amount || 0)}`).lineFeed();
+    if ((sale.transaction_fee || 0) > 0) {
+      generator
+        .text(`${TRANSACTION_FEE_LABEL}: ${formatCurrencyForPrint(sale.transaction_fee || 0)}`)
+        .lineFeed()
+        .text(`Total paid: ${formatCurrencyForPrint((sale.paid_amount || 0) + (sale.transaction_fee || 0))}`)
+        .lineFeed();
+    }
 
     generator.separator();
     generator

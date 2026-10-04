@@ -18,6 +18,13 @@ import {
   PickupPrep,
   PickupPrepDay,
   PickupPrepItemCheck,
+  ReturnCheck,
+  ReturnCheckDay,
+  ReturnCheckItemInput,
+  TransactionFeeRule,
+  TransactionFeeRuleInput,
+  PotBalances,
+  PotTransfer,
   Category,
   ItemFacets,
   PackagePricing,
@@ -72,6 +79,8 @@ import {
   DepositAgreementView,
   PaymentProof,
   PaymentProofKind,
+  ReceiptKind,
+  WAReceipt,
 } from '@/types';
 import { emitAPIStatus } from '@/lib/api-status';
 import { unwrapNamedRecord } from '@/lib/api-utils';
@@ -381,8 +390,12 @@ class APIClient {
     return payload && typeof payload === 'object' && 'item' in payload ? payload.item : payload as Item;
   }
 
-  async updateItemQuantity(id: string, quantity: number): Promise<Item> {
-    const response = await this.client.put<APIResponse<Item>>(`/api/v1/items/${id}/quantity`, { quantity });
+  async updateItemQuantity(
+    id: string,
+    quantity: number,
+    purchase?: { payment_method?: string; pot?: string; on_credit?: boolean },
+  ): Promise<Item> {
+    const response = await this.client.put<APIResponse<Item>>(`/api/v1/items/${id}/quantity`, { quantity, ...purchase });
     return this.handleResponse<Item>(response);
   }
 
@@ -678,10 +691,14 @@ class APIClient {
     paymentMethod: string,
     paidOn?: string,
     paymentProofUrl?: string,
+    feeRuleId?: string,
+    pot?: string,
   ): Promise<Booking> {
     const response = await this.client.put<APIResponse<Booking>>(`/api/v1/bookings/${bookingId}/payment`, {
       amount,
       payment_method: paymentMethod,
+      fee_rule_id: feeRuleId || undefined,
+      pot: pot || undefined,
       paid_on: paidOn,
       payment_proof_url: paymentProofUrl,
     });
@@ -699,6 +716,22 @@ class APIClient {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
     return response.data.data!.url;
+  }
+
+  /**
+   * Sends a rendered receipt image to the customer on WhatsApp. Staff or Admin
+   * trigger it by hand. `phone` is optional when the record has a customer.
+   */
+  async sendReceiptWhatsApp(kind: ReceiptKind, ownerId: string, image: File, phone?: string): Promise<WAReceipt> {
+    const formData = new FormData();
+    formData.append('file', image);
+    if (phone) formData.append('phone', phone);
+    const response = await this.client.post<APIResponse<{ receipt: WAReceipt }>>(
+      `/api/v1/receipts/${kind}/${ownerId}/whatsapp`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data.data!.receipt;
   }
 
   async uploadPaymentProof(bookingId: string, file: File): Promise<void> {
@@ -817,11 +850,15 @@ class APIClient {
       deposit_proof_url?: string;
       remaining_payment_proof_url?: string;
     },
+    remainingFeeRuleId?: string,
+    pots?: { remaining_pot?: string; deposit_pot?: string },
   ): Promise<Rental> {
     const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/activate`, {
       user_id: userId,
       identity_card_url: identityCardUrl,
       remaining_payment_method: remainingPaymentMethod,
+      remaining_fee_rule_id: remainingFeeRuleId || undefined,
+      ...pots,
       ...deposit,
       ...proofs,
     });
@@ -837,6 +874,8 @@ class APIClient {
     paymentMethod?: string,
     depositRefundMethod?: string,
     depositRefundProofUrl?: string,
+    feeRuleId?: string,
+    pot?: string,
   ): Promise<Rental> {
     const body: Record<string, unknown> = {
       user_id: userId
@@ -845,6 +884,8 @@ class APIClient {
     if (typeof damageCharges === 'number') body.damage_charges = damageCharges;
     if (damageNotes) body.damage_notes = damageNotes;
     if (paymentMethod) body.payment_method = paymentMethod;
+    if (feeRuleId) body.fee_rule_id = feeRuleId;
+    if (pot) body.pot = pot;
     if (depositRefundMethod) body.deposit_refund_method = depositRefundMethod;
     if (depositRefundProofUrl) body.deposit_refund_proof_url = depositRefundProofUrl;
     const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/complete`, body);
@@ -861,6 +902,9 @@ class APIClient {
       damage_charges?: number;
       damage_notes?: string;
       payment_method?: string;
+      fee_rule_id?: string;
+      pot?: string;
+      refund_pot?: string;
       deposit_refund_method?: string;
       deposit_refund_proof_url?: string;
     },
@@ -882,6 +926,72 @@ class APIClient {
   async sendRentalWAReminder(rentalId: string): Promise<WAReminder> {
     const response = await this.client.post<APIResponse<{ reminder: WAReminder }>>(`/api/v1/rentals/${rentalId}/wa-reminder`, {});
     return response.data.data!.reminder;
+  }
+
+  // Pot Transfers: money moved between the Cash Drawer, BCA, and BNI.
+  async getPotTransfers(startDate?: string, endDate?: string): Promise<PotTransfer[]> {
+    const search = new URLSearchParams();
+    if (startDate) search.set('start_date', startDate);
+    if (endDate) search.set('end_date', endDate);
+    const response = await this.client.get<APIResponse<{ transfers: PotTransfer[] }>>(
+      `/api/v1/pot-transfers${search.toString() ? `?${search}` : ''}`,
+    );
+    return response.data.data?.transfers || [];
+  }
+
+  async createPotTransfer(input: {
+    transfer_date?: string;
+    from_pot: string;
+    to_pot: string;
+    amount: number;
+    note?: string;
+  }): Promise<PotTransfer> {
+    const response = await this.client.post<APIResponse<{ transfer: PotTransfer }>>('/api/v1/pot-transfers', input);
+    return response.data.data!.transfer;
+  }
+
+  async voidPotTransfer(id: string): Promise<PotTransfer> {
+    const response = await this.client.post<APIResponse<{ transfer: PotTransfer }>>(`/api/v1/admin/pot-transfers/${id}/void`, {});
+    return response.data.data!.transfer;
+  }
+
+  async getPotBalances(asOf?: string): Promise<PotBalances> {
+    const response = await this.client.get<APIResponse<PotBalances>>(
+      `/api/v1/admin/pot-balances${asOf ? `?as_of=${asOf}` : ''}`,
+    );
+    return response.data.data!;
+  }
+
+  async splitBankBalance(input: { as_of_date?: string; bca_amount: number; bni_amount: number }): Promise<PotTransfer[]> {
+    const response = await this.client.post<APIResponse<{ transfers: PotTransfer[] }>>(
+      '/api/v1/admin/pot-transfers/split-bank',
+      input,
+    );
+    return response.data.data?.transfers || [];
+  }
+
+  // Transaction Fee Rules. Staff gets the active rules; Admin may ask for all.
+  async getTransactionFeeRules(all = false): Promise<TransactionFeeRule[]> {
+    const response = await this.client.get<APIResponse<{ rules: TransactionFeeRule[] }>>(
+      `/api/v1/transaction-fee-rules${all ? '?all=true' : ''}`,
+    );
+    return response.data.data?.rules || [];
+  }
+
+  async createTransactionFeeRule(input: TransactionFeeRuleInput): Promise<TransactionFeeRule> {
+    const response = await this.client.post<APIResponse<{ rule: TransactionFeeRule }>>(
+      '/api/v1/admin/transaction-fee-rules',
+      input,
+    );
+    return response.data.data!.rule;
+  }
+
+  async updateTransactionFeeRule(id: string, input: TransactionFeeRuleInput): Promise<TransactionFeeRule> {
+    const response = await this.client.put<APIResponse<{ rule: TransactionFeeRule }>>(
+      `/api/v1/admin/transaction-fee-rules/${id}`,
+      input,
+    );
+    return response.data.data!.rule;
   }
 
   // H-1 Pickup checklist. With no date the backend returns tomorrow.
@@ -910,6 +1020,27 @@ class APIClient {
       { ready },
     );
     return response.data.data!.prep;
+  }
+
+  // Daily Return Check. With no date the backend returns today, with every
+  // older Rental that is still not back.
+  async getReturnCheckDay(date?: string): Promise<ReturnCheckDay> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const response = await this.client.get<APIResponse<ReturnCheckDay>>(`/api/v1/rentals/return-check${query}`);
+    return response.data.data!;
+  }
+
+  async getReturnCheck(rentalId: string): Promise<ReturnCheck> {
+    const response = await this.client.get<APIResponse<{ check: ReturnCheck }>>(`/api/v1/rentals/${rentalId}/return-check`);
+    return response.data.data!.check;
+  }
+
+  async checkReturnItem(rentalId: string, itemId: string, check: ReturnCheckItemInput): Promise<ReturnCheck> {
+    const response = await this.client.put<APIResponse<{ check: ReturnCheck }>>(
+      `/api/v1/rentals/${rentalId}/return-check/items/${itemId}`,
+      check,
+    );
+    return response.data.data!.check;
   }
 
   async getPublicDepositAgreement(token: string): Promise<DepositAgreementView> {
@@ -1520,6 +1651,7 @@ class APIClient {
     amount: number;
     fiscal_year?: number;
     shareholder?: string;
+    pot?: string;
     notes?: string;
   }): Promise<Dividend> {
     const response = await this.client.post<APIResponse<{ dividend: Dividend }>>(
@@ -1550,7 +1682,7 @@ class APIClient {
     return response.data.data!.payable;
   }
 
-  async payPayable(id: string, payload: { amount: number; payment_method?: string; paid_on?: string }): Promise<Payable> {
+  async payPayable(id: string, payload: { amount: number; payment_method?: string; pot?: string; paid_on?: string }): Promise<Payable> {
     const response = await this.client.post<APIResponse<{ payable: Payable }>>(`/api/v1/admin/payables/${id}/pay`, payload);
     return response.data.data!.payable;
   }
@@ -1569,13 +1701,14 @@ class APIClient {
     lender: string;
     principal: number;
     payment_method?: string;
+    pot?: string;
     notes?: string;
   }): Promise<Loan> {
     const response = await this.client.post<APIResponse<{ loan: Loan }>>('/api/v1/admin/loans', payload);
     return response.data.data!.loan;
   }
 
-  async repayLoan(id: string, payload: { amount: number; payment_method?: string; paid_on?: string }): Promise<Loan> {
+  async repayLoan(id: string, payload: { amount: number; payment_method?: string; pot?: string; paid_on?: string }): Promise<Loan> {
     const response = await this.client.post<APIResponse<{ loan: Loan }>>(`/api/v1/admin/loans/${id}/repay`, payload);
     return response.data.data!.loan;
   }

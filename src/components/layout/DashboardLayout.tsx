@@ -35,6 +35,9 @@ import {
   TrendingUp,
   MessageCircle,
   ClipboardCheck,
+  PackageCheck,
+  Percent,
+  ArrowLeftRight,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CashierChromeProvider, useCashierChrome } from '@/components/cashier/CashierChromeContext';
@@ -63,7 +66,9 @@ const navigationSections: NavigationSection[] = [
       { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar, roles: ['admin', 'staff'] },
       { name: 'Rentals', href: '/dashboard/rentals', icon: FileText, roles: ['admin', 'staff'] },
       { name: 'Pickup Prep', href: '/dashboard/pickup-prep', icon: ClipboardCheck, roles: ['admin', 'staff'] },
+      { name: 'Return Check', href: '/dashboard/return-check', icon: PackageCheck, roles: ['admin', 'staff'] },
       { name: 'Expenses', href: '/dashboard/expenses', icon: Wallet, roles: ['admin', 'staff'] },
+      { name: 'Pot Transfers', href: '/dashboard/pot-transfers', icon: ArrowLeftRight, roles: ['admin', 'staff'] },
       { name: 'Sales', href: '/dashboard/sales', icon: ShoppingBag, roles: ['admin', 'staff'] },
     ],
   },
@@ -83,6 +88,7 @@ const navigationSections: NavigationSection[] = [
     items: [
       { name: 'Bulk Input Sync', href: '/dashboard/admin/bulk-input-sync', icon: FileSpreadsheet, roles: ['admin'] },
       { name: 'WA Reminders', href: '/dashboard/admin/wa-reminders', icon: MessageCircle, roles: ['admin'] },
+      { name: 'Transaction Fees', href: '/dashboard/admin/transaction-fees', icon: Percent, roles: ['admin'] },
       { name: 'Assets', href: '/dashboard/admin/assets', icon: Landmark, roles: ['admin'] },
       { name: 'Analytics', href: '/dashboard/admin/rental-analytics', icon: TrendingUp, roles: ['admin'] },
       { name: 'Financial Report', href: '/dashboard/admin/financial-report', icon: BarChart3, roles: ['admin'] },

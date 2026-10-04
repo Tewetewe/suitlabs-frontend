@@ -9,6 +9,9 @@ import SimpleModal from './SimpleModal';
 import CameraModal from './CameraModal';
 import { RackPullList } from '@/components/items/RackPullList';
 import { ProofPick } from '@/components/payments/ProofPick';
+import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
+import { PotPicker } from '@/components/payments/PotPicker';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
@@ -30,7 +33,8 @@ function rentalsFromUserResponse(payload: unknown): Rental[] {
 interface PickupRentalModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  /** Gets the Booking ID when the Pickup collected its remaining amount. */
+  onSuccess: (paidBookingId?: string) => void;
   rental: Rental | null;
   depositEnabled?: boolean;
   onSendAgreement?: (rentalId: string) => Promise<void>;
@@ -61,6 +65,9 @@ export function PickupRentalModal({
   const [sendingAgreement, setSendingAgreement] = useState(false);
   const [depositMethod, setDepositMethod] = useState('cash');
   const [remainingMethod, setRemainingMethod] = useState('cash');
+  const [remainingFeeRuleId, setRemainingFeeRuleId] = useState('');
+  const [remainingPot, setRemainingPot] = useState('');
+  const [depositPot, setDepositPot] = useState('');
   const [bankName, setBankName] = useState('');
   const [accountName, setAccountName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -93,6 +100,9 @@ export function PickupRentalModal({
     if (!isOpen || !rental) return;
     setDepositMethod('cash');
     setRemainingMethod('cash');
+    setRemainingFeeRuleId('');
+    setRemainingPot('');
+    setDepositPot('');
     setBankName(rental.deposit_bank_name || '');
     setAccountName(rental.deposit_account_name || '');
     setAccountNumber(rental.deposit_account_number || '');
@@ -185,6 +195,10 @@ export function PickupRentalModal({
       setErrors({ submit: 'Collect the remaining booking balance before pickup.' });
       return;
     }
+    if ((needsRemaining && potMissing(remainingMethod, remainingPot)) || (needsDeposit && potMissing(depositMethod, depositPot))) {
+      setErrors({ submit: POT_MISSING_MESSAGE });
+      return;
+    }
     if (needsDeposit && depositMethod === 'transfer') {
       if (!bankName.trim() || !accountName.trim() || !accountNumber.trim()) {
         setErrors({ submit: 'Customer bank name, account name, and number are required for transfer.' });
@@ -237,8 +251,13 @@ export function PickupRentalModal({
           deposit_proof_url: depositProofUrl,
           remaining_payment_proof_url: remainingProofUrl,
         },
+        needsRemaining ? remainingFeeRuleId : undefined,
+        {
+          remaining_pot: needsRemaining ? potForRequest(remainingMethod, remainingPot) : undefined,
+          deposit_pot: needsDeposit ? potForRequest(depositMethod, depositPot) : undefined,
+        },
       );
-      onSuccess();
+      onSuccess(needsRemaining ? rental.booking_id || undefined : undefined);
       onClose();
     } catch (error) {
       console.error('Failed to pickup rental:', error);
@@ -327,6 +346,15 @@ export function PickupRentalModal({
                     value={remainingMethod}
                     onChange={(e) => setRemainingMethod(e.target.value)}
                   />
+                  <TransactionFeeLines
+                    amount={remainingAmount}
+                    method={remainingMethod}
+                    pot={remainingPot}
+                    onPotChange={setRemainingPot}
+                    ruleId={remainingFeeRuleId}
+                    onRuleIdChange={setRemainingFeeRuleId}
+                    className="text-sm text-slate-600"
+                  />
                   <ProofPick
                     id="pickup-remaining-proof"
                     label="Remaining payment proof (optional)"
@@ -370,6 +398,7 @@ export function PickupRentalModal({
                         value={depositMethod}
                         onChange={(e) => setDepositMethod(e.target.value)}
                       />
+                      <PotPicker method={depositMethod} pot={depositPot} onChange={setDepositPot} />
                       {depositMethod === 'transfer' && (
                         <div className="space-y-3">
                           <Input label="Bank name" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="BCA" />

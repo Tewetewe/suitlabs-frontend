@@ -325,9 +325,9 @@ export default function ItemsPage() {
           <span className="truncate text-xs text-slate-500">
             {item.color || item.brand || item.code}
           </span>
-          <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900" title={formatCurrency(item.one_day_price)}>
-            {formatCurrencyCompact(item.one_day_price)}
-            <span className="text-[11px] font-medium text-slate-400">/day</span>
+          <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900" title={formatCurrency(item.standard_price)}>
+            {formatCurrencyCompact(item.standard_price)}
+            <span className="text-[11px] font-medium text-slate-400">/3 days</span>
           </span>
         </div>
         <Badge variant={itemStatusVariant(item.status)} dot className="capitalize">
@@ -374,8 +374,8 @@ export default function ItemsPage() {
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <div className="text-right">
               <p className="text-sm font-semibold tabular-nums text-slate-900">
-                {formatCurrency(item.one_day_price)}
-                <span className="text-[11px] font-medium text-slate-400">/day</span>
+                {formatCurrency(item.standard_price)}
+                <span className="text-[11px] font-medium text-slate-400">/3 days</span>
               </p>
               <Badge variant={itemStatusVariant(item.status)} dot className="mt-1 capitalize">
                 {item.status}

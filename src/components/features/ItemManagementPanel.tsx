@@ -356,8 +356,8 @@ export function ItemManagementPanel({ item, onUpdate }: ItemManagementPanelProps
               </p>
             </div>
             <div>
-              <p className="text-sm text-slate-500">Price/Day</p>
-              <p className="font-semibold">{formatCurrency(item.one_day_price)}</p>
+              <p className="text-sm text-slate-500">Price/3 days</p>
+              <p className="font-semibold">{formatCurrency(item.standard_price)}</p>
             </div>
             <div>
               <p className="text-sm text-slate-500">Price/4hr</p>

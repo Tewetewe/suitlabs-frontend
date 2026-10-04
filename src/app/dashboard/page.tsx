@@ -235,7 +235,7 @@ export default function DashboardPage() {
                   loading={loading}
                   value={formatCurrencyCompact(pnl?.cash_on_hand || 0)}
                   title={formatCurrency(pnl?.cash_on_hand || 0)}
-                  sub={`Drawer ${formatCurrencyCompact(pnl?.cash_drawer || 0)} · Bank ${formatCurrencyCompact(pnl?.bank || 0)}`}
+                  sub={`Drawer ${formatCurrencyCompact(pnl?.cash_drawer || 0)} · BCA ${formatCurrencyCompact(pnl?.bank_pots?.bca || 0)} · BNI ${formatCurrencyCompact(pnl?.bank_pots?.bni || 0)}${pnl?.bank_pots?.unassigned ? ` · Unassigned ${formatCurrencyCompact(pnl.bank_pots.unassigned)}` : ''}`}
                 />
                 <MetricTile
                   label="Accounts Receivable"

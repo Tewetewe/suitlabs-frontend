@@ -9,8 +9,10 @@ import { Select } from '@/components/ui/Select';
 import { CreateItemRequest, Category, ItemFacets } from '@/types';
 import { apiClient } from '@/lib/api';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { PotPicker } from '@/components/payments/PotPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { facetOptions } from '@/lib/select-options';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { Switch } from '@/components/ui/Switch';
 
 const PURCHASE_PAYMENT_OPTIONS = [
@@ -42,14 +44,16 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
     condition: 'excellent',
     quantity: '',
     standard_price: '',
-    one_day_price: '',
     four_hour_price: '',
+    set_standard_price: '',
+    set_four_hour_price: '',
     purchase_price: '',
     selling_price: '',
     is_sellable: false,
     category_id: '',
     tags: '',
     payment_method: 'cash',
+    pot: '',
     on_credit: false,
   });
   const [loading, setLoading] = useState(false);
@@ -168,8 +172,10 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
       if (!formData.type) newErrors.type = 'Type is required';
       if (!formData.quantity || parseInt(formData.quantity) < 1) newErrors.quantity = 'Valid quantity is required (minimum 1)';
       if (!formData.standard_price || parseFloat(formData.standard_price) < 0) newErrors.standard_price = 'Valid standard price is required';
-      if (!formData.one_day_price || parseFloat(formData.one_day_price) < 0) newErrors.one_day_price = 'Valid one day price is required';
       if (!formData.four_hour_price || parseFloat(formData.four_hour_price) < 0) newErrors.four_hour_price = 'Valid four hour price is required';
+      // On credit, nothing is paid now, so no bank is needed.
+      const paysNow = isAdmin && parseFloat(formData.purchase_price) > 0 && !formData.on_credit;
+      if (paysNow && potMissing(formData.payment_method, formData.pot)) newErrors.submit = POT_MISSING_MESSAGE;
 
       if (Object.keys(newErrors).length > 0) {
         setErrors(newErrors);
@@ -190,12 +196,18 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         condition: formData.condition as 'excellent' | 'good' | 'fair' | 'poor',
         quantity: parseInt(formData.quantity),
         standard_price: parseFloat(formData.standard_price),
-        one_day_price: parseFloat(formData.one_day_price),
         four_hour_price: parseFloat(formData.four_hour_price),
+        ...(formData.type === 'suit'
+          ? {
+              set_standard_price: parseFloat(formData.set_standard_price) || 0,
+              set_four_hour_price: parseFloat(formData.set_four_hour_price) || 0,
+            }
+          : {}),
         ...(isAdmin && formData.purchase_price
           ? {
               purchase_price: parseFloat(formData.purchase_price),
               payment_method: formData.payment_method as CreateItemRequest['payment_method'],
+              pot: paysNow ? potForRequest(formData.payment_method, formData.pot) : undefined,
               on_credit: formData.on_credit,
             }
           : {}),
@@ -221,14 +233,16 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
         condition: 'excellent',
         quantity: '',
         standard_price: '',
-        one_day_price: '',
-        four_hour_price: '',
+            four_hour_price: '',
+    set_standard_price: '',
+    set_four_hour_price: '',
         purchase_price: '',
         selling_price: '',
         is_sellable: false,
         category_id: '',
         tags: '',
         payment_method: 'cash',
+        pot: '',
         on_credit: false,
       });
       setPreviewUrl(null);
@@ -329,18 +343,26 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
             />
 
             <CurrencyInput
-              label="One Day Price *"
-              value={formData.one_day_price}
-              onChange={(n) => handleInputChange('one_day_price', n ? String(n) : '')}
-              error={errors.one_day_price}
-            />
-
-            <CurrencyInput
               label="Four Hour Price *"
               value={formData.four_hour_price}
               onChange={(n) => handleInputChange('four_hour_price', n ? String(n) : '')}
               error={errors.four_hour_price}
             />
+
+            {formData.type === 'suit' && (
+              <>
+                <CurrencyInput
+                  label="Set Price (3-day)"
+                  value={formData.set_standard_price}
+                  onChange={(n) => handleInputChange('set_standard_price', n ? String(n) : '')}
+                />
+                <CurrencyInput
+                  label="Set Price (4 hours)"
+                  value={formData.set_four_hour_price}
+                  onChange={(n) => handleInputChange('set_four_hour_price', n ? String(n) : '')}
+                />
+              </>
+            )}
 
             {isAdmin && (
               <CurrencyInput
@@ -360,6 +382,14 @@ export default function AddItemModal({ isOpen, onClose, onAdd }: AddItemModalPro
                   onChange={(e) => handleInputChange('payment_method', e.target.value)}
                   disabled={formData.on_credit}
                 />
+                {!formData.on_credit && (
+                  <PotPicker
+                    label="Paid from"
+                    method={formData.payment_method}
+                    pot={formData.pot}
+                    onChange={(pot) => setFormData((prev) => ({ ...prev, pot }))}
+                  />
+                )}
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"

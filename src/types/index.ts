@@ -57,6 +57,59 @@ export interface WAReminder {
   updated_at: string;
 }
 
+// Pots (align with backend entity/pot.go): where the shop's money sits.
+// 'bank' is Bank (unassigned): the balance from before the BCA/BNI split.
+export type Pot = 'cash' | 'bca' | 'bni' | 'bank';
+
+export interface BankPots {
+  bca: number;
+  bni: number;
+  unassigned: number;
+}
+
+export interface PotBalances {
+  as_of: string;
+  cash: number;
+  bca: number;
+  bni: number;
+  unassigned: number;
+}
+
+export interface PotTransfer {
+  id: string;
+  transfer_date: string;
+  from_pot: Pot;
+  to_pot: Pot;
+  amount: number;
+  note: string;
+  branch_id: string;
+  created_by: string;
+  voided_at?: string;
+  voided_by?: string;
+  created_at: string;
+}
+
+// Transaction Fee Rules (align with backend entity/transaction_fee.go)
+export type FeeMethod = 'qris' | 'debit' | 'cc';
+
+export interface TransactionFeeRule {
+  id: string;
+  method: FeeMethod;
+  /** bca, bni, or '' for a rule that is the same on every terminal (QRIS). */
+  terminal: string;
+  label: string;
+  /** Basis points: 30 = 0.3%, 200 = 2%. */
+  rate_bps: number;
+  /** The fee applies only to a payment above this amount. */
+  min_amount: number;
+  active: boolean;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type TransactionFeeRuleInput = Omit<TransactionFeeRule, 'id' | 'created_at' | 'updated_at'>;
+
 // H-1 Pickup checklist (align with backend usecase/pickup_prep_usecase.go)
 export type PickupPrepStatus = 'not_started' | 'in_progress' | 'ready' | 'problem';
 export type PickupPrepProblem = '' | 'damaged' | 'not_found';
@@ -122,6 +175,101 @@ export interface PickupPrepItemCheck {
   undamaged: boolean;
   size_ok: boolean;
   problem: PickupPrepProblem;
+  problem_note: string;
+}
+
+// Daily Return Check (align with backend usecase/return_check_usecase.go)
+export type ReturnCheckStatus = 'not_started' | 'in_progress' | 'checked' | 'problem' | 'returned';
+export type ReturnCheckProblem = '' | 'damaged' | 'missing';
+
+export interface ReminderInfo {
+  status: WAReminderStatus;
+  trigger: WAReminderTrigger;
+  reminder_date: string;
+  sent_at?: string;
+  error?: string;
+}
+
+export interface ReturnCheckItem {
+  item_id: string;
+  code: string;
+  barcode?: string;
+  name: string;
+  type: string;
+  size: string;
+  color: string;
+  quantity: number;
+  is_addon: boolean;
+  received: boolean;
+  undamaged: boolean;
+  stain_free: boolean;
+  problem: ReturnCheckProblem;
+  problem_note: string;
+  checked_by?: string;
+  checked_at?: string;
+  passed: boolean;
+}
+
+export interface ReturnCheck {
+  rental_id: string;
+  booking_id?: string;
+  invoice_number?: string;
+  branch_id: string;
+  branch_name?: string;
+  customer_name: string;
+  customer_phone?: string;
+  rental_status: Rental['status'];
+  pickup_date: string;
+  return_date: string;
+  actual_return_date?: string;
+  /** The 20:00 deadline on the Return Date. */
+  due_by: string;
+  days_overdue: number;
+  /** For an open Rental, the Late Fee if it completes now. */
+  late_fee: number;
+  notes?: string;
+  status: ReturnCheckStatus;
+  items_passed: number;
+  items_total: number;
+  items: ReturnCheckItem[];
+  security_deposit: number;
+  deposit_held: boolean;
+  reminder?: ReminderInfo;
+  reminded_today: boolean;
+}
+
+export interface PickupReminder {
+  rental_id: string;
+  invoice_number?: string;
+  branch_id: string;
+  branch_name?: string;
+  customer_name: string;
+  customer_phone?: string;
+  pickup_date: string;
+  items_total: number;
+  remaining_amount: number;
+  reminder?: ReminderInfo;
+  reminded_today: boolean;
+}
+
+export interface ReturnCheckDay {
+  date: string;
+  is_today: boolean;
+  total: number;
+  returned: number;
+  checked: number;
+  problem: number;
+  overdue: number;
+  to_remind: number;
+  rentals: ReturnCheck[];
+  pickups: PickupReminder[];
+}
+
+export interface ReturnCheckItemInput {
+  received: boolean;
+  undamaged: boolean;
+  stain_free: boolean;
+  problem: ReturnCheckProblem;
   problem_note: string;
 }
 
@@ -490,8 +638,9 @@ export interface Item {
   rented_qty?: number;
   maintenance_qty?: number;
   standard_price: number;
-  one_day_price: number;
   four_hour_price: number;
+  set_four_hour_price?: number;
+  set_standard_price?: number;
   purchase_price?: number;
   selling_price?: number;
   is_sellable?: boolean;
@@ -565,6 +714,8 @@ export interface Booking {
   discount_amount: number;
   paid_amount: number;
   remaining_amount: number;
+  /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */
+  transaction_fee?: number;
   status: 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled' | 'pending_approval';
   payment_status: 'pending' | 'partial' | 'completed';
   payment_method?: BookingPaymentMethod;
@@ -618,8 +769,13 @@ export interface Rental {
   security_deposit: number;
   late_fee: number;
   damage_charges: number;
+  /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */
+  transaction_fee?: number;
   identity_card_url?: string; // URL to uploaded identity card image
   deposit_payment_method?: 'cash' | 'transfer' | null;
+  /** Where the deposit went (cash, bca, bni); the refund leaves from it by default. */
+  deposit_pot?: string;
+  deposit_refund_pot?: string;
   deposit_bank_name?: string;
   deposit_account_name?: string;
   deposit_account_number?: string;
@@ -716,6 +872,8 @@ export interface Sale {
   discount_amount: number;
   total_amount: number;
   paid_amount: number;
+  /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */
+  transaction_fee?: number;
   payment_method?: SalePaymentMethod;
   notes?: string;
   customer?: Customer;
@@ -744,6 +902,10 @@ export interface CreateSaleRequest {
   discount_amount?: number;
   paid_amount?: number;
   payment_method?: SalePaymentMethod;
+  /** EDC terminal and card for a card payment; may be empty when one rule covers the method. */
+  fee_rule_id?: string;
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   notes?: string;
   items: CreateSaleItemRequest[];
 }
@@ -797,6 +959,8 @@ export interface Expense {
   description: string;
   amount: number;
   payment_method?: ExpensePaymentMethod | '';
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   vendor?: string;
   notes?: string;
   status: ExpenseStatus;
@@ -816,6 +980,8 @@ export interface CreateExpenseRequest {
   description: string;
   amount: number;
   payment_method?: ExpensePaymentMethod | '';
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   vendor?: string;
   notes?: string;
 }
@@ -826,6 +992,8 @@ export interface UpdateExpenseRequest {
   description?: string;
   amount?: number;
   payment_method?: ExpensePaymentMethod | '';
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   vendor?: string;
   notes?: string;
 }
@@ -909,6 +1077,8 @@ export interface RecurringExpense {
   description: string;
   amount: number;
   payment_method?: ExpensePaymentMethod | '';
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   vendor?: string;
   notes?: string;
   frequency: 'monthly';
@@ -926,6 +1096,8 @@ export interface CreateRecurringExpenseRequest {
   description: string;
   amount: number;
   payment_method?: ExpensePaymentMethod | '';
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   vendor?: string;
   notes?: string;
   day_of_month: number;
@@ -988,6 +1160,8 @@ export interface CreateFixedAssetRequest {
   vendor?: string;
   notes?: string;
   payment_method?: 'cash' | 'transfer' | 'qris' | 'debit' | 'cc';
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   on_credit?: boolean;
 }
 
@@ -1059,6 +1233,8 @@ export interface Dividend {
   fiscal_year: number;
   amount: number;
   shareholder?: string;
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   notes?: string;
 }
 
@@ -1066,6 +1242,7 @@ export interface BalanceSheetReport {
   as_of_date: string;
   cash_drawer: number;
   bank: number;
+  bank_pots?: BankPots;
   cash: number;
   accounts_receivable: number;
   inventory: number;
@@ -1098,6 +1275,7 @@ export interface CashFlowReport {
   beginning_cash: number;
   beginning_cash_drawer: number;
   beginning_bank: number;
+  beginning_bank_pots?: BankPots;
   booking_collections: number;
   sale_collections: number;
   rental_charges: number;
@@ -1113,6 +1291,9 @@ export interface CashFlowReport {
   ending_cash: number;
   ending_cash_drawer: number;
   ending_bank: number;
+  ending_bank_pots?: BankPots;
+  /** Money moved between Pots in the period; changes no total. */
+  pot_transfers?: number;
   by_method: CashByMethod;
 }
 
@@ -1123,6 +1304,7 @@ export interface AccountingReport {
   cash_on_hand: number;
   cash_drawer: number;
   bank: number;
+  bank_pots?: BankPots;
   profit_and_loss: ProfitAndLossReport;
   balance_sheet: BalanceSheetReport;
   cash_flow: CashFlowReport;
@@ -1268,10 +1450,13 @@ export interface CreateItemRequest {
   condition: 'excellent' | 'good' | 'fair' | 'poor';
   quantity: number;
   standard_price: number;
-  one_day_price: number;
   four_hour_price: number;
+  set_four_hour_price?: number;
+  set_standard_price?: number;
   purchase_price?: number;
   payment_method?: 'cash' | 'transfer' | 'qris' | 'debit' | 'cc';
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   on_credit?: boolean;
   selling_price?: number;
   is_sellable?: boolean;
@@ -1291,12 +1476,18 @@ export interface CreateBookingRequest {
   status: 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled' | 'pending_approval';
   payment_status: 'pending' | 'partial' | 'completed';
   payment_method: BookingPaymentMethod;
+  /** EDC terminal and card for a card payment; may be empty when one rule covers the method. */
+  fee_rule_id?: string;
+  /** bca or bni: the bank account a non-cash payment went to or left from. */
+  pot?: string;
   package_pricing_id?: string; // optional selected package id
   total_amount: number;
   paid_amount?: number;
   discount_amount?: number;
   remaining_amount?: number;
   payment_proof_url?: string;
+  /** A discount to apply before the payment is taken. */
+  discount_id?: string;
   items: Array<{
     item_id: string;
     quantity: number;
@@ -1329,6 +1520,24 @@ export interface CreateCustomerRequest {
 }
 
 // Additional types for new features
+/** The record a receipt belongs to. */
+export type ReceiptKind = 'booking' | 'rental' | 'sale';
+
+/** One receipt image sent to a customer on WhatsApp. */
+export interface WAReceipt {
+  id: string;
+  kind: ReceiptKind;
+  owner_id: string;
+  phone: string;
+  image_url: string;
+  caption: string;
+  status: 'sent' | 'failed';
+  wablas_id?: string;
+  error_summary?: string;
+  sent_by: string;
+  created_at: string;
+}
+
 export interface InvoiceData {
   invoice_number: string;
   booking_id: string;
@@ -1341,6 +1550,9 @@ export interface InvoiceData {
   discount_amount: number;
   final_amount: number;
   due_amount: number;
+  paid_amount?: number;
+  /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */
+  transaction_fee?: number;
   invoice_type: string;
   due_date: string;
   items: InvoiceItem[];
