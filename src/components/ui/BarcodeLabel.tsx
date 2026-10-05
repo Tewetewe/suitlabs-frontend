@@ -7,6 +7,7 @@ interface BarcodeLabelProps {
   value: string;
   itemName: string;
   itemCode: string;
+  sizeLabel?: string;
   format?: 'EAN13' | 'CODE128' | 'CODE39';
   width?: number;
   height?: number;
@@ -20,11 +21,12 @@ export function BarcodeLabel({
   value,
   itemName,
   itemCode,
+  sizeLabel,
   format = 'CODE128',
-  width = 2,
-  height = 80,
-  fontSize = 12,
-  margin = 20,
+  width = 3,
+  height = 120,
+  fontSize = 14,
+  margin = 8,
   className = '',
   onImageGenerated
 }: BarcodeLabelProps) {
@@ -50,12 +52,13 @@ export function BarcodeLabel({
 
         // Set canvas size for the label
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) return;
+        ctx.imageSmoothingEnabled = false;
 
         // Calculate dimensions
-        const labelWidth = 400;
-        const labelHeight = 200;
+        const labelWidth = 384;
+        const labelHeight = 320;
         
         canvas.width = labelWidth;
         canvas.height = labelHeight;
@@ -71,34 +74,53 @@ export function BarcodeLabel({
 
         // Draw item name
         ctx.fillStyle = '#111827';
-        ctx.font = 'bold 16px Arial';
+        ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(itemName, labelWidth / 2, 40);
+        ctx.fillText(itemName, labelWidth / 2, 28);
 
-        // Draw item code
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '12px Arial';
-        ctx.fillText(`#${itemCode}`, labelWidth / 2, 60);
+        let barcodeY = 48;
+        if (sizeLabel) {
+          ctx.fillStyle = '#000000';
+          ctx.font = 'bold 42px Arial';
+          ctx.fillText(sizeLabel, labelWidth / 2, 78);
+          barcodeY = 96;
+        }
 
-        // Create barcode on a separate canvas
+        ctx.fillStyle = '#374151';
+        ctx.font = '14px Arial';
+        ctx.fillText(`#${itemCode}`, labelWidth / 2, barcodeY);
+        barcodeY += 12;
+
         const barcodeCanvas = document.createElement('canvas');
         JsBarcode(barcodeCanvas, cleanedValue, {
           format: format,
           width: width,
           height: height,
-          displayValue: true,
+          displayValue: false,
           fontSize: fontSize,
-          margin: 10,
+          margin: 8,
           background: '#ffffff',
           lineColor: '#000000',
-          textAlign: 'center',
-          textPosition: 'bottom',
-          textMargin: 2
         });
 
-        // Draw barcode in the center
-        const barcodeX = (labelWidth - barcodeCanvas.width) / 2;
-        const barcodeY = 80;
+        const maxBarcodeW = 360;
+        let drawW = barcodeCanvas.width;
+        if (drawW > maxBarcodeW) {
+          const barWidth = Math.max(1, Math.floor(maxBarcodeW / Math.max(1, cleanedValue.length * 11 + 35)));
+          JsBarcode(barcodeCanvas, cleanedValue, {
+            format: format,
+            width: barWidth,
+            height: height,
+            displayValue: false,
+            fontSize: fontSize,
+            margin: 8,
+            background: '#ffffff',
+            lineColor: '#000000',
+          });
+          drawW = barcodeCanvas.width;
+        }
+        const barcodeX = Math.floor((labelWidth - drawW) / 2);
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(barcodeCanvas, barcodeX, barcodeY);
 
         // Call callback with image data
@@ -122,12 +144,12 @@ export function BarcodeLabel({
         }
       }
     }
-  }, [value, itemName, itemCode, format, width, height, fontSize, margin, onImageGenerated, isClient]);
+  }, [value, itemName, itemCode, sizeLabel, format, width, height, fontSize, margin, onImageGenerated, isClient]);
 
   if (!isClient) {
     return (
       <div className={`inline-block ${className}`}>
-        <div className="bg-gray-100 border border-gray-300 rounded p-4 text-center text-gray-500 text-sm">
+        <div className="rounded-xl border border-black/5 bg-slate-50 p-4 text-center text-sm text-slate-500">
           Loading barcode label...
         </div>
       </div>
@@ -137,7 +159,7 @@ export function BarcodeLabel({
   if (!value || value.trim() === '') {
     return (
       <div className={`inline-block ${className}`}>
-        <div className="bg-gray-100 border border-gray-300 rounded p-4 text-center text-gray-500 text-sm">
+        <div className="rounded-xl border border-black/5 bg-slate-50 p-4 text-center text-sm text-slate-500">
           No barcode available
         </div>
       </div>
@@ -148,7 +170,7 @@ export function BarcodeLabel({
     <div className={`inline-block ${className}`}>
       <canvas 
         ref={canvasRef} 
-        className="border border-gray-200 rounded-lg shadow-sm"
+        className="rounded-xl border border-black/5 shadow-sm"
         style={{ maxWidth: '100%', height: 'auto' }}
       />
     </div>

@@ -1,14 +1,13 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardFooter } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { SafeImage } from '@/components/ui/SafeImage';
 import ClientOnly from '@/components/ClientOnly';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import AddItemModal from '@/components/modals/AddItemModal';
@@ -25,25 +24,25 @@ const SimpleBarcodeScanner = dynamic(() => import('@/components/ui/SimpleBarcode
 });
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
-import { Item, ItemFilters, CreateItemRequest, Category } from '@/types';
-import { formatCurrency } from '@/lib/currency';
+import { Item, ItemFilters, CreateItemRequest, Category, ItemFacets } from '@/types';
+import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
+import { facetOptions } from '@/lib/select-options';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, Pagination, SkeletonCard } from '@/components/ui/DataDisplay';
-import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck } from 'lucide-react';
+import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, Skeleton, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck, ArrowRightLeft } from 'lucide-react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
+import { TransferItemModal } from '@/components/modals/TransferItemModal';
+import SimpleModal from '@/components/modals/SimpleModal';
+import { useBranch } from '@/contexts/BranchContext';
 
 type ViewMode = 'grid' | 'list';
 
 export default function ItemsPage() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<ItemFilters>({});
+  const { branches } = useBranch();
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 400);
-  const [total, setTotal] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage] = useState(12); // Show 12 items per page
+  const [filters, setFilters] = useState<ItemFilters>({});
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -54,6 +53,14 @@ export default function ItemsPage() {
   const [useSimpleScanner, setUseSimpleScanner] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
+  const [facets, setFacets] = useState<ItemFacets>({
+    types: [],
+    brands: [],
+    colors: [],
+    sizes: [],
+    statuses: [],
+    conditions: [],
+  });
   const { success, error } = useToast();
   const [availabilityForItem, setAvailabilityForItem] = useState<Item | null>(null);
   const [availabilityDates, setAvailabilityDates] = useState<{ start: string; end: string }>({ start: '', end: '' });
@@ -61,11 +68,30 @@ export default function ItemsPage() {
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [rentalDate, setRentalDate] = useState('');
   const [returnDate, setReturnDate] = useState('');
+  const [transferringItem, setTransferringItem] = useState<Item | null>(null);
 
   // Load categories for filter dropdown
   useEffect(() => {
     loadCategories();
+    loadFacets();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const type = new URLSearchParams(window.location.search).get('type');
+    if (type) {
+      setFilters((prev) => (prev.type === type ? prev : { ...prev, type }));
+    }
+  }, []);
+
+  const loadFacets = async () => {
+    try {
+      const data = await apiClient.getItemFacets(true);
+      setFacets(data);
+    } catch (err) {
+      console.error('Failed to load item facets:', err);
+    }
+  };
 
   const loadCategories = async () => {
     try {
@@ -102,57 +128,59 @@ export default function ItemsPage() {
     return digitsOnly;
   };
 
-  const loadItems = useCallback(async () => {
+  const loadItemsPage = useCallback(async (page: number) => {
     try {
-      setLoading(true);
       const paginationFilters = {
         ...filters,
-        page: currentPage,
-        limit: itemsPerPage
+        all_branches: true,
+        page,
+        limit: LIST_PAGE_SIZE,
       };
-      let response;
-      if (rentalDate && returnDate) {
-        response = await apiClient.getAvailableItemsCombined({
-          ...paginationFilters,
-          start_date: rentalDate,
-          end_date: returnDate,
-        });
-      } else {
-        response = await apiClient.getItems(paginationFilters);
-      }
-      
+      const response =
+        rentalDate && returnDate
+          ? await apiClient.getAvailableItemsCombined({
+              ...paginationFilters,
+              start_date: rentalDate,
+              end_date: returnDate,
+            })
+          : await apiClient.getItems(paginationFilters);
+
       if (!response?.success) {
         throw new Error('API request failed');
       }
 
       const nextItems = response.data?.data?.items || [];
-      setItems(nextItems);
-      setTotal(response.data?.pagination?.total || 0);
-      setTotalPages(response.data?.pagination?.total_pages || 1);
+      const pagination = response.data?.pagination;
+      return {
+        items: nextItems,
+        hasMore: hasNextPage(pagination, nextItems.length),
+        total: pagination?.total || 0,
+      };
     } catch (err) {
       console.error('Failed to load items:', err);
       error('Failed to Load Items', 'Unable to fetch item data. Please try again.');
-      setItems([]);
-      setTotal(0);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
+      return { items: [], hasMore: false, total: 0 };
     }
-  }, [filters, currentPage, itemsPerPage, rentalDate, returnDate, error]);
+  }, [filters, rentalDate, returnDate, error]);
 
-  useEffect(() => {
-    loadItems();
-  }, [loadItems]);
+  const {
+    items,
+    setItems,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    reload,
+    sentinelRef,
+  } = useInfiniteList(loadItemsPage);
 
   useEffect(() => {
     setFilters(prev => ({ ...prev, search: debouncedSearch || undefined }));
-    setCurrentPage(1);
   }, [debouncedSearch]);
 
   const handleBarcodeScan = (barcode: string) => {
     const cleanedBarcode = sanitizeBarcode(barcode);
     setFilters({ ...filters, barcode: cleanedBarcode });
-    setCurrentPage(1);
     setIsScannerOpen(false);
     setUseSimpleScanner(false);
     success('Barcode Scanned!', `Searching for barcode: ${cleanedBarcode}`);
@@ -163,7 +191,7 @@ export default function ItemsPage() {
       await apiClient.createItem(itemData);
       success('Item Created Successfully!', `${itemData.name} has been added to the inventory.`);
       // Reload items after successful creation
-      await loadItems();
+      await reload();
     } catch (error) {
       console.error('Failed to create item:', error);
       throw error; // Re-throw to let the modal handle the error
@@ -180,7 +208,7 @@ export default function ItemsPage() {
       const item = items.find(i => i.id === id);
       const itemName = item ? item.name : 'Item';
       success('Item Updated Successfully!', `${itemName} has been updated.`);
-      await loadItems(); // Reload items after successful update
+      await reload(); // Reload items after successful update
     } catch (error) {
       console.error('ItemsPage: Failed to update item:', error);
       throw error; // Re-throw to let the modal handle the error
@@ -198,7 +226,7 @@ export default function ItemsPage() {
     try {
       await apiClient.deleteItem(deletingItem.id);
       success('Item Deleted Successfully!', `${deletingItem.name} has been removed from the inventory.`);
-      await loadItems(); // Reload items after successful deletion
+      await reload(); // Reload items after successful deletion
       setDeletingItem(null);
     } catch (err) {
       console.error('Failed to delete item:', err);
@@ -218,256 +246,142 @@ export default function ItemsPage() {
     }
   };
 
-  const itemConditionVariant = (s: string): 'success' | 'primary' | 'warning' | 'danger' | 'default' => {
-    switch (s) {
-      case 'excellent': return 'success';
-      case 'good':      return 'primary';
-      case 'fair':      return 'warning';
-      case 'poor':      return 'danger';
-      default:          return 'default';
-    }
-  };
+  const typeOptions = facetOptions(facets.types, 'All Types');
+  const statusOptions = facetOptions(facets.statuses, 'All Status');
+  const conditionOptions = facetOptions(facets.conditions, 'All Conditions');
+  const brandOptions = facetOptions(facets.brands, 'All Brands', false);
+  const colorOptions = facetOptions(facets.colors, 'All Colors', false);
 
-  const typeOptions = [
-    { value: '', label: 'All Types' },
-    { value: 'suit', label: 'Suit' },
-    { value: 'accessory', label: 'Accessory' },
-    { value: 'shoes', label: 'Shoes' },
-    { value: 'tie', label: 'Tie' },
-    { value: 'belt', label: 'Belt' },
-    { value: 'trousers', label: 'Trousers' },
-    { value: 'shirts', label: 'Shirts' },
-    { value: 'vest', label: 'Vest' },
-  ];
+  const itemFacts = (item: Item) =>
+    [item.color, item.size?.label, `Qty ${item.quantity}`].filter(Boolean).join(' · ');
 
-  const statusOptions = [
-    { value: '', label: 'All Status' },
-    { value: 'available', label: 'Available' },
-    { value: 'rented', label: 'Rented' },
-    { value: 'maintenance', label: 'Maintenance' },
-    { value: 'retired', label: 'Retired' },
-  ];
-
-  const conditionOptions = [
-    { value: '', label: 'All Conditions' },
-    { value: 'excellent', label: 'Excellent' },
-    { value: 'good', label: 'Good' },
-    { value: 'fair', label: 'Fair' },
-    { value: 'poor', label: 'Poor' },
-  ];
-
-  const brandOptions = [
-    { value: '', label: 'All Brands' },
-    { value: 'SuitLabs Standard', label: 'SuitLabs Standard' },
-    { value: 'Goldy', label: 'Goldy' },
-    { value: 'Mubeng', label: 'Mubeng' },
-    { value: 'Parayu', label: 'Parayu' },
-  ];
-
-  const colorOptions = [
-    { value: '', label: 'All Colors' },
-    { value: 'Black', label: 'Black' },
-    { value: 'Navy', label: 'Navy' },
-    { value: 'Gray', label: 'Gray' },
-    { value: 'Brown', label: 'Brown' },
-    { value: 'White', label: 'White' },
-    { value: 'Blue', label: 'Blue' },
-  ];
-
+  const ItemActions = ({ item, overlay = false }: { item: Item; overlay?: boolean }) => (
+    <OverflowMenu label="Item actions" overlay={overlay}>
+      <OverflowMenuItem
+        icon={<CalendarCheck className="h-4 w-4 text-slate-400" />}
+        onClick={() => {
+          setAvailabilityForItem(item);
+          setAvailabilityDates({ start: '', end: '' });
+          setAvailabilityResult('');
+        }}
+      >
+        Check dates
+      </OverflowMenuItem>
+      <OverflowMenuItem
+        icon={<ArrowRightLeft className="h-4 w-4 text-slate-400" />}
+        onClick={() => setTransferringItem(item)}
+      >
+        Transfer
+      </OverflowMenuItem>
+      <OverflowMenuItem icon={<Edit className="h-4 w-4 text-slate-400" />} onClick={() => handleEditItem(item)}>
+        Edit
+      </OverflowMenuItem>
+      <OverflowMenuItem danger icon={<Trash2 className="h-4 w-4" />} onClick={() => handleDeleteItem(item)}>
+        Delete
+      </OverflowMenuItem>
+    </OverflowMenu>
+  );
 
   const ItemCard = ({ item }: { item: Item }) => (
-    <Card key={item.id}>
-      <CardContent className="space-y-3">
-        {/* Item Image */}
-        <Link href={`/dashboard/items/${item.id}`} className="block">
-          <div className="aspect-square rounded-2xl flex items-center justify-center overflow-hidden bg-black/5 ring-1 ring-black/5">
-            {item.thumbnail_url && (/^https?:\/\//.test(item.thumbnail_url) || item.thumbnail_url.startsWith('/')) ? (
-              <Image
-                src={item.thumbnail_url}
-                alt={item.name}
-                width={200}
-                height={200}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <Package className="h-12 w-12 text-slate-400" />
-            )}
-          </div>
-        </Link>
-
-        {/* Item Details */}
-        <div className="space-y-2">
-          <div className="flex items-start justify-between gap-2">
-            <Link href={`/dashboard/items/${item.id}`} className="font-semibold text-slate-900 hover:underline flex-1 min-w-0">
-              <span className="leading-snug [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical] overflow-hidden">
-                {item.name}
-              </span>
-            </Link>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5 max-w-full overflow-hidden">
-            <Badge variant={itemStatusVariant(item.status)}>{item.status}</Badge>
-            <Badge variant={itemConditionVariant(item.condition)}>{item.condition}</Badge>
-            {/* Category is usually redundant in dense cards — keep only if short */}
-            {item.category?.name && item.category.name.length <= 18 && (
-              <span className="inline-flex items-center rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-black/5 truncate max-w-[10rem]">
-                {item.category.name}
-              </span>
-            )}
-          </div>
-
-          <div className="text-sm text-slate-600">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="font-medium text-slate-700 truncate max-w-[11rem]">{item.brand}</span>
-              <span className="text-slate-300">•</span>
-              <span className="truncate max-w-[7rem]">{item.color}</span>
-              <span className="text-slate-300">•</span>
-              <span className="tabular-nums">Size {item.size.label}</span>
-              <span className="text-slate-300">•</span>
-              <span className="tabular-nums">Qty {item.quantity}</span>
-            </div>
-          </div>
-
-          {/* Tags */}
-          {item.tags && item.tags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex items-center rounded-full bg-white/50 px-2 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-black/5 truncate max-w-[10rem]">
-                {item.tags[0]}
-              </span>
-              {item.tags.length > 1 && (
-                <span className="inline-flex items-center rounded-full bg-white/50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-black/5">
-                  +{item.tags.length - 1}
-                </span>
-              )}
-            </div>
+    <Card padding="none" className="relative z-0 h-full overflow-hidden">
+      <div className="relative flex aspect-square items-center justify-center bg-slate-100">
+        <SafeImage
+          src={item.thumbnail_url}
+          alt={item.name}
+          width={320}
+          height={320}
+          className="h-full w-full object-cover"
+          fallback={<Package className="h-10 w-10 text-slate-300" />}
+        />
+        <Link
+          href={`/dashboard/items/${item.id}`}
+          className="absolute inset-0"
+          aria-label={item.name}
+        />
+        <div className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
+          {item.size?.label && (
+            <span className="rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white">
+              {item.size.label}
+            </span>
           )}
-
-          <div className="pt-1">
-            <p className="text-base font-semibold text-slate-900 tabular-nums">
-              {formatCurrency(item.one_day_price)}
-              <span className="text-xs font-medium text-slate-500">/day</span>
-            </p>
-          </div>
         </div>
-      </CardContent>
-      
-      <CardFooter>
-        <div className="flex w-full items-center justify-between gap-2">
-          <div className="text-[11px] text-slate-500 tabular-nums">
-            {item.code ? `ID • ${item.code}` : ''}
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => { setAvailabilityForItem(item); setAvailabilityDates({ start: '', end: '' }); setAvailabilityResult(''); }}
-            title="Check Availability"
-            aria-label="Check Availability"
-            className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
-          >
-            <CalendarCheck className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleEditItem(item)}
-            title="Edit"
-            aria-label="Edit"
-            className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleDeleteItem(item)}
-            title="Delete"
-            aria-label="Delete"
-            className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-red-500/10 text-red-600"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+        {item.branch?.name && (
+          <span className="pointer-events-none absolute bottom-2 left-2 max-w-[90%] truncate rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white">
+            {item.branch.name}
+          </span>
+        )}
+        <div className="absolute right-2 top-2 z-10">
+          <ItemActions item={item} overlay />
         </div>
-      </CardFooter>
+      </div>
+      <div className="space-y-0.5 p-2.5">
+        <Link
+          href={`/dashboard/items/${item.id}`}
+          className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900 hover:text-indigo-700"
+        >
+          {item.name}
+        </Link>
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-xs text-slate-500">
+            {item.color || item.brand || item.code}
+          </span>
+          <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900" title={formatCurrency(item.standard_price)}>
+            {formatCurrencyCompact(item.standard_price)}
+            <span className="text-[11px] font-medium text-slate-400">/3 days</span>
+          </span>
+        </div>
+        <Badge variant={itemStatusVariant(item.status)} dot className="capitalize">
+          {item.status}
+        </Badge>
+      </div>
     </Card>
   );
 
   const ItemListItem = ({ item }: { item: Item }) => (
-    <Card key={item.id}>
+    <Card padding="sm">
       <CardContent>
-        <div className="flex space-x-4">
-          {/* Item Image */}
-          <Link href={`/dashboard/items/${item.id}`} className="w-16 h-16 sm:w-20 sm:h-20 bg-black/5 rounded-2xl flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-black/5">
-            {item.thumbnail_url && (/^https?:\/\//.test(item.thumbnail_url) || item.thumbnail_url.startsWith('/')) ? (
-              <Image
-                src={item.thumbnail_url}
-                alt={item.name}
-                width={80}
-                height={80}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <Package className="h-6 w-6 sm:h-8 sm:w-8 text-slate-400" />
-            )}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Link
+            href={`/dashboard/items/${item.id}`}
+            className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-20 sm:w-20"
+          >
+            <SafeImage
+              src={item.thumbnail_url}
+              alt={item.name}
+              width={80}
+              height={80}
+              className="h-full w-full object-cover"
+              fallback={<Package className="h-7 w-7 text-slate-300" />}
+            />
           </Link>
 
-          {/* Item Details */}
-          <div className="flex-1 min-w-0">
-            <div className="flex justify-between items-start mb-2">
-              <Link href={`/dashboard/items/${item.id}`} className="font-semibold text-slate-900 hover:underline flex-1 min-w-0">
-                <span className="leading-snug [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical] overflow-hidden">
-                  {item.name}
-                </span>
-              </Link>
-              {item.code && <span className="text-xs text-slate-500 ml-2 shrink-0 tabular-nums">#{item.code}</span>}
-            </div>
+          <div className="min-w-0 flex-1">
+            <Link
+              href={`/dashboard/items/${item.id}`}
+              className="line-clamp-1 font-semibold text-slate-900 hover:text-indigo-700"
+            >
+              {item.name}
+            </Link>
+            <p className="mt-0.5 truncate text-sm text-slate-500">
+              {itemFacts(item)}
+              {item.branch?.name ? ` · ${item.branch.name}` : ''}
+            </p>
+            {item.code && (
+              <p className="mt-0.5 truncate font-mono text-[11px] text-slate-400">{item.code}</p>
+            )}
+          </div>
 
-            <div className="flex flex-wrap gap-1 mb-2">
-              <Badge variant={itemStatusVariant(item.status)}>{item.status}</Badge>
-              <Badge variant={itemConditionVariant(item.condition)}>{item.condition}</Badge>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="text-right">
+              <p className="text-sm font-semibold tabular-nums text-slate-900">
+                {formatCurrency(item.standard_price)}
+                <span className="text-[11px] font-medium text-slate-400">/3 days</span>
+              </p>
+              <Badge variant={itemStatusVariant(item.status)} dot className="mt-1 capitalize">
+                {item.status}
+              </Badge>
             </div>
-
-            <div className="flex justify-between items-end">
-              <div className="text-sm text-slate-600">
-                <p>{item.brand} • {item.color} • Size {item.size.label} • Qty {item.quantity}</p>
-                {item.category && (
-                  <p className="text-xs text-slate-600 font-medium mb-1">{item.category.name}</p>
-                )}
-                <p className="font-semibold text-slate-900 tabular-nums">{formatCurrency(item.one_day_price)}<span className="text-xs font-medium text-slate-500">/day</span></p>
-              </div>
-              
-              <div className="flex space-x-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => { setAvailabilityForItem(item); setAvailabilityDates({ start: '', end: '' }); setAvailabilityResult(''); }}
-                  title="Check Availability"
-                  aria-label="Check Availability"
-                  className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
-                >
-                  <CalendarCheck className="h-4 w-4" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => handleEditItem(item)}
-                  title="Edit"
-                  aria-label="Edit"
-                  className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-white/60"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => handleDeleteItem(item)}
-                  title="Delete"
-                  aria-label="Delete"
-                  className="h-9 w-9 p-0 rounded-xl ring-1 ring-black/5 bg-white/40 hover:bg-red-500/10 text-red-600"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            <ItemActions item={item} />
           </div>
         </div>
       </CardContent>
@@ -476,7 +390,7 @@ export default function ItemsPage() {
 
   return (
     <ErrorBoundary>
-      <DashboardLayout>
+      <>
         <PageShell
           title="Items"
           subtitle="Manage your inventory of suits and accessories"
@@ -494,7 +408,7 @@ export default function ItemsPage() {
                 placeholder={filters.barcode ? `Barcode: ${filters.barcode}` : "Search items..."}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className={filters.barcode ? 'border-blue-500 bg-blue-50' : undefined}
+                className={filters.barcode ? 'border-indigo-500 bg-indigo-50' : undefined}
               />
               <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex gap-1">
                 <button
@@ -511,7 +425,7 @@ export default function ItemsPage() {
               </div>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <div className="sm:hidden">
                 <Button
                   variant="ghost"
@@ -522,22 +436,22 @@ export default function ItemsPage() {
                   <Filter className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="hidden sm:flex gap-2">
-                <Button
-                  variant={viewMode === 'grid' ? 'primary' : 'ghost'}
-                  size="md"
-                  onClick={() => setViewMode('grid')}
-                >
-                  <Grid className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'list' ? 'primary' : 'ghost'}
-                  size="md"
-                  onClick={() => setViewMode('list')}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                variant={viewMode === 'grid' ? 'primary' : 'ghost'}
+                size="md"
+                onClick={() => setViewMode('grid')}
+                title="Grid view"
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'primary' : 'ghost'}
+                size="md"
+                onClick={() => setViewMode('list')}
+                title="List view"
+              >
+                <List className="h-4 w-4" />
+              </Button>
             </div>
           </FilterBar>
 
@@ -550,18 +464,34 @@ export default function ItemsPage() {
                   {/* Filter Dropdowns */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                     <Select
+                      searchable={false}
+                      label="Shop"
+                      options={[
+                        { value: '', label: 'All shops' },
+                        ...branches.filter((branch) => branch.is_active).map((branch) => ({
+                          value: branch.id,
+                          label: branch.name,
+                        })),
+                      ]}
+                      value={filters.branch_id || ''}
+                      onChange={(e) => setFilters({ ...filters, branch_id: e.target.value || undefined })}
+                    />
+                    <Select
+                      searchable={false}
                       label="Type"
                       options={typeOptions}
                       value={filters.type || ''}
                       onChange={(e) => setFilters({ ...filters, type: e.target.value || undefined })}
                     />
                     <Select
+                      searchable={false}
                       label="Status"
                       options={statusOptions}
                       value={filters.status || ''}
                       onChange={(e) => setFilters({ ...filters, status: e.target.value || undefined })}
                     />
                     <Select
+                      searchable={false}
                       label="Condition"
                       options={conditionOptions}
                       value={filters.condition || ''}
@@ -609,12 +539,6 @@ export default function ItemsPage() {
                                 onChange={(e) => {
                                   const cleaned = sanitizeBarcode(e.target.value);
                                   setFilters({ ...filters, barcode: cleaned || undefined });
-                                  setCurrentPage(1);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    setCurrentPage(1);
-                                  }
                                 }}
                               />
                               <Button
@@ -637,7 +561,7 @@ export default function ItemsPage() {
                             <Input
                               type="date"
                               value={rentalDate}
-                              onChange={(e) => { setRentalDate(e.target.value); setCurrentPage(1); }}
+                              onChange={(e) => { setRentalDate(e.target.value); }}
                             />
                           </div>
                           {/* Return Date */}
@@ -647,7 +571,7 @@ export default function ItemsPage() {
                               type="date"
                               value={returnDate}
                               min={rentalDate || undefined}
-                              onChange={(e) => { setReturnDate(e.target.value); setCurrentPage(1); }}
+                              onChange={(e) => { setReturnDate(e.target.value); }}
                             />
                           </div>
                         </div>
@@ -674,10 +598,28 @@ export default function ItemsPage() {
         {/* Items Grid/List */}
         {loading ? (
           <div className={viewMode === 'grid'
-            ? "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-            : "space-y-4"
+            ? "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4"
+            : "space-y-3"
           }>
-            {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+            {Array.from({ length: 8 }).map((_, i) => (
+              viewMode === 'grid' ? (
+                <div key={i} className="overflow-hidden rounded-2xl glass-panel">
+                  <Skeleton className="aspect-square w-full rounded-none" />
+                  <div className="space-y-2 p-2.5">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              ) : (
+                <div key={i} className="flex items-center gap-4 rounded-2xl glass-panel p-4">
+                  <Skeleton className="h-16 w-16 shrink-0 rounded-xl" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              )
+            ))}
           </div>
         ) : items.length === 0 ? (
           <EmptyState
@@ -688,8 +630,8 @@ export default function ItemsPage() {
           />
         ) : (
           <div className={viewMode === 'grid' 
-            ? "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" 
-            : "space-y-4"
+            ? "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" 
+            : "space-y-3"
           }>
             {items.map((item) => 
               viewMode === 'grid' ? (
@@ -701,13 +643,15 @@ export default function ItemsPage() {
           </div>
         )}
 
-        <Pagination
-          page={currentPage}
-          totalPages={totalPages}
-          total={total}
-          perPage={itemsPerPage}
-          onPageChange={setCurrentPage}
-        />
+        {items.length > 0 && (
+          <InfiniteScrollSentinel
+            sentinelRef={sentinelRef}
+            loadingMore={loadingMore}
+            hasMore={hasMore}
+            loaded={items.length}
+            total={total}
+          />
+        )}
       </PageShell>
 
       {/* Add Item Modal */}
@@ -734,6 +678,15 @@ export default function ItemsPage() {
         loading={deleteLoading}
       />
 
+      <TransferItemModal
+        isOpen={!!transferringItem}
+        item={transferringItem}
+        onClose={() => setTransferringItem(null)}
+        onTransferred={(updated) => {
+          setItems((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+        }}
+      />
+
       {/* Barcode Scanner Modal */}
       {useSimpleScanner ? (
         <SimpleBarcodeScanner
@@ -749,55 +702,52 @@ export default function ItemsPage() {
         />
       )}
 
-      {/* Availability Modal */}
-      {availabilityForItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold mb-4">Check Availability</h3>
-            <p className="text-sm text-gray-600 mb-4 truncate">Item: {availabilityForItem.name} #{availabilityForItem.code}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Rental Date</label>
-                <Input type="date" value={availabilityDates.start} onChange={(e) => setAvailabilityDates(prev => ({ ...prev, start: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Return Date</label>
-                <Input type="date" value={availabilityDates.end} onChange={(e) => setAvailabilityDates(prev => ({ ...prev, end: e.target.value }))} />
-              </div>
+      <SimpleModal
+        isOpen={Boolean(availabilityForItem)}
+        title="Check availability"
+        onClose={() => { setAvailabilityForItem(null); setAvailabilityResult(''); }}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => { setAvailabilityForItem(null); setAvailabilityResult(''); }}>Close</Button>
+            <Button
+              onClick={async () => {
+                if (!availabilityDates.start || !availabilityDates.end) {
+                  setAvailabilityResult('Please select both dates');
+                  return;
+                }
+                setCheckingAvailability(true);
+                try {
+                  if (availabilityForItem && availabilityForItem.status !== 'available') {
+                    setAvailabilityResult('Unavailable: item is not currently available');
+                  } else {
+                    setAvailabilityResult('Available for the selected dates');
+                  }
+                } finally {
+                  setCheckingAvailability(false);
+                }
+              }}
+              loading={checkingAvailability}
+            >
+              Check
+            </Button>
+          </>
+        }
+      >
+        {availabilityForItem && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 truncate">{availabilityForItem.name} · {availabilityForItem.code}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Rental date" type="date" value={availabilityDates.start} onChange={(e) => setAvailabilityDates((prev) => ({ ...prev, start: e.target.value }))} />
+              <Input label="Return date" type="date" value={availabilityDates.end} onChange={(e) => setAvailabilityDates((prev) => ({ ...prev, end: e.target.value }))} />
             </div>
             {availabilityResult && (
-              <div className={`mb-3 text-sm ${availabilityResult.startsWith('Available') ? 'text-green-700' : 'text-red-700'}`}>{availabilityResult}</div>
+              <p className={`text-sm ${availabilityResult.startsWith('Available') ? 'text-emerald-700' : 'text-red-600'}`}>{availabilityResult}</p>
             )}
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => { setAvailabilityForItem(null); setAvailabilityResult(''); }}>Close</Button>
-              <Button
-                onClick={async () => {
-                  if (!availabilityDates.start || !availabilityDates.end) {
-                    setAvailabilityResult('Please select both dates');
-                    return;
-                  }
-                  setCheckingAvailability(true);
-                  try {
-                    // Basic client-side rule: item must be currently status=available
-                    // For full accuracy, add a backend date-conflict endpoint later
-                    if (availabilityForItem.status !== 'available') {
-                      setAvailabilityResult('Unavailable: item is not currently available');
-                    } else {
-                      setAvailabilityResult('Available for the selected dates');
-                    }
-                  } finally {
-                    setCheckingAvailability(false);
-                  }
-                }}
-                loading={checkingAvailability}
-              >
-                Check
-              </Button>
-            </div>
           </div>
-        </div>
-      )}
-      </DashboardLayout>
+        )}
+      </SimpleModal>
+      </>
     </ErrorBoundary>
   );
 }

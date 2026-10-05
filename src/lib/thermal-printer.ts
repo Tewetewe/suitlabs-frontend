@@ -3,9 +3,20 @@
  * Handles Bluetooth and USB connection to thermal printers
  */
 
-import { ESCPOSGenerator, formatCurrencyForPrint, formatDateForPrint, formatDateTimeForPrint } from './escpos';
-import { InvoiceData } from '@/types';
-import { Rental } from '@/types';
+import {
+  canPrintBarcode,
+  CUT_MARGIN_LINES,
+  ESCPOSGenerator,
+  LABEL_CUT_MARGIN_LINES,
+  formatCurrencyForPrint,
+  formatDateForPrint,
+  formatDateTimeForPrint,
+} from './escpos';
+import { InvoiceData, Rental, Sale } from '@/types';
+import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
+import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from './branch-scope';
+import { TRANSACTION_FEE_LABEL } from './transaction-fee';
+import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -19,16 +30,78 @@ const THERMAL_PRINTER_SERVICE_UUIDS = [
   '000018f0-0000-1000-8000-00805f9b34fb', // 18F0 (Star Micronics BLE)
 ];
 
+/** ESC p 0 50 100 — drawer pin 2, 100 ms on, 200 ms off. Matches the Android bridge. */
+const DRAWER_KICK = new Uint8Array([0x1b, 0x70, 0x00, 50, 100]);
+const DRAWER_KICK_DEBOUNCE_MS = 1000;
+const DRAWER_SETTLE_MS = 250;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export interface ThermalPrinterDevice {
   device: BluetoothDevice;
   server?: BluetoothRemoteGATTServer;
   characteristic?: BluetoothRemoteGATTCharacteristic;
 }
 
+/**
+ * Blank lines printed directly under the invoice barcode.
+ *
+ * A scanner needs clear paper under the symbol, and the bars must never be the
+ * last ink before a tear. This is separate from the tear-off gap that follows,
+ * so trimming one never eats the other.
+ */
+const BARCODE_BOTTOM_MARGIN_LINES = 2;
+
+/**
+ * Put the invoice number on the paper, as bars where they fit and as text where
+ * they do not.
+ *
+ * Every branch used to be able to print nothing: an empty number, a symbol too
+ * wide for 58 mm paper, or a thrown error. The slip then carried no number at
+ * all, so nobody could scan it or type it in.
+ */
+/** Prints the totals block of a Booking or Sale receipt (receiptTotals). */
+function printTotals(generator: ESCPOSGenerator, lines: ReceiptTotalLine[]): void {
+  for (const line of lines) {
+    const amount = line.kind === 'discount' ? `(${formatCurrencyForPrint(line.amount)})` : formatCurrencyForPrint(line.amount);
+    if (line.kind === 'total') generator.setBold(true);
+    generator.text(`${line.label}: ${amount}`).lineFeed();
+    if (line.kind === 'total') generator.setBold(false);
+  }
+}
+
+function appendInvoiceBarcode(generator: ESCPOSGenerator, invoiceNumber: string): void {
+  const barcodeData = invoiceBarcodeValue(invoiceNumber);
+  if (!barcodeData) {
+    return;
+  }
+
+  let printedBars = false;
+  if (canPrintBarcode(barcodeData, 2)) {
+    try {
+      generator
+        .setAlign('center')
+        .barcode(barcodeData, 'CODE128', { height: 120, width: 2, hri: false });
+      printedBars = true;
+    } catch (error) {
+      console.warn('Failed to print invoice barcode:', error);
+    }
+  }
+
+  if (!printedBars) {
+    generator.setAlign('center').setBold(true).text(barcodeData).lineFeed().setBold(false);
+  }
+
+  generator.lineFeed(BARCODE_BOTTOM_MARGIN_LINES);
+}
+
 export class ThermalPrinterService {
   private device: BluetoothDevice | null = null;
   private server: BluetoothRemoteGATTServer | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  private lastDrawerKickAt = 0;
 
   /**
    * Check if Web Bluetooth API is available
@@ -180,7 +253,7 @@ export class ThermalPrinterService {
       .text('If you can see this,')
       .lineFeed()
       .text('your printer is working!')
-      .lineFeed(3)
+      .lineFeed(CUT_MARGIN_LINES)
       .cut();
 
     await this.print(generator.getBytes());
@@ -191,6 +264,24 @@ export class ThermalPrinterService {
    */
   getDeviceName(): string {
     return this.device?.name || 'Unknown Device';
+  }
+
+  /**
+   * Pop the cash drawer wired to the printer's DK port.
+   *
+   * Byte-for-byte the pulse the Android Print Bridge sends (ReceiptPrinter.java:
+   * DRAWER_KICK) — pin 2, 100 ms on, 200 ms off — so a drawer that works at the
+   * counter tablet works the same from a laptop. The 1 s debounce is the same
+   * guard: two kicks in quick succession can stall the solenoid.
+   */
+  async openCashDrawer(): Promise<void> {
+    const elapsed = Date.now() - this.lastDrawerKickAt;
+    if (elapsed < DRAWER_KICK_DEBOUNCE_MS) {
+      await delay(DRAWER_KICK_DEBOUNCE_MS - elapsed);
+    }
+    await this.print(DRAWER_KICK);
+    this.lastDrawerKickAt = Date.now();
+    await delay(DRAWER_SETTLE_MS);
   }
 
   /**
@@ -289,6 +380,8 @@ export class ThermalPrinterService {
    */
   async printBookingInvoice(invoice: InvoiceData): Promise<void> {
     const generator = new ESCPOSGenerator();
+    const shopPhone = receiptPhone(invoice.company?.phone);
+    const shopHours = receiptHours(invoice.company?.hours);
 
     // Initialize printer
     generator.initialize();
@@ -302,17 +395,20 @@ export class ThermalPrinterService {
       .lineFeed()
       .setFontSize(1, 1)
       .setBold(false)
-      .text('Sewa Jas Jimbaran & Nusadua')
+      .text(receiptSubtitle(invoice.company?.subtitle))
       .lineFeed(2);
 
     // Company Info (optimized for 58mm paper width)
     generator
       .setFontSize(1, 1)
-      .text(invoice.company?.address || 'Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kabupaten Badung, Bali 80362')
+      .text(receiptAddress(invoice.company?.address))
       .lineFeed();
     
-    if (invoice.company?.phone) {
-      generator.text(`TEL: ${invoice.company.phone}`).lineFeed();
+    if (shopPhone) {
+      generator.text(shopPhone).lineFeed();
+    }
+    for (const hours of shopHours) {
+      generator.text(hours).lineFeed();
     }
     if (invoice.company?.email) {
       generator.text(`Email: ${invoice.company.email}`).lineFeed();
@@ -336,27 +432,11 @@ export class ThermalPrinterService {
       .text(`Type: ${invoice.invoice_type?.toUpperCase() || 'FULL'}`)
       .lineFeed();
 
-    if (invoice.due_date) {
-      generator.text(`Due Date: ${formatDateForPrint(invoice.due_date)}`).lineFeed();
-    }
-
-    generator.lineFeed();
-
-    // Print Invoice Number as Barcode
-    generator
-      .setAlign('center')
-      .text('Invoice Barcode:')
-      .lineFeed();
-    
-    try {
-      // Use invoice number for barcode (remove any non-alphanumeric characters for CODE128)
-      const barcodeData = invoice.invoice_number.replace(/[^A-Za-z0-9]/g, '');
-      if (barcodeData.length > 0) {
-        generator.barcode(barcodeData, 'CODE128');
-      }
-    } catch (error) {
-      console.warn('Failed to print barcode:', error);
-      // Continue without barcode if it fails
+    // Due is the day the rest must be paid, the Pickup date, so it prints only
+    // while money is owed.
+    const owing = (invoice.final_amount || invoice.total_amount || 0) - (invoice.paid_amount || 0) > 0.009;
+    if (owing && invoice.booking_date) {
+      generator.text(`Due: ${formatDateForPrint(invoice.booking_date)}`).lineFeed();
     }
 
     generator.lineFeed();
@@ -369,15 +449,10 @@ export class ThermalPrinterService {
       .lineFeed()
       .setBold(false)
       .text(invoice.customer_name)
-      .lineFeed()
-      .text(`Email: ${invoice.customer_email}`)
-      .lineFeed()
-      .text(`Phone: ${invoice.customer_phone}`)
-      .lineFeed(2);
+      .lineFeed();
 
     generator.separator();
 
-    // Items
     generator
       .setBold(true)
       .text('ITEMS:')
@@ -385,118 +460,54 @@ export class ThermalPrinterService {
       .setBold(false);
 
     if (invoice.items && invoice.items.length > 0) {
-      const isPackagePricing = invoice.items.every(
-        (item) => (item.unit_price || 0) <= 0 && (item.total || 0) <= 0
-      ) && (invoice.total_amount || 0) > 0;
+      const isPackagePricing =
+        invoice.items.every((item) => (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) &&
+        (invoice.total_amount || 0) > 0;
 
       invoice.items.forEach((item) => {
-        if (isPackagePricing && (item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
+        if ((item.unit_price || 0) <= 0 && (item.total || 0) <= 0) {
           generator.text(`  ${item.description}`).lineFeed();
         } else {
           generator
             .text(`  ${item.description}`)
             .lineFeed()
-            .text(`    ${item.quantity} PCS × ${formatCurrencyForPrint(item.unit_price || 0)} = ${formatCurrencyForPrint(item.total || 0)}`)
+            .text(
+              `    ${item.quantity} x ${formatCurrencyForPrint(item.unit_price || 0)} = ${formatCurrencyForPrint(item.total || 0)}`
+            )
             .lineFeed();
         }
       });
 
       if (isPackagePricing) {
-        generator
-          .setBold(true)
-          .text(`Package Total: ${formatCurrencyForPrint(invoice.total_amount || 0)}`)
-          .lineFeed()
-          .setBold(false);
+        generator.text(`Package: ${formatCurrencyForPrint(invoice.total_amount || 0)}`).lineFeed();
       }
     } else {
       generator.text(invoice.product_name || 'Booking Package').lineFeed();
     }
 
-    generator.lineFeed();
     generator.separator();
+    printTotals(
+      generator,
+      receiptTotals({
+        subtotal: invoice.total_amount || 0,
+        discount: invoice.discount_amount,
+        fee: invoice.transaction_fee,
+        paid: invoice.paid_amount || 0,
+        owed: invoice.final_amount || invoice.total_amount || 0,
+      }),
+    );
 
-    // Summary
-    generator
-      .text(`Subtotal: ${formatCurrencyForPrint(invoice.total_amount || 0)}`)
-      .lineFeed();
-
-    if ((invoice.discount_amount || 0) > 0) {
-      generator.text(`Discount: (${formatCurrencyForPrint(invoice.discount_amount || 0)})`).lineFeed();
-    }
-
-    generator
-      .setBold(true)
-      .setFontSize(1, 1)
-      .text(`TOTAL AMOUNT: ${formatCurrencyForPrint(invoice.final_amount || invoice.total_amount || 0)}`)
-      .lineFeed()
-      .setBold(false)
-      .setFontSize(1, 1);
-
-    generator.lineFeed();
-    generator.separator();
-
-    // Payment Info
-    if (invoice.invoice_type === 'dp') {
-      generator
-        .text(`Down Payment: ${formatCurrencyForPrint(invoice.due_amount || 0)}`)
-        .lineFeed()
-        .text(`Remaining: ${formatCurrencyForPrint((invoice.final_amount || invoice.total_amount || 0) - (invoice.due_amount || 0))}`)
-        .lineFeed();
-    } else {
-      generator.text(`Due Amount: ${formatCurrencyForPrint(invoice.due_amount || 0)}`).lineFeed();
-    }
-
-    generator
-      .setBold(true)
-      .text(`Payment Status: ${invoice.payment_status?.toUpperCase() || 'PENDING'}`)
-      .lineFeed()
-      .setBold(false);
-
-    if (invoice.booking_date) {
-      generator.lineFeed();
-      generator.separator();
-      generator.text(`Booking Date: ${formatDateForPrint(invoice.booking_date)}`).lineFeed();
-    }
-
-    // Footer
-    generator.lineFeed();
     generator.separator();
     generator
       .setAlign('center')
       .text('Thank you for using SuitLabs!')
       .lineFeed()
-      .setFontSize(1, 1)
-      .text('All bookings subject to T&C')
-      .lineFeed()
-      .text('6-Month Warranty. T&C apply.')
-      .lineFeed()
       .text('suitlabs.bali')
-      .lineFeed(2);
+      .lineFeed();
+    appendInvoiceBarcode(generator, invoice.invoice_number);
+    generator.lineFeed(CUT_MARGIN_LINES);
 
-    // Print QR Code with invoice details
-    try {
-      const qrData = JSON.stringify({
-        invoice: invoice.invoice_number,
-        booking: invoice.booking_id,
-        type: invoice.invoice_type,
-        amount: invoice.final_amount,
-      });
-      generator
-        .setAlign('center')
-        .text('Scan for details:')
-        .lineFeed();
-      generator.qrcode(qrData, 6);
-    } catch (error) {
-      console.warn('Failed to print QR code:', error);
-      // Continue without QR code if it fails
-    }
-
-    generator.lineFeed(2);
-
-    // Cut paper
     generator.cut();
-
-    // Print
     await this.print(generator.getBytes());
   }
 
@@ -505,23 +516,11 @@ export class ThermalPrinterService {
    */
   async printRentalInvoice(rental: Rental): Promise<void> {
     const generator = new ESCPOSGenerator();
-    const invoiceNumber = `INV-${rental.id.slice(-8).toUpperCase()}`;
-    const items = (rental.items || rental.booking?.items || []) as Array<{
-      item?: { name?: string; size?: { label?: string } };
-      quantity: number;
-      unit_price: number;
-      total_price: number;
-      discount_amount?: number;
-    }>;
-
-    const itemsSubtotal = items.reduce((sum, item) => {
-      const itemTotal = item.total_price || (item.unit_price || 0) * (item.quantity || 1);
-      return sum + itemTotal;
-    }, 0);
-
-    const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
-    const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
-    const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
+    const invoiceNumber = rentalInvoiceNumber(rental);
+    const shopSubtitle = receiptSubtitle(rental.branch?.receipt_subtitle);
+    const shopAddress = receiptAddress(rental.branch?.address);
+    const shopPhone = receiptPhone(rental.branch?.phone);
+    const shopHours = receiptHours(rental.branch?.opening_hours);
 
     // Initialize printer
     generator.initialize();
@@ -535,14 +534,21 @@ export class ThermalPrinterService {
       .lineFeed()
       .setFontSize(1, 1)
       .setBold(false)
-      .text('Sewa Jas Jimbaran & Nusadua')
+      .text(shopSubtitle)
       .lineFeed(2);
 
     // Company Info (optimized for 58mm paper width)
     generator
       .setFontSize(1, 1)
-      .text('Jl. Taman Kebo Iwa No.1D, Benoa, Kec. Kuta Sel., Kab. Badung, Bali 80362')
-      .lineFeed(2);
+      .text(shopAddress)
+      .lineFeed();
+    if (shopPhone) {
+      generator.text(shopPhone).lineFeed();
+    }
+    for (const hours of shopHours) {
+      generator.text(hours).lineFeed();
+    }
+    generator.lineFeed();
 
     // Separator
     generator.separator();
@@ -560,42 +566,46 @@ export class ThermalPrinterService {
       .text(`Status: ${rental.status.toUpperCase()}`)
       .lineFeed();
 
-    if (rental.customer) {
-      generator
-        .text(`Customer: ${rental.customer.first_name} ${rental.customer.last_name}`)
-        .lineFeed()
-        .text(`Phone: ${rental.customer.phone}`)
-        .lineFeed();
-    }
-
-    generator.lineFeed();
-
-    // Print Invoice Number as Barcode
-    generator
-      .setAlign('center')
-      .text('Invoice Barcode:')
-      .lineFeed();
-    
-    try {
-      // Use invoice number for barcode (remove any non-alphanumeric characters for CODE128)
-      const barcodeData = invoiceNumber.replace(/[^A-Za-z0-9]/g, '');
-      if (barcodeData.length > 0) {
-        generator.barcode(barcodeData, 'CODE128');
-      }
-    } catch (error) {
-      console.warn('Failed to print barcode:', error);
-      // Continue without barcode if it fails
-    }
-
-    generator.lineFeed();
     generator.separator();
 
-    // Items
     generator
+      .setAlign('left')
       .setBold(true)
-      .text('ITEMS:')
+      .text('CUSTOMER:')
       .lineFeed()
-      .setBold(false);
+      .setBold(false)
+      .text(
+        rental.customer
+          ? `${rental.customer.first_name} ${rental.customer.last_name}`.trim()
+          : '-'
+      )
+      .lineFeed();
+
+    const items = (rental.items || rental.booking?.items || []) as Array<{
+      item?: { name?: string; size?: { label?: string } };
+      quantity: number;
+      unit_price: number;
+      total_price: number;
+      discount_amount?: number;
+    }>;
+    const itemsSubtotal = items.reduce(
+      (sum, item) => sum + (item.total_price || (item.unit_price || 0) * (item.quantity || 1)),
+      0
+    );
+    const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
+    const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
+    const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
+
+    generator.separator();
+    generator
+      .setAlign('left')
+      .text(`Rental: ${formatDateForPrint(rental.rental_date)}`)
+      .lineFeed()
+      .text(`Return: ${formatDateForPrint(rental.return_date)}`)
+      .lineFeed();
+
+    generator.separator();
+    generator.setBold(true).text('ITEMS:').lineFeed().setBold(false);
 
     if (items.length > 0) {
       items.forEach((item) => {
@@ -605,134 +615,186 @@ export class ThermalPrinterService {
         const quantity = item.quantity || 1;
         const unitPrice = item.unit_price || item.total_price || 0;
         const itemTotal = item.total_price || unitPrice * quantity;
-        const discount = item.discount_amount ?? 0;
-
         generator.text(`  ${description}`).lineFeed();
-        generator.text(`    ${quantity} PCS × ${formatCurrencyForPrint(unitPrice)} = ${formatCurrencyForPrint(itemTotal)}`).lineFeed();
-        if (discount > 0) {
-          generator.text(`    Discount: (${formatCurrencyForPrint(discount)})`).lineFeed();
-        }
+        generator
+          .text(`    ${quantity} x ${formatCurrencyForPrint(unitPrice)} = ${formatCurrencyForPrint(itemTotal)}`)
+          .lineFeed();
       });
     } else {
       generator.text('Rental Package').lineFeed();
     }
 
-    generator.lineFeed();
     generator.separator();
-
-    // Summary
-    generator
-      .text(`Subtotal: ${formatCurrencyForPrint(itemsSubtotal || rental.total_cost || 0)}`)
-      .lineFeed();
-
+    generator.text(`Subtotal: ${formatCurrencyForPrint(itemsSubtotal || rental.total_cost || 0)}`).lineFeed();
     if (itemsDiscount > 0) {
       generator.text(`Discount: (${formatCurrencyForPrint(itemsDiscount)})`).lineFeed();
     }
-
-    if (rental.late_fee > 0) {
+    if ((rental.late_fee || 0) > 0) {
       generator.text(`Late Fee: ${formatCurrencyForPrint(rental.late_fee)}`).lineFeed();
     }
-
-    if (rental.damage_charges > 0) {
+    if ((rental.damage_charges || 0) > 0) {
       generator.text(`Damage: ${formatCurrencyForPrint(rental.damage_charges)}`).lineFeed();
     }
+    generator.setBold(true).text(`GRAND TOTAL: ${formatCurrencyForPrint(total)}`).lineFeed().setBold(false);
+    if ((rental.transaction_fee || 0) > 0) {
+      generator.text(`${TRANSACTION_FEE_LABEL}: ${formatCurrencyForPrint(rental.transaction_fee || 0)}`).lineFeed();
+    }
 
-    generator
-      .setBold(true)
-      .setFontSize(1, 1)
-      .text(`GRAND TOTAL: ${formatCurrencyForPrint(total)}`)
-      .lineFeed()
-      .setBold(false)
-      .setFontSize(1, 1);
-
-    // Deposit
-    if (rental.security_deposit > 0) {
-      generator.lineFeed();
-      generator.separator();
-      generator
-        .text(`Security Deposit: ${formatCurrencyForPrint(rental.security_deposit)}`)
-        .lineFeed();
-
-      if (rental.damage_charges > 0) {
-        generator.text(`Damage Deduction: (${formatCurrencyForPrint(rental.damage_charges)})`).lineFeed();
+    if ((rental.security_deposit || 0) > 0) {
+      generator.text(`Deposit: ${formatCurrencyForPrint(rental.security_deposit)}`).lineFeed();
+      if ((rental.damage_charges || 0) > 0) {
+        generator.text(`Deduction: (${formatCurrencyForPrint(rental.damage_charges)})`).lineFeed();
       }
-
-      generator
-        .setBold(true)
-        .text(`Refundable: ${formatCurrencyForPrint(refundableDeposit)}`)
-        .lineFeed()
-        .setBold(false);
+      generator.text(`Refundable: ${formatCurrencyForPrint(refundableDeposit)}`).lineFeed();
     }
 
-    // Dates
-    generator.lineFeed();
-    generator.separator();
-    generator
-      .text(`Rental Date: ${formatDateForPrint(rental.rental_date)}`)
-      .lineFeed()
-      .text(`Return Date: ${formatDateForPrint(rental.return_date)}`)
-      .lineFeed();
-
-    if (rental.actual_pickup_date) {
-      generator.text(`Pickup: ${formatDateForPrint(rental.actual_pickup_date)}`).lineFeed();
-    }
-
-    if (rental.actual_return_date) {
-      generator.text(`Returned: ${formatDateForPrint(rental.actual_return_date)}`).lineFeed();
-    }
-
-    // Notes
-    if (rental.notes) {
-      generator.lineFeed();
+    if (rental.actual_pickup_date || rental.actual_return_date) {
       generator.separator();
-      generator
-        .setBold(true)
-        .text('NOTE:')
-        .lineFeed()
-        .setBold(false)
-        .text(rental.notes)
-        .lineFeed();
+      if (rental.actual_pickup_date) {
+        generator.text(`Pickup: ${formatDateForPrint(rental.actual_pickup_date)}`).lineFeed();
+      }
+      if (rental.actual_return_date) {
+        generator.text(`Returned: ${formatDateForPrint(rental.actual_return_date)}`).lineFeed();
+      }
     }
 
-    // Footer
-    generator.lineFeed();
+    if (rental.notes) {
+      generator.separator();
+      generator.setBold(true).text('NOTE:').lineFeed().setBold(false).text(rental.notes).lineFeed();
+    }
+
     generator.separator();
     generator
       .setAlign('center')
       .text('Thank you for using SuitLabs!')
       .lineFeed()
-      .setFontSize(1, 1)
-      .text('All rentals subject to T&C')
-      .lineFeed()
-      .text('6-Month Warranty. T&C apply.')
-      .lineFeed()
       .text('suitlabs.bali')
+      .lineFeed();
+    appendInvoiceBarcode(generator, invoiceNumber);
+    generator.lineFeed(CUT_MARGIN_LINES);
+
+    generator.cut();
+    await this.print(generator.getBytes());
+  }
+
+  async printSaleInvoice(sale: Sale): Promise<void> {
+    const generator = new ESCPOSGenerator();
+    const invoiceNumber = saleInvoiceNumber(sale);
+    const shopSubtitle = receiptSubtitle(sale.branch?.receipt_subtitle);
+    const shopAddress = receiptAddress(sale.branch?.address);
+    const shopPhone = receiptPhone(sale.branch?.phone);
+    const shopHours = receiptHours(sale.branch?.opening_hours);
+    const customerName = sale.customer
+      ? `${sale.customer.first_name} ${sale.customer.last_name}`.trim() || 'Walk-in'
+      : 'Walk-in';
+
+    generator.initialize();
+    generator
+      .setAlign('center')
+      .setFontSize(2, 2)
+      .setBold(true)
+      .text('SUITLABS BALI')
+      .lineFeed()
+      .setFontSize(1, 1)
+      .setBold(false)
+      .text(shopSubtitle)
       .lineFeed(2);
 
-    // Print QR Code with rental details
-    try {
-      const qrData = JSON.stringify({
-        invoice: invoiceNumber,
-        rental: rental.id,
-        status: rental.status,
-        total: total,
+    generator
+      .setFontSize(1, 1)
+      .text(shopAddress)
+      .lineFeed();
+    if (shopPhone) {
+      generator.text(shopPhone).lineFeed();
+    }
+    for (const hours of shopHours) {
+      generator.text(hours).lineFeed();
+    }
+    generator.lineFeed();
+
+    generator.separator();
+    generator
+      .setAlign('left')
+      .setFontSize(1, 1)
+      .text(`Invoice: ${invoiceNumber}`)
+      .lineFeed()
+      .text(`Date: ${formatDateTimeForPrint(new Date())}`)
+      .lineFeed()
+      .text(`Sale: ${invoiceNumber}`)
+      .lineFeed()
+      .text(`Status: ${(sale.status || 'completed').toUpperCase()}`)
+      .lineFeed();
+
+    generator.separator();
+    generator
+      .setAlign('left')
+      .setBold(true)
+      .text('CUSTOMER:')
+      .lineFeed()
+      .setBold(false)
+      .text(customerName)
+      .lineFeed();
+
+    generator.separator();
+    generator.setBold(true).text('ITEMS:').lineFeed().setBold(false);
+
+    const saleItems = sale.items || [];
+    if (saleItems.length > 0) {
+      saleItems.forEach((line) => {
+        const name = line.item?.name || 'Item';
+        const size = line.item?.size?.label ? ` - ${line.item.size.label}` : '';
+        generator.text(`  ${name}${size}`).lineFeed();
+        generator
+          .text(
+            `    ${line.quantity} x ${formatCurrencyForPrint(line.unit_price || 0)} = ${formatCurrencyForPrint(line.line_total || 0)}`
+          )
+          .lineFeed();
       });
-      generator
-        .setAlign('center')
-        .text('Scan for details:')
-        .lineFeed();
-      generator.qrcode(qrData, 6);
-    } catch (error) {
-      console.warn('Failed to print QR code:', error);
-      // Continue without QR code if it fails
+    } else {
+      generator.text('Sale').lineFeed();
     }
 
-    generator.lineFeed(2);
+    generator.separator();
+    printTotals(
+      generator,
+      receiptTotals({
+        subtotal: sale.subtotal || 0,
+        discount: sale.discount_amount,
+        fee: sale.transaction_fee,
+        paid: sale.paid_amount || 0,
+        owed: sale.total_amount || 0,
+      }),
+    );
 
-    // Cut paper
+    generator.separator();
+    generator
+      .setAlign('center')
+      .text('Thank you for using SuitLabs!')
+      .lineFeed()
+      .text('suitlabs.bali')
+      .lineFeed();
+    appendInvoiceBarcode(generator, invoiceNumber);
+    generator.lineFeed(CUT_MARGIN_LINES);
+
     generator.cut();
+    await this.print(generator.getBytes());
+  }
 
-    // Print
+  /**
+   * Print just the invoice barcode: the number as text plus the bars.
+   *
+   * Uses the label tear-bar gap because this is a reprint, not a full receipt.
+   * The caller must not open the cash drawer — barcode reprints are not a sale.
+   */
+  async printInvoiceBarcode(invoiceNumber: string): Promise<void> {
+    const generator = new ESCPOSGenerator();
+    generator.initialize();
+    if (invoiceNumber) {
+      generator.setAlign('center').setBold(true).text(invoiceNumber).lineFeed().setBold(false);
+    }
+    appendInvoiceBarcode(generator, invoiceNumber);
+    generator.lineFeed(LABEL_CUT_MARGIN_LINES);
+    generator.cut();
     await this.print(generator.getBytes());
   }
 
@@ -761,42 +823,35 @@ export class ThermalPrinterService {
       .lineFeed()
       .setBold(false);
 
-    // Item Code
-    generator
-      .setFontSize(1, 1)
-      .text(`#${item.code}`)
-      .lineFeed();
+    if (item.size?.label) {
+      generator
+        .setBold(true)
+        .setFontSize(2, 2)
+        .text(item.size.label)
+        .lineFeed()
+        .setFontSize(1, 1)
+        .setBold(false);
+    }
 
-    // Item Details (if available) - optional, smaller
-    if (item.brand || item.color || item.size?.label) {
-      const details: string[] = [];
-      if (item.brand) details.push(item.brand);
-      if (item.color) details.push(item.color);
-      if (item.size?.label) details.push(`Size: ${item.size.label}`);
-      
-      if (details.length > 0) {
-        generator
-          .setFontSize(1, 1)
-          .text(details.join(' • '))
-          .lineFeed();
-      }
+    generator.text(`#${item.code}`).lineFeed();
+
+    const extras: string[] = [];
+    if (item.brand) extras.push(item.brand);
+    if (item.color) extras.push(item.color);
+    if (extras.length > 0) {
+      generator.text(extras.join(' / ')).lineFeed();
     }
 
     generator.lineFeed();
 
-    // Print Barcode (centered, no label text)
     try {
-      // Clean barcode value (remove non-alphanumeric for CODE128)
       const barcodeData = item.barcode.replace(/[^A-Za-z0-9]/g, '');
       if (barcodeData.length > 0) {
         generator
           .setAlign('center')
-          .barcode(barcodeData, 'CODE128');
+          .barcode(barcodeData, 'CODE128', { height: 120, width: 3, hri: false });
       } else {
-        generator
-          .setAlign('center')
-          .text('Invalid barcode')
-          .lineFeed();
+        generator.setAlign('center').text('Invalid barcode').lineFeed();
       }
     } catch (error) {
       console.warn('Failed to print barcode:', error);
@@ -806,7 +861,7 @@ export class ThermalPrinterService {
         .lineFeed();
     }
 
-    generator.lineFeed(2);
+    generator.lineFeed(LABEL_CUT_MARGIN_LINES);
 
     // Cut paper
     generator.cut();

@@ -3,20 +3,21 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatCurrency } from '@/lib/currency';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { formatCurrency, formatCurrencyCompact, formatNumber } from '@/lib/currency';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { PageShell, StatGrid } from '@/components/ui/PageShell';
+import { MetricTile, PageShell, StatGrid } from '@/components/ui/PageShell';
 import { Badge } from '@/components/ui/DataDisplay';
 import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
-import { Booking, DashboardStats, Rental } from '@/types';
-import { Package, Users, Calendar, DollarSign, AlertTriangle, Wrench, Plus, ArrowRight } from 'lucide-react';
+import { Booking, DashboardStats, AssetReport, AccountingReport, Rental } from '@/types';
+import { Package, Users, Calendar, DollarSign, AlertTriangle, Wrench, ArrowRight, Wallet, TrendingUp, Landmark, Store, HandCoins } from 'lucide-react';
+import { useDepositSettings } from '@/hooks/useDepositSettings';
 
 const quickActions = [
-  { label: 'New Booking',   href: '/dashboard/bookings', variant: 'primary'   as const, icon: Calendar },
-  { label: 'Add Item',      href: '/dashboard/items',    variant: 'secondary' as const, icon: Package },
-  { label: 'Add Customer',  href: '/dashboard/customers',variant: 'secondary' as const, icon: Users },
+  { label: 'Open Cashier',  href: '/dashboard/cashier',  variant: 'primary'   as const, icon: Store },
+  { label: 'New Booking',   href: '/dashboard/bookings', variant: 'secondary' as const, icon: Calendar },
+  { label: 'New Sale',      href: '/dashboard/sales',    variant: 'secondary' as const, icon: DollarSign },
+  { label: 'Add Expense',   href: '/dashboard/expenses', variant: 'secondary' as const, icon: Wallet },
 ];
 
 type ActivityItem = {
@@ -41,9 +42,13 @@ function timeAgo(iso?: string) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const { enabled: depositEnabled } = useDepositSettings();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [pnl, setPnl] = useState<AccountingReport | null>(null);
+  const [assets, setAssets] = useState<AssetReport | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -56,6 +61,24 @@ export default function DashboardPage() {
         ]);
 
         if (s.status === 'fulfilled') setStats(s.value);
+
+        if (isAdmin) {
+          const now = new Date();
+          const pad = (n: number) => String(n).padStart(2, '0');
+          const start = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+          const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+          const end = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDay)}`;
+          try {
+            setPnl(await apiClient.getAccountingReport({ startDate: start, endDate: end }));
+          } catch {
+            setPnl(null);
+          }
+          try {
+            setAssets(await apiClient.getAssets());
+          } catch {
+            setAssets(null);
+          }
+        }
 
         const bookings: Booking[] =
           bookingsRes.status === 'fulfilled'
@@ -126,27 +149,28 @@ export default function DashboardPage() {
       }
     };
     load().catch(console.error);
-  }, []);
+  }, [isAdmin]);
 
   const statItems = [
-    { label: 'Total Items',      key: 'totalItems'       as keyof DashboardStats, icon: <Package />,       iconBg: 'bg-indigo-50',  iconColor: 'text-indigo-600' },
-    { label: 'Total Bookings',   key: 'totalBookings'    as keyof DashboardStats, icon: <Calendar />,      iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-    { label: 'Active Rentals',   key: 'activeRentals'    as keyof DashboardStats, icon: <Users />,         iconBg: 'bg-sky-50',     iconColor: 'text-sky-600' },
-    { label: "Today's Revenue",  key: 'todayRevenue'     as keyof DashboardStats, icon: <DollarSign />,    iconBg: 'bg-amber-50',   iconColor: 'text-amber-600', format: 'currency' },
-    { label: 'Low Stock',        key: 'lowStockItems'    as keyof DashboardStats, icon: <AlertTriangle />, iconBg: 'bg-red-50',     iconColor: 'text-red-600' },
-    { label: 'Maintenance',      key: 'maintenanceItems' as keyof DashboardStats, icon: <Wrench />,        iconBg: 'bg-orange-50',  iconColor: 'text-orange-600' },
+    { label: 'Total Items',      key: 'totalItems'            as keyof DashboardStats, icon: <Package />,       iconBg: 'bg-indigo-50',  iconColor: 'text-indigo-600' },
+    { label: 'Total Bookings',   key: 'totalBookings'         as keyof DashboardStats, icon: <Calendar />,      iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+    { label: 'Active Rentals',   key: 'activeRentals'         as keyof DashboardStats, icon: <Users />,         iconBg: 'bg-sky-50',     iconColor: 'text-sky-600' },
+    { label: "Today's Revenue",  key: 'todayRevenue'          as keyof DashboardStats, icon: <DollarSign />,    iconBg: 'bg-amber-50',   iconColor: 'text-amber-600', format: 'currency' },
+    ...(depositEnabled ? [{ label: 'Releases Today', key: 'todayDepositReleases'  as keyof DashboardStats, icon: <HandCoins />,     iconBg: 'bg-teal-50',    iconColor: 'text-teal-600' }] : []),
+    { label: 'Low Stock',        key: 'lowStockItems'         as keyof DashboardStats, icon: <AlertTriangle />, iconBg: 'bg-red-50',     iconColor: 'text-red-600' },
+    { label: 'Maintenance',      key: 'maintenanceItems'      as keyof DashboardStats, icon: <Wrench />,        iconBg: 'bg-orange-50',  iconColor: 'text-orange-600' },
   ];
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title={`Welcome back, ${user?.first_name ?? 'there'}`}
         subtitle="A quick snapshot of what matters today."
         action={
-          <Link href="/dashboard/bookings">
+          <Link href="/dashboard/cashier">
             <Button size="md">
-              <Plus className="h-4 w-4" />
-              New Booking
+              <Store className="h-4 w-4" />
+              Open Cashier
             </Button>
           </Link>
         }
@@ -158,14 +182,115 @@ export default function DashboardPage() {
             value:    loading
                         ? ''
                         : s.format === 'currency'
-                          ? formatCurrency(stats?.[s.key] as number ?? 0)
-                          : (stats?.[s.key] as number ?? 0).toLocaleString(),
+                          ? formatCurrencyCompact(stats?.[s.key] as number ?? 0)
+                          : formatNumber(stats?.[s.key] as number ?? 0),
+            title:    s.format === 'currency' ? formatCurrency(stats?.[s.key] as number ?? 0) : undefined,
             icon:      s.icon,
             iconBg:    s.iconBg,
             iconColor: s.iconColor,
             loading,
           }))}
         />
+
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle>This month (accrual)</CardTitle>
+                <div className="flex items-center gap-3">
+                  <Link href="/dashboard/admin/rental-analytics" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                    Analytics →
+                  </Link>
+                  <Link href="/dashboard/admin/financial-report" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                    Full report →
+                  </Link>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <MetricTile
+                  label="Revenue"
+                  icon={<TrendingUp />}
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.profit_and_loss?.totals?.total_revenue || 0)}
+                  title={formatCurrency(pnl?.profit_and_loss?.totals?.total_revenue || 0)}
+                />
+                <MetricTile
+                  label="Expenses"
+                  icon={<Wallet />}
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.profit_and_loss?.totals?.expenses || 0)}
+                  title={formatCurrency(pnl?.profit_and_loss?.totals?.expenses || 0)}
+                />
+                <MetricTile
+                  label="Net profit"
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.profit_and_loss?.totals?.net_profit || 0)}
+                  title={formatCurrency(pnl?.profit_and_loss?.totals?.net_profit || 0)}
+                  valueClassName={(pnl?.profit_and_loss?.totals?.net_profit || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}
+                />
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <MetricTile
+                  label="Cash on Hand"
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.cash_on_hand || 0)}
+                  title={formatCurrency(pnl?.cash_on_hand || 0)}
+                  sub={`Drawer ${formatCurrencyCompact(pnl?.cash_drawer || 0)} · BCA ${formatCurrencyCompact(pnl?.bank_pots?.bca || 0)} · BNI ${formatCurrencyCompact(pnl?.bank_pots?.bni || 0)}${pnl?.bank_pots?.unassigned ? ` · Unassigned ${formatCurrencyCompact(pnl.bank_pots.unassigned)}` : ''}`}
+                />
+                <MetricTile
+                  label="Accounts Receivable"
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.balance_sheet?.accounts_receivable || 0)}
+                  title={formatCurrency(pnl?.balance_sheet?.accounts_receivable || 0)}
+                />
+                <MetricTile
+                  label="Dividends this year"
+                  loading={loading}
+                  value={formatCurrencyCompact(pnl?.year_dividends || 0)}
+                  title={formatCurrency(pnl?.year_dividends || 0)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Shop assets</CardTitle>
+                <Link href="/dashboard/admin/assets" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                  Full list →
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <MetricTile
+                  label="Total assets"
+                  icon={<Landmark />}
+                  loading={loading}
+                  value={formatCurrencyCompact(assets?.total_value || 0)}
+                  title={formatCurrency(assets?.total_value || 0)}
+                />
+                <MetricTile
+                  label="Inventory"
+                  loading={loading}
+                  value={formatCurrencyCompact(assets?.inventory?.total_value || 0)}
+                  title={formatCurrency(assets?.inventory?.total_value || 0)}
+                />
+                <MetricTile
+                  label="Fixed assets"
+                  loading={loading}
+                  value={formatCurrencyCompact(assets?.fixed?.total_value || 0)}
+                  title={formatCurrency(assets?.fixed?.total_value || 0)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Secondary row */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -224,6 +349,6 @@ export default function DashboardPage() {
           </Card>
         </div>
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }

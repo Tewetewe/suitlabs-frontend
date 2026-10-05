@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { Select } from '@/components/ui/Select';
@@ -13,6 +13,7 @@ import { PageShell } from '@/components/ui/PageShell';
 import { FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
 import { useToast } from '@/contexts/ToastContext';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { Plus } from 'lucide-react';
 
 function TextAreaField({
@@ -69,6 +70,8 @@ export default function PackagePricingPage() {
     description: string;
   }>({ package_name: '', duration_hours: 24, price: '', description: '' });
   const [search, setSearch] = useState('');
+  const [deletingPackage, setDeletingPackage] = useState<PackagePricing | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { success, error } = useToast();
 
   const loadPricings = useCallback(async () => {
@@ -142,17 +145,19 @@ export default function PackagePricingPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!deletingPackage) return;
     try {
-      const pkg = pricings.find(p => p.id === id);
-      const ok = confirm(`Delete package${pkg?.package_name ? ` "${pkg.package_name}"` : ''}?`);
-      if (!ok) return;
-      await apiClient.deletePackagePricing(id);
+      setDeleting(true);
+      await apiClient.deletePackagePricing(deletingPackage.id);
       await loadPricings();
       success('Package deleted');
+      setDeletingPackage(null);
     } catch (e) {
       console.error('Failed to delete pricing', e);
       error('Delete failed', 'Please try again.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -168,7 +173,7 @@ export default function PackagePricingPage() {
     .map(h => ({ value: String(h), label: formatDurationLabel(h) }));
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Package Pricing"
         subtitle="Manage rental package durations and prices"
@@ -252,18 +257,11 @@ export default function PackagePricingPage() {
                 helperText="How long the rental lasts."
               />
 
-              <Input
-                label="Price (Rp)"
-                type="number"
-                inputMode="numeric"
-                placeholder="e.g. 1200000"
+              <CurrencyInput
+                label="Price"
                 value={form.price}
-                onChange={e => {
-                  const raw = e.target.value;
-                  setForm({ ...form, price: raw === '' ? '' : Number(raw) });
-                }}
+                onChange={(n) => setForm({ ...form, price: n || '' })}
                 helperText="Total package price."
-                min={0}
               />
 
               <TextAreaField
@@ -287,7 +285,7 @@ export default function PackagePricingPage() {
             />
           ) : (
             filtered.map(p => (
-              <Card key={p.id}>
+              <Card key={p.id} padding="sm">
                 <CardContent>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
@@ -305,7 +303,7 @@ export default function PackagePricingPage() {
                     </div>
                     <div className="flex gap-2 sm:shrink-0">
                       <Button variant="outline" onClick={() => startEdit(p)}>Edit</Button>
-                      <Button variant="ghost" onClick={() => handleDelete(p.id)}>Delete</Button>
+                      <Button variant="ghost" onClick={() => setDeletingPackage(p)}>Delete</Button>
                     </div>
                   </div>
                 </CardContent>
@@ -314,8 +312,17 @@ export default function PackagePricingPage() {
           )}
         </div>
       </PageShell>
-    </DashboardLayout>
+      <ConfirmModal
+        isOpen={!!deletingPackage}
+        title="Delete package"
+        description={deletingPackage ? `Delete “${deletingPackage.package_name}”? This cannot be undone.` : undefined}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleting}
+        onClose={() => setDeletingPackage(null)}
+        onConfirm={handleDelete}
+      />
+    </>
   );
 }
-
 

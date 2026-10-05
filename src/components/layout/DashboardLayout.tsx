@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useRef } from 'react';
+import Link, { useLinkStatus } from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBranch } from '@/contexts/BranchContext';
+import { ALL_BRANCHES_ID, branchAccent } from '@/lib/branch-scope';
 import { Menu as HeadlessMenu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { 
   LayoutDashboard, 
@@ -21,8 +23,26 @@ import {
   Shirt,
   FileSpreadsheet,
   BarChart3,
+  ShoppingBag,
+  Wallet,
+  Landmark,
+  Store,
+  Smartphone,
+  Monitor,
+  MapPin,
+  Receipt,
+  BookOpen,
+  TrendingUp,
+  MessageCircle,
+  ClipboardCheck,
+  PackageCheck,
+  Percent,
+  ArrowLeftRight,
+  CalendarCheck,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { CashierChromeProvider, useCashierChrome } from '@/components/cashier/CashierChromeContext';
+import { Select } from '@/components/ui/Select';
 
 type NavigationRole = 'admin' | 'staff' | 'user';
 
@@ -42,9 +62,15 @@ const navigationSections: NavigationSection[] = [
   {
     title: null as string | null,
     items: [
+      { name: 'Cashier', href: '/dashboard/cashier', icon: Store, roles: ['admin', 'staff'] },
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'staff'] },
       { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar, roles: ['admin', 'staff'] },
       { name: 'Rentals', href: '/dashboard/rentals', icon: FileText, roles: ['admin', 'staff'] },
+      { name: 'Pickup Prep', href: '/dashboard/pickup-prep', icon: ClipboardCheck, roles: ['admin', 'staff'] },
+      { name: 'Return Check', href: '/dashboard/return-check', icon: PackageCheck, roles: ['admin', 'staff'] },
+      { name: 'Expenses', href: '/dashboard/expenses', icon: Wallet, roles: ['admin', 'staff'] },
+      { name: 'Pot Transfers', href: '/dashboard/pot-transfers', icon: ArrowLeftRight, roles: ['admin', 'staff'] },
+      { name: 'Sales', href: '/dashboard/sales', icon: ShoppingBag, roles: ['admin', 'staff'] },
     ],
   },
   {
@@ -61,32 +87,90 @@ const navigationSections: NavigationSection[] = [
   {
     title: 'Admin',
     items: [
+      { name: 'Daily Close', href: '/dashboard/admin/daily-close', icon: CalendarCheck, roles: ['admin'] },
       { name: 'Bulk Input Sync', href: '/dashboard/admin/bulk-input-sync', icon: FileSpreadsheet, roles: ['admin'] },
+      { name: 'WA Reminders', href: '/dashboard/admin/wa-reminders', icon: MessageCircle, roles: ['admin'] },
+      { name: 'Transaction Fees', href: '/dashboard/admin/transaction-fees', icon: Percent, roles: ['admin'] },
+      { name: 'Assets', href: '/dashboard/admin/assets', icon: Landmark, roles: ['admin'] },
+      { name: 'Analytics', href: '/dashboard/admin/rental-analytics', icon: TrendingUp, roles: ['admin'] },
       { name: 'Financial Report', href: '/dashboard/admin/financial-report', icon: BarChart3, roles: ['admin'] },
+      { name: 'Branches', href: '/dashboard/admin/branches', icon: MapPin, roles: ['admin'] },
+    ],
+  },
+  {
+    title: 'Guides',
+    items: [
+      { name: 'Cashier Guide', href: '/dashboard/guides/cashier', icon: Receipt, roles: ['admin', 'staff'] },
+      { name: 'Operations Handbook', href: '/dashboard/guides/handbook', icon: BookOpen, roles: ['admin'] },
     ],
   },
 ] ;
 
 const navigation = navigationSections.flatMap((s) => s.items);
 
+function isNavActive(href: string, pathname: string | null) {
+  return href === pathname || (href !== '/dashboard' && Boolean(pathname?.startsWith(href)));
+}
+
+function NavPendingShade({ isActive }: { isActive: boolean }) {
+  const { pending } = useLinkStatus();
+  if (!pending || isActive) return null;
+  return <span className="pointer-events-none absolute inset-0 rounded-[inherit] bg-indigo-50/80" aria-hidden />;
+}
+
+function SidebarLink({
+  href,
+  isActive,
+  className,
+  onNavigate,
+  innerRef,
+  children,
+  ...rest
+}: {
+  href: string;
+  isActive: boolean;
+  className: string;
+  onNavigate?: () => void;
+  innerRef?: React.Ref<HTMLAnchorElement>;
+  children: React.ReactNode;
+} & React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  const router = useRouter();
+  return (
+    <Link
+      href={href}
+      ref={innerRef}
+      prefetch
+      onClick={onNavigate}
+      onMouseEnter={() => router.prefetch(href)}
+      onFocus={() => router.prefetch(href)}
+      className={clsx('relative', className)}
+      {...rest}
+    >
+      <NavPendingShade isActive={isActive} />
+      {children}
+    </Link>
+  );
+}
+
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  return (
+    <CashierChromeProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </CashierChromeProvider>
+  );
+}
+
+function DashboardLayoutInner({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, loading, isAuthenticated } = useAuth();
-
-  useEffect(() => {
-    // Tablet-first: treat <768px as mobile. iPad/tablet uses the full sidebar layout.
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
+  const { allowedBranches, currentBranch, currentBranchId, viewingAll, setCurrentBranchId } = useBranch();
+  const activeNavRef = useRef<HTMLAnchorElement | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -97,25 +181,56 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, [isAuthenticated, loading, router]);
 
   useEffect(() => {
-    if (isMobile) setSidebarOpen(false);
-  }, [pathname, isMobile]);
+    setSidebarOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const node = activeNavRef.current;
+    if (!node) return;
+
+    const reveal = () => {
+      const nav = node.closest('nav');
+      if (nav instanceof HTMLElement) {
+        const nodeRect = node.getBoundingClientRect();
+        const navRect = nav.getBoundingClientRect();
+        const offset = nodeRect.top - navRect.top - (navRect.height / 2 - nodeRect.height / 2);
+        nav.scrollTo({ top: nav.scrollTop + offset, behavior: 'smooth' });
+      } else {
+        node.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      }
+      if (sidebarOpen) {
+        node.focus({ preventScroll: true });
+      }
+    };
+
+    const frame = window.requestAnimationFrame(reveal);
+    const timer = window.setTimeout(reveal, sidebarOpen ? 320 : 0);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [pathname, sidebarOpen]);
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
   const role = user?.role as NavigationRole | undefined;
+  const isCashier = pathname === '/dashboard/cashier';
+  const { chrome, setChrome } = useCashierChrome();
+  const cashierPhone = isCashier && chrome === 'phone';
   const allowedNavigation = navigation.filter(item => !item.roles || (role ? item.roles.includes(role) : false));
   const mobileNavigation = allowedNavigation.filter(item =>
-    ['/dashboard', '/dashboard/items', '/dashboard/bookings', '/dashboard/rentals', '/dashboard/customers'].includes(item.href)
+    ['/dashboard/cashier', '/dashboard/bookings', '/dashboard/rentals', '/dashboard/items', '/dashboard/sales'].includes(item.href)
   );
-  const activePage = navigation.find(item =>
-    item.href === pathname || (item.href !== '/dashboard' && pathname?.startsWith(item.href))
-  );
+  const activePage = navigation.find((item) => isNavActive(item.href, pathname));
 
   return (
-    <div className="min-h-screen bg-transparent">
-      {/* ── Mobile drawer overlay ─────────────────────────────────── */}
+    <div className={clsx(isCashier ? 'h-dvh overflow-hidden bg-transparent' : 'min-h-screen bg-transparent')}>
+      {/* ── Drawer overlay (mobile always; cashier also on tablet) ── */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden animate-fade-in"
+          className={clsx(
+            'fixed inset-0 z-40 bg-black/40 backdrop-blur-sm animate-fade-in',
+            !isCashier && 'md:hidden'
+          )}
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -125,7 +240,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         className={clsx(
           'fixed inset-y-0 left-0 z-50 flex w-72 flex-col',
           'glass-panel-strong',
-          'transform transition-transform duration-300 ease-in-out md:translate-x-0',
+          'transform transition-transform duration-300 ease-in-out',
+          !isCashier && 'md:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -142,9 +258,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             />
           </Link>
 
-          {/* Close on mobile */}
           <button
-            className="ml-auto text-slate-500 hover:text-slate-900 md:hidden touch-manipulation"
+            className={clsx(
+              'ml-auto text-slate-500 hover:text-slate-900 touch-manipulation min-h-11 min-w-11 flex items-center justify-center',
+              !isCashier && 'md:hidden'
+            )}
+            aria-label="Close menu"
             onClick={() => setSidebarOpen(false)}
           >
             <X className="h-5 w-5" />
@@ -166,17 +285,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 )}
 
                 {items.map((item) => {
-                  const isActive = item.href === pathname || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+                  const isActive = isNavActive(item.href, pathname);
                   return (
-                    <Link
+                    <SidebarLink
                       key={item.name}
                       href={item.href}
-                      onClick={() => setSidebarOpen(false)}
+                      isActive={isActive}
+                      innerRef={isActive ? activeNavRef : undefined}
+                      onNavigate={() => setSidebarOpen(false)}
+                      data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                       className={clsx(
                         'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation',
                         isActive
-                          ? 'bg-white/70 text-slate-900 ring-1 ring-black/5 shadow-sm'
-                          : 'text-slate-600 hover:bg-white/40 hover:text-slate-900'
+                          ? 'bg-indigo-50 text-indigo-950'
+                          : 'text-slate-600 hover:bg-indigo-50/70 hover:text-slate-900'
                       )}
                     >
                       <item.icon
@@ -186,7 +308,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         )}
                       />
                       {item.name}
-                    </Link>
+                    </SidebarLink>
                   );
                 })}
               </div>
@@ -196,31 +318,107 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </aside>
 
       {/* ── Main area ─────────────────────────────────────────────── */}
-      <div className="md:pl-72">
+      <div className={clsx(!isCashier && 'md:pl-72', isCashier && 'flex h-dvh flex-col')}>
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b border-black/5 bg-white/40 px-4 backdrop-blur-xl sm:px-6">
-          <div className="flex items-center gap-3">
-            {/* Hamburger */}
+        <header className="app-topbar sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white px-3 sm:gap-3 sm:px-6 landscape:h-11 landscape:px-3">
+          <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden -ml-1 flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 hover:bg-white/50 touch-manipulation"
+              aria-label="Open menu"
+              data-testid="open-nav"
+              className={clsx(
+                '-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-indigo-50 touch-manipulation landscape:h-9 landscape:w-9',
+                !isCashier && 'md:hidden'
+              )}
             >
               <Menu className="h-5 w-5" />
             </button>
 
-            {/* Breadcrumb-style current page label */}
             {activePage && (
-              <span className="text-sm font-semibold text-slate-800">
+              <span className={clsx('truncate text-sm font-semibold text-slate-800', isCashier && 'hidden sm:inline landscape:hidden xl:landscape:inline')}>
                 {activePage.name}
               </span>
             )}
           </div>
 
-          {/* Right side */}
+          {isCashier && (
+            <div className="flex shrink-0 rounded-full bg-white p-0.5 ring-1 ring-black/10">
+              <button
+                type="button"
+                onClick={() => setChrome('phone')}
+                aria-label="Phone"
+                className={clsx(
+                  'flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-semibold touch-manipulation sm:h-9 sm:px-2.5 landscape:h-8',
+                  chrome === 'phone' ? 'bg-slate-900 text-white' : 'text-slate-600'
+                )}
+              >
+                <Smartphone className="h-3.5 w-3.5" />
+                <span className="hidden xl:inline">Phone</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChrome('counter')}
+                aria-label="Counter"
+                className={clsx(
+                  'flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-semibold touch-manipulation sm:h-9 sm:px-2.5 landscape:h-8',
+                  chrome === 'counter' ? 'bg-slate-900 text-white' : 'text-slate-600'
+                )}
+              >
+                <Monitor className="h-3.5 w-3.5" />
+                <span className="hidden xl:inline">Counter</span>
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
+            {(user?.role === 'admin' || allowedBranches.length > 1) && (
+              <label className="sr-only" htmlFor="branch-switcher">Current shop</label>
+            )}
+            {(user?.role === 'admin' || allowedBranches.length > 1) ? (
+              <div className="flex items-center gap-2">
+                <span
+                  className={clsx(
+                    'hidden h-2.5 w-2.5 rounded-full sm:block',
+                    viewingAll
+                      ? 'bg-slate-400'
+                      : branchAccent(currentBranch?.code) === 'emerald'
+                        ? 'bg-emerald-500'
+                        : 'bg-indigo-500'
+                  )}
+                />
+                <div className="w-28 sm:w-36 landscape:w-32 xl:w-48">
+                  <Select
+                    id="branch-switcher"
+                    size="sm"
+                    searchable={false}
+                    clearable={false}
+                    value={viewingAll ? ALL_BRANCHES_ID : (currentBranchId || '')}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setCurrentBranchId(next === ALL_BRANCHES_ID ? null : next);
+                    }}
+                    options={[
+                      ...(user?.role === 'admin' ? [{ value: ALL_BRANCHES_ID, label: 'All branches' }] : []),
+                      ...allowedBranches.map((branch) => ({ value: branch.id, label: branch.name })),
+                    ]}
+                    searchPlaceholder="Shop"
+                    emptyMessage="No shops"
+                  />
+                </div>
+              </div>
+            ) : currentBranch ? (
+              <div className="flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 ring-1 ring-black/10">
+                <span className={clsx(
+                  'h-2.5 w-2.5 rounded-full',
+                  branchAccent(currentBranch.code) === 'emerald' ? 'bg-emerald-500' : 'bg-indigo-500'
+                )} />
+                {currentBranch.name}
+              </div>
+            ) : null}
+
             <HeadlessMenu as="div" className="relative">
               <MenuButton
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-b from-indigo-500 to-indigo-600 text-xs font-bold text-white shrink-0 shadow-sm shadow-indigo-500/20 ring-1 ring-black/5 hover:shadow-md transition touch-manipulation"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-b from-indigo-500 to-indigo-600 text-xs font-bold text-white shrink-0 shadow-sm shadow-indigo-500/20 ring-1 ring-black/5 hover:shadow-md transition touch-manipulation landscape:h-8 landscape:w-8"
                 aria-label="Open user menu"
               >
                 {initials}
@@ -261,29 +459,39 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="p-4 pb-24 sm:p-6 sm:pb-24 md:pb-8 md:p-6 lg:p-8">
+        <main
+          key={viewingAll ? ALL_BRANCHES_ID : (currentBranchId || 'shop')}
+          className={clsx(
+            isCashier
+              ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-0'
+              : 'p-4 pb-24 sm:p-6 sm:pb-24 md:pb-8 md:p-6 lg:p-8'
+          )}
+        >
           {children}
         </main>
       </div>
 
-      {/* ── Mobile bottom nav ───────────────────────────────────── */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white/45 px-2 pb-safe pt-1 backdrop-blur-xl md:hidden">
+      {/* ── Mobile bottom nav. Phone cashier keeps it so staff can leave POS. ─ */}
+      <nav className={clsx(
+        'app-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white px-2 pb-safe pt-1 md:hidden transition-transform duration-200',
+        isCashier && !cashierPhone && 'hidden'
+      )}>
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
           {mobileNavigation.map((item) => {
-            const isActive = item.href === pathname || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+            const isActive = isNavActive(item.href, pathname);
             return (
-              <Link
+              <SidebarLink
                 key={`mobile-${item.name}`}
                 href={item.href}
+                isActive={isActive}
                 className={clsx(
                   'flex min-h-[56px] flex-col items-center justify-center rounded-lg px-1 py-1.5 text-[11px] font-medium transition-colors',
-                  isActive ? 'text-indigo-700 bg-white/70 ring-1 ring-black/5' : 'text-slate-600 hover:bg-white/50'
+                  isActive ? 'text-indigo-700 bg-indigo-50' : 'text-slate-600 hover:bg-indigo-50/70'
                 )}
               >
                 <item.icon className={clsx('mb-0.5 h-4 w-4', isActive ? 'text-indigo-600' : 'text-slate-500')} />
                 <span className="truncate max-w-full">{item.name}</span>
-              </Link>
+              </SidebarLink>
             );
           })}
         </div>

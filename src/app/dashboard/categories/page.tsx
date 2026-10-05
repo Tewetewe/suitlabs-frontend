@@ -1,16 +1,17 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/lib/api';
 import { Category } from '@/types';
-import { Plus, Edit, Trash2, Settings, Folder, FolderOpen, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Settings, Folder, FolderOpen } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { PageShell } from '@/components/ui/PageShell';
-import { FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, SkeletonRow } from '@/components/ui/DataDisplay';
+import SimpleModal from '@/components/modals/SimpleModal';
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -82,10 +83,6 @@ export default function CategoriesPage() {
       newExpanded.add(categoryId);
     }
     setExpandedCategories(newExpanded);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
   };
 
   const handleCreateCategory = async (e: React.FormEvent) => {
@@ -420,79 +417,65 @@ export default function CategoriesPage() {
 
     return (
       <div key={category.id}>
-        <Card className="mb-2">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between" style={{ paddingLeft }}>
-              <div className="flex items-center flex-1">
-                {hasSubcategories && (
-                  <button
-                    onClick={() => toggleCategory(category.id)}
-                    className="mr-2 p-1 hover:bg-gray-100 rounded"
-                  >
-                    {isExpanded ? (
-                      <FolderOpen className="h-4 w-4 text-blue-600" />
-                    ) : (
-                      <Folder className="h-4 w-4 text-gray-600" />
-                    )}
-                  </button>
-                )}
-                {!hasSubcategories && (
-                  <div className="mr-2 p-1">
-                    <div className="h-4 w-4"></div>
-                  </div>
-                )}
-                
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-gray-900">{category.name}</h3>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      category.is_active 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {category.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                    {hasSubcategories && (
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {category.subcategories!.length} subcategories
-                      </span>
-                    )}
-                  </div>
-                  {category.description && (
-                    <p className="text-sm text-gray-600 mt-1">{category.description}</p>
+        <Card padding="sm" className="mb-1">
+          <CardContent className="flex items-center gap-2" style={{ paddingLeft }}>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center">
+              {hasSubcategories ? (
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(category.id)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100"
+                  aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                >
+                  {isExpanded ? (
+                    <FolderOpen className="h-4 w-4 text-indigo-600" />
+                  ) : (
+                    <Folder className="h-4 w-4 text-slate-500" />
                   )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Created: {formatDate(category.created_at)}
-                  </p>
-                </div>
+                </button>
+              ) : null}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-slate-900">{category.name}</span>
+                {!category.is_active && <Badge variant="danger">Inactive</Badge>}
               </div>
-              
-              <div className="flex gap-2 ml-4">
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => openEditModal(category)}
-                  title="Edit category"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => openDeleteModal(category)}
-                  title="Delete category"
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+              {(category.description || hasSubcategories) && (
+                <p className="mt-0.5 truncate text-sm text-slate-500">
+                  {[
+                    category.description,
+                    hasSubcategories ? `${category.subcategories!.length} sub` : '',
+                  ].filter(Boolean).join(' · ')}
+                </p>
+              )}
+            </div>
+
+            <div className="flex shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => openEditModal(category)}
+                title="Edit category"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => openDeleteModal(category)}
+                title="Delete category"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
           </CardContent>
         </Card>
-        
+
         {hasSubcategories && isExpanded && (
-          <div className="ml-4">
-            {category.subcategories!.map(subcategory => 
+          <div className="ml-3">
+            {category.subcategories!.map(subcategory =>
               renderCategory(subcategory, level + 1)
             )}
           </div>
@@ -545,7 +528,7 @@ export default function CategoriesPage() {
   void useMemo(() => countActiveCategories(categories), [categories, countActiveCategories]);
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Categories"
         subtitle="Organize your inventory with categories and subcategories"
@@ -591,244 +574,123 @@ export default function CategoriesPage() {
           )}
         </div>
 
+        <SimpleModal
+          isOpen={showAddModal}
+          title="Add category"
+          onClose={closeAddModal}
+          size="md"
+          footer={
+            <>
+              <Button type="button" variant="ghost" onClick={closeAddModal} disabled={createLoading}>Cancel</Button>
+              <Button type="submit" form="add-category-form" loading={createLoading} disabled={!formData.name.trim()}>Create</Button>
+            </>
+          }
+        >
+          <form id="add-category-form" onSubmit={handleCreateCategory} className="space-y-4">
+            <Input
+              label="Name"
+              required
+              value={formData.name}
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                if (errors.name) setErrors((prev) => ({ ...prev, name: '' }));
+              }}
+              placeholder="e.g. Suits, Accessories"
+              error={errors.name}
+            />
+            <Textarea
+              label="Description"
+              rows={3}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Optional"
+            />
+            <Select
+              label="Parent category"
+              value={formData.parent_id}
+              onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
+              searchPlaceholder="Root category"
+              emptyMessage="No categories"
+              helperText="Leave empty for a root category."
+              options={[
+                { value: '', label: 'Root category' },
+                ...flattenCategories(categories).map((category) => ({
+                  value: category.id,
+                  label: category.name,
+                })),
+              ]}
+            />
+          </form>
+        </SimpleModal>
 
-        {/* Add Category Modal */}
-        {showAddModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b">
-                <h2 className="text-lg font-semibold text-gray-900">Add New Category</h2>
-                <button
-                  onClick={closeAddModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              
-              <form onSubmit={handleCreateCategory} className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category Name *
-                  </label>
-                  <Input
-                    required
-                    value={formData.name}
-                    onChange={(e) => {
-                      setFormData({ ...formData, name: e.target.value });
-                      if (errors.name) {
-                        setErrors(prev => ({ ...prev, name: '' }));
-                      }
-                    }}
-                    placeholder="e.g., Electronics, Clothing, Books"
-                    error={errors.name}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                    rows={3}
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Optional description for this category..."
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Parent Category
-                  </label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                    value={formData.parent_id}
-                    onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
-                  >
-                    <option value="">Root Category (No Parent)</option>
-                    {flattenCategories(categories).map(category => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Leave empty to create a root category, or select a parent to create a subcategory
-                  </p>
-                </div>
-                
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={closeAddModal}
-                    disabled={createLoading}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={createLoading || !formData.name.trim()}
-                    className="flex-1"
-                  >
-                    {createLoading ? 'Creating...' : 'Create Category'}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        <SimpleModal
+          isOpen={showEditModal && Boolean(editingCategory)}
+          title="Edit category"
+          onClose={closeEditModal}
+          size="md"
+          footer={
+            <>
+              <Button type="button" variant="ghost" onClick={closeEditModal} disabled={editLoading}>Cancel</Button>
+              <Button type="submit" form="edit-category-form" loading={editLoading} disabled={!formData.name.trim()}>Save</Button>
+            </>
+          }
+        >
+          <form id="edit-category-form" onSubmit={handleEditCategory} className="space-y-4">
+            <Input
+              label="Name"
+              required
+              value={formData.name}
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                if (errors.name) setErrors((prev) => ({ ...prev, name: '' }));
+              }}
+              placeholder="e.g. Suits, Accessories"
+              error={errors.name}
+            />
+            <Textarea
+              label="Description"
+              rows={3}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Optional"
+            />
+            <Select
+              label="Parent category"
+              value={formData.parent_id}
+              onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
+              searchPlaceholder="Root category"
+              emptyMessage="No categories"
+              helperText="Leave empty to make this a root category."
+              options={[
+                { value: '', label: 'Root category' },
+                ...flattenCategories(categories)
+                  .filter((cat) => cat.id !== editingCategory?.id)
+                  .map((category) => ({
+                    value: category.id,
+                    label: category.name,
+                  })),
+              ]}
+            />
+          </form>
+        </SimpleModal>
 
-        {/* Edit Category Modal */}
-        {showEditModal && editingCategory && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b">
-                <h2 className="text-lg font-semibold text-gray-900">Edit Category</h2>
-                <button
-                  onClick={closeEditModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              
-              <form onSubmit={handleEditCategory} className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category Name *
-                  </label>
-                  <Input
-                    required
-                    value={formData.name}
-                    onChange={(e) => {
-                      setFormData({ ...formData, name: e.target.value });
-                      if (errors.name) {
-                        setErrors(prev => ({ ...prev, name: '' }));
-                      }
-                    }}
-                    placeholder="e.g., Electronics, Clothing, Books"
-                    error={errors.name}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                    rows={3}
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Optional description for this category..."
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Parent Category
-                  </label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                    value={formData.parent_id}
-                    onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
-                  >
-                    <option value="">Root Category (No Parent)</option>
-                    {flattenCategories(categories)
-                      .filter(cat => cat.id !== editingCategory.id) // Don't allow self as parent
-                      .map(category => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Leave empty to make this a root category, or select a parent to make it a subcategory
-                  </p>
-                </div>
-                
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={closeEditModal}
-                    disabled={editLoading}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={editLoading || !formData.name.trim()}
-                    className="flex-1"
-                  >
-                    {editLoading ? 'Updating...' : 'Update Category'}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Delete Category Modal */}
-        {showDeleteModal && deletingCategory && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-md w-full">
-              <div className="flex items-center justify-between p-6 border-b">
-                <h2 className="text-lg font-semibold text-gray-900">Delete Category</h2>
-                <button
-                  onClick={closeDeleteModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              
-              <div className="p-6">
-                <div className="flex items-center mb-4">
-                  <div className="flex-shrink-0">
-                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                      <Trash2 className="h-5 w-5 text-red-600" />
-                    </div>
-                  </div>
-                  <div className="ml-4">
-                    <h3 className="text-lg font-medium text-gray-900">
-                      Are you sure you want to delete &quot;{deletingCategory.name}&quot;?
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      This action cannot be undone. Any subcategories will also be affected.
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={closeDeleteModal}
-                    disabled={deleteLoading}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={handleDeleteCategory}
-                    disabled={deleteLoading}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    {deleteLoading ? 'Deleting...' : 'Delete Category'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <SimpleModal
+          isOpen={showDeleteModal && Boolean(deletingCategory)}
+          title="Delete category"
+          onClose={closeDeleteModal}
+          size="sm"
+          footer={
+            <>
+              <Button type="button" variant="ghost" onClick={closeDeleteModal} disabled={deleteLoading}>Cancel</Button>
+              <Button type="button" variant="danger" onClick={handleDeleteCategory} loading={deleteLoading}>Delete</Button>
+            </>
+          }
+        >
+          <p className="text-sm text-slate-600">
+            Remove <span className="font-medium text-slate-900">{deletingCategory?.name}</span>? Subcategories may also be affected. This cannot be undone.
+          </p>
+        </SimpleModal>
       </PageShell>
-    </DashboardLayout>
+    </>
   );
 }

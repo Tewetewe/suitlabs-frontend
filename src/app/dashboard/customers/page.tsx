@@ -1,47 +1,50 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
+import { PhoneInput } from '@/components/ui/PhoneInput';
+import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Customer, CustomerFilters, CreateCustomerRequest } from '@/types';
-import { Plus, Edit, Trash2, User, Mail, Phone } from 'lucide-react';
+import { Plus, Edit, Trash2, User } from 'lucide-react';
 import GenericDeleteConfirmModal from '@/components/modals/GenericDeleteConfirmModal';
 import EditCustomerModal from '@/components/modals/EditCustomerModal';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, Pagination, SkeletonCard } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import SimpleModal from '@/components/modals/SimpleModal';
+import { useBranch } from '@/contexts/BranchContext';
+import { CUSTOMER_LANGUAGE_OPTIONS, customerLanguageLabel } from '@/lib/select-options';
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<CustomerFilters>({});
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 400);
-  const [total, setTotal] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage] = useState(6); // Show 6 customers per page
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
 
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [formData, setFormData] = useState<CreateCustomerRequest>({
+  const emptyForm: CreateCustomerRequest = {
     email: '',
     first_name: '',
     last_name: '',
     phone: '',
+    instagram: '',
+    tiktok: '',
     address: '',
-    notes: ''
-  });
+    notes: '',
+    language: 'id',
+  };
+  const [formData, setFormData] = useState<CreateCustomerRequest>(emptyForm);
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { currentBranch, viewingAll } = useBranch();
   const { success, error } = useToast();
 
   // Don't automatically redirect - let user decide
@@ -51,49 +54,49 @@ export default function CustomersPage() {
     }
   }, [isAuthenticated, authLoading]);
 
-  const loadCustomers = useCallback(async () => {
-    if (!isAuthenticated) return;
-    
+  const loadCustomersPage = useCallback(async (page: number) => {
+    if (!isAuthenticated) return { items: [], hasMore: false, total: 0 };
+
     try {
-      setLoading(true);
-      const paginationFilters = {
+      const response = await apiClient.getCustomers({
         ...filters,
-        page: currentPage,
-        limit: itemsPerPage
-      };
-      const response = await apiClient.getCustomers(paginationFilters);
-      
+        page,
+        limit: LIST_PAGE_SIZE,
+      });
+
       if (!response?.success) {
         throw new Error('API request failed');
       }
 
       const nextCustomers = response.data?.data?.customers || [];
-      setCustomers(nextCustomers);
-      setTotal(response.data?.pagination?.total || 0);
-      setTotalPages(response.data?.pagination?.total_pages || 1);
+      const pagination = response.data?.pagination;
+      return {
+        items: nextCustomers,
+        hasMore: hasNextPage(pagination, nextCustomers.length),
+        total: pagination?.total || 0,
+      };
     } catch (err) {
       console.error('Failed to load customers:', err);
       error(
         'Failed to Load Customers',
         'Unable to fetch customer data. Please try again.'
       );
-      setCustomers([]);
-      setTotal(0);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
+      return { items: [], hasMore: false, total: 0 };
     }
-  }, [filters, currentPage, itemsPerPage, isAuthenticated, error]);
+  }, [filters, isAuthenticated, error]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadCustomers();
-    }
-  }, [loadCustomers, isAuthenticated]);
+  const {
+    items: customers,
+    loading,
+    loadingMore,
+    hasMore,
+    total,
+    reload,
+    sentinelRef,
+  } = useInfiniteList(loadCustomersPage);
 
   useEffect(() => {
     setFilters(prev => ({ ...prev, search: debouncedSearch || undefined }));
-    setCurrentPage(1);
   }, [debouncedSearch]);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
@@ -102,7 +105,11 @@ export default function CustomersPage() {
 
     try {
       setCreateLoading(true);
-      await apiClient.createCustomer(formData);
+      const email = formData.email?.trim();
+      await apiClient.createCustomer({
+        ...formData,
+        email: email || undefined,
+      });
       
       // Show success toast
       success(
@@ -111,18 +118,11 @@ export default function CustomersPage() {
       );
       
       // Reset form and close modal
-      setFormData({
-        email: '',
-        first_name: '',
-        last_name: '',
-        phone: '',
-        address: '',
-        notes: ''
-      });
+      setFormData(emptyForm);
       setShowCreateModal(false);
       
       // Reload customers
-      await loadCustomers();
+      await reload();
     } catch (err) {
       console.error('Failed to create customer:', err);
       error(
@@ -153,7 +153,7 @@ export default function CustomersPage() {
       );
       
       // Reload customers
-      await loadCustomers();
+      await reload();
     } catch (err) {
       console.error('Failed to update customer:', err);
       error(
@@ -185,7 +185,7 @@ export default function CustomersPage() {
       );
       
       setDeletingCustomer(null);
-      await loadCustomers();
+      await reload();
     } catch (err) {
       console.error('Failed to delete customer:', err);
       error(
@@ -203,21 +203,14 @@ export default function CustomersPage() {
 
   const closeCreateModal = () => {
     setShowCreateModal(false);
-    setFormData({
-      email: '',
-      first_name: '',
-      last_name: '',
-      phone: '',
-      address: '',
-      notes: ''
-    });
+    setFormData(emptyForm);
   };
 
   // Show loading while checking authentication
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-gray-500">Loading...</div>
+        <div className="animate-pulse text-slate-500">Loading...</div>
       </div>
     );
   }
@@ -228,10 +221,14 @@ export default function CustomersPage() {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <PageShell
         title="Customers"
-        subtitle="Manage your customer database"
+        subtitle={
+          viewingAll
+            ? 'Shared directory — Origin Branch shows which shop they first registered at'
+            : `New customers belong to ${currentBranch?.name || 'this shop'}. Origin Branch is visible on every record.`
+        }
         action={
           <Button onClick={openCreateModal}>
             <Plus className="h-4 w-4" />
@@ -245,89 +242,81 @@ export default function CustomersPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
-          <select
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          <Select
+            searchable={false}
             value={filters.is_active?.toString() || ''}
             onChange={(e) => {
               setFilters({ ...filters, is_active: e.target.value ? e.target.value === 'true' : undefined });
-              setCurrentPage(1);
             }}
-          >
-            <option value="">All Customers</option>
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
+            options={[
+              { value: '', label: 'All Customers' },
+              { value: 'true', label: 'Active' },
+              { value: 'false', label: 'Inactive' },
+            ]}
+          />
         </FilterBar>
 
         {/* Customers List */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-2">
           {loading ? (
-            Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
+            Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
           ) : customers.length === 0 ? (
-            <div className="col-span-full">
-              <EmptyState
-                icon={<User className="h-10 w-10" />}
-                title="No customers found"
-                description={filters.search || filters.is_active !== undefined ? 'Try adjusting your filters' : 'Get started by adding your first customer'}
-                action={<Button onClick={openCreateModal}><Plus className="h-4 w-4" /> Add Customer</Button>}
-              />
-            </div>
+            <EmptyState
+              icon={<User className="h-10 w-10" />}
+              title="No customers found"
+              description={filters.search || filters.is_active !== undefined ? 'Try adjusting your filters' : 'Get started by adding your first customer'}
+              action={<Button onClick={openCreateModal}><Plus className="h-4 w-4" /> Add Customer</Button>}
+            />
           ) : (
-            customers.map((customer) => (
-              <Card key={customer.id}>
-                <CardContent>
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center">
-                      <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                        <User className="h-6 w-6 text-blue-600" />
-                      </div>
-                      <div className="ml-3">
-                        <h3 className="text-sm font-medium text-gray-900">
+            customers.map((customer) => {
+              const meta = [
+                customer.phone,
+                customer.email,
+                customer.instagram ? `IG ${customer.instagram}` : '',
+                customer.tiktok ? `TikTok ${customer.tiktok}` : '',
+                customer.branch?.name,
+              ].filter(Boolean).join(' · ');
+
+              return (
+                <Card key={customer.id} padding="sm" className="relative z-0 [&:has(details[open])]:z-30">
+                  <CardContent className="flex items-start gap-3">
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => handleEditCustomer(customer)}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-slate-900">
                           {customer.first_name} {customer.last_name}
-                        </h3>
-                        <Badge variant={customer.is_active ? 'success' : 'danger'}>
-                          {customer.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                        {!customer.is_active && <Badge variant="danger">Inactive</Badge>}
+                        <Badge variant={customer.language === 'en' ? 'info' : 'default'}>
+                          {customerLanguageLabel(customer.language)}
                         </Badge>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Mail className="h-4 w-4 mr-2" />
-                      <span className="truncate">{customer.email || '-'}</span>
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Phone className="h-4 w-4 mr-2" />
-                      <span>{customer.phone}</span>
-                    </div>
-                    {customer.address && (
-                      <div className="text-sm text-gray-600">
-                        <p className="truncate">{customer.address}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex justify-between pt-4 mt-4 border-t border-gray-200">
-                    <Button variant="ghost" size="sm" onClick={() => handleEditCustomer(customer)}>
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteCustomer(customer)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                      {meta && <p className="mt-0.5 truncate text-sm text-slate-500">{meta}</p>}
+                    </button>
+                    <OverflowMenu>
+                      <OverflowMenuItem icon={<Edit className="h-4 w-4 text-slate-400" />} onClick={() => handleEditCustomer(customer)}>
+                        Edit
+                      </OverflowMenuItem>
+                      <OverflowMenuItem danger icon={<Trash2 className="h-4 w-4" />} onClick={() => handleDeleteCustomer(customer)}>
+                        Delete
+                      </OverflowMenuItem>
+                    </OverflowMenu>
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
 
-        <Pagination
-          page={currentPage}
-          totalPages={totalPages}
+        <InfiniteScrollSentinel
+          sentinelRef={sentinelRef}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          loaded={customers.length}
           total={total}
-          perPage={itemsPerPage}
-          onPageChange={setCurrentPage}
         />
 
         {/* Create Customer Modal */}
@@ -368,20 +357,40 @@ export default function CustomersPage() {
             <Input
               label="Email"
               type="email"
-              required
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="john.doe@example.com"
             />
 
-            <Input
+            <PhoneInput
               label="Phone"
-              type="tel"
               required
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="08xx-xxxx-xxxx"
+              onChange={(phone) => setFormData({ ...formData, phone })}
             />
+
+            <Select
+              searchable={false}
+              label="Language"
+              value={formData.language || 'id'}
+              onChange={(e) => setFormData({ ...formData, language: e.target.value as 'id' | 'en' })}
+              options={CUSTOMER_LANGUAGE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Instagram (optional)"
+                value={formData.instagram || ''}
+                onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
+                placeholder="@username"
+              />
+              <Input
+                label="TikTok (optional)"
+                value={formData.tiktok || ''}
+                onChange={(e) => setFormData({ ...formData, tiktok: e.target.value })}
+                placeholder="@username"
+              />
+            </div>
 
             <Input
               label="Address (optional)"
@@ -390,28 +399,14 @@ export default function CustomersPage() {
               placeholder="Street, city"
             />
 
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                Notes (optional)
-              </label>
-              <textarea
-                rows={3}
-                value={formData.notes || ''}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Anything staff should know…"
-                className={[
-                  'block w-full rounded-xl border text-slate-900',
-                  'glass-control',
-                  'placeholder:text-slate-400 text-sm',
-                  'px-3 py-2 touch-manipulation resize-y',
-                  'border-black/10 focus:border-indigo-500/60 focus:ring-indigo-500/40',
-                  'focus:outline-none focus:ring-1 transition-colors',
-                ].join(' ')}
-              />
-              <p className="mt-1.5 text-xs text-slate-500">
-                Visible to staff only.
-              </p>
-            </div>
+            <Textarea
+              label="Notes (optional)"
+              rows={3}
+              value={formData.notes || ''}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Anything staff should know…"
+              helperText="Visible to staff only."
+            />
           </form>
         </SimpleModal>
       </PageShell>
@@ -434,6 +429,6 @@ export default function CustomersPage() {
         itemDetails={deletingCustomer ? deletingCustomer.email : undefined}
         loading={deleteLoading}
       />
-    </DashboardLayout>
+    </>
   );
 }

@@ -6,6 +6,7 @@ import {
   ItemPaginatedResponse,
   RentalPaginatedResponse,
   BookingPaginatedResponse,
+  SalePaginatedResponse,
   CreateResponse,
   UpdateResponse,
   DeleteResponse,
@@ -14,7 +15,21 @@ import {
   Customer, 
   Booking, 
   Rental, 
+  PickupPrep,
+  PickupPrepDay,
+  PickupPrepItemCheck,
+  ReturnCheck,
+  ReturnCheckDay,
+  ReturnCheckItemInput,
+  TransactionFeeRule,
+  TransactionFeeRuleInput,
+  PotBalances,
+  PotTransfer,
+  DailyClose,
+  DailyCloseSummary,
+  TipMonth,
   Category,
+  ItemFacets,
   PackagePricing,
   Discount,
   PaginationMeta,
@@ -26,15 +41,57 @@ import {
   ItemFilters,
   BookingFilters,
   CustomerFilters,
+  Sale,
+  SaleFilters,
+  CreateSaleRequest,
+  Expense,
+  ExpenseFilters,
+  ExpensePaginatedResponse,
+  ExpenseSummary,
+  CreateExpenseRequest,
+  UpdateExpenseRequest,
+  ProfitAndLossReport,
+  RecurringExpense,
+  CreateRecurringExpenseRequest,
+  InventoryAssetReport,
+  AssetReport,
+  FixedAsset,
+  CreateFixedAssetRequest,
+  AccountingReport,
+  OpeningBalance,
+  ClosedMonth,
+  Dividend,
+  Payable,
+  Loan,
   InvoiceData,
   DiscountApplication,
   DiscountStats,
   DiscountSummary,
   MaintenanceItem,
   FinancialGroupBy,
-  FinancialReportRow
+  FinancialReportRow,
+  OwnerAnalytics,
+  GoogleSheetsStatus,
+  GoogleSyncJobType,
+  GoogleSyncRun,
+  ItemSyncResult,
+  Branch,
+  WAReminder,
+  WAReminderStatusInfo,
+  WAReminderRunResult,
+  WAMessageLog,
+  WAMessageKindFilter,
+  FeeWaiver,
+  LateFeePreview,
+  DepositAgreementView,
+  PaymentProof,
+  PaymentProofKind,
+  ReceiptKind,
+  WAReceipt,
 } from '@/types';
 import { emitAPIStatus } from '@/lib/api-status';
+import { unwrapNamedRecord } from '@/lib/api-utils';
+import { headerBranchId } from '@/lib/branch-scope';
 
 // Backend category structure (uses 'children' instead of 'subcategories')
 interface BackendCategory {
@@ -85,6 +142,10 @@ class APIClient {
       if (this.token) {
         config.headers.Authorization = `Bearer ${this.token}`;
       }
+      const branchId = headerBranchId(config.method);
+      if (branchId) {
+        config.headers['X-Branch-Id'] = branchId;
+      }
       return config;
     });
 
@@ -105,8 +166,10 @@ class APIClient {
         if (error.response?.status === 401) {
           // Don't redirect if this IS the login request — let the login page
           // handle the error and display it to the user.
-          const isLoginRequest = error.config?.url?.includes('/auth/login');
-          if (!isLoginRequest) {
+          const url = typeof error.config?.url === 'string' ? error.config.url : '';
+          const isLoginRequest = url.includes('/auth/login');
+          const isPublicAgreement = url.includes('/public/deposit-agreements/');
+          if (!isLoginRequest && !isPublicAgreement) {
             this.clearToken();
             localStorage.removeItem('auth_token');
             if (typeof window !== 'undefined') {
@@ -153,6 +216,10 @@ class APIClient {
     throw new Error('Invalid response format');
   }
 
+  private unwrapItem(payload: Item | { item: Item }): Item {
+    return payload && typeof payload === 'object' && 'item' in payload ? payload.item : payload;
+  }
+
   // Helper method to handle paginated responses
   private handlePaginatedResponse<T>(response: { data: PaginatedResponse<T> }): PaginatedResponse<T> {
     const { data } = response;
@@ -195,6 +262,13 @@ class APIClient {
   }
 
   // Items
+  async getItemFacets(allBranches = false): Promise<ItemFacets> {
+    const response = await this.client.get<APIResponse<ItemFacets>>('/api/v1/items/facets', {
+      params: allBranches ? { all_branches: true } : undefined,
+    });
+    return response.data.data || { types: [], brands: [], colors: [], sizes: [], statuses: [], conditions: [] };
+  }
+
   async getItems(filters?: ItemFilters): Promise<ItemPaginatedResponse> {
     const params = new URLSearchParams();
     if (filters) {
@@ -231,6 +305,52 @@ class APIClient {
     await this.client.delete<DeleteResponse>(`/api/v1/items/${id}`);
   }
 
+  async getSales(filters?: SaleFilters): Promise<SalePaginatedResponse> {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') params.append(key, String(value));
+      });
+    }
+    const response = await this.client.get<SalePaginatedResponse>(`/api/v1/sales${params.toString() ? `?${params}` : ''}`);
+    return response.data;
+  }
+
+  async getSale(id: string): Promise<Sale> {
+    const response = await this.client.get<APIResponse<{ sale: Sale } | Sale>>(`/api/v1/sales/${id}`);
+    const payload = response.data.data as { sale?: Sale } | Sale;
+    if (payload && 'sale' in payload && payload.sale) return payload.sale;
+    return payload as Sale;
+  }
+
+  async createSale(sale: CreateSaleRequest): Promise<Sale> {
+    const response = await this.client.post<APIResponse<{ sale: Sale } | Sale>>('/api/v1/sales', sale);
+    const payload = response.data.data as { sale?: Sale } | Sale;
+    if (payload && 'sale' in payload && payload.sale) return payload.sale;
+    return payload as Sale;
+  }
+
+  /**
+   * A Sale from the barcode printed on its receipt.
+   *
+   * The receipt encodes the Sale number without its hyphens, and the backend
+   * strips the stored number the same way, so the scanner does not have to
+   * reproduce punctuation.
+   */
+  async getSaleByBarcode(code: string): Promise<Sale> {
+    const response = await this.client.get<APIResponse<{ sale: Sale }>>(
+      `/api/v1/sales/barcode/${encodeURIComponent(code)}`,
+    );
+    return response.data.data!.sale;
+  }
+
+  async cancelSale(id: string): Promise<Sale> {
+    const response = await this.client.put<APIResponse<{ sale: Sale } | Sale>>(`/api/v1/sales/${id}/cancel`);
+    const payload = response.data.data as { sale?: Sale } | Sale;
+    if (payload && 'sale' in payload && payload.sale) return payload.sale;
+    return payload as Sale;
+  }
+
   async getAvailableItems(): Promise<Item[]> {
     const response = await this.client.get<APIResponse<Item[]>>('/api/v1/items/available');
     return response.data.data!;
@@ -263,18 +383,26 @@ class APIClient {
 
 
   async searchByBarcode(barcode: string): Promise<Item> {
-    const response = await this.client.get<APIResponse<Item>>(`/api/v1/items/barcode?barcode=${barcode}`);
-    return response.data.data!;
+    const encoded = encodeURIComponent(barcode);
+    const response = await this.client.get<APIResponse<Item | { item: Item }>>(
+      `/api/v1/items/barcode?barcode=${encoded}`,
+    );
+    return this.unwrapItem(this.handleResponse<Item | { item: Item }>(response));
   }
 
   async getItemByCode(code: string): Promise<Item> {
     const encoded = encodeURIComponent(code);
-    const response = await this.client.get<APIResponse<Item>>(`/api/v1/items/code/${encoded}`);
-    return this.handleResponse<Item>(response);
+    const response = await this.client.get<APIResponse<Item | { item: Item }>>(`/api/v1/items/code/${encoded}`);
+    const payload = this.handleResponse<Item | { item: Item }>(response);
+    return payload && typeof payload === 'object' && 'item' in payload ? payload.item : payload as Item;
   }
 
-  async updateItemQuantity(id: string, quantity: number): Promise<Item> {
-    const response = await this.client.put<APIResponse<Item>>(`/api/v1/items/${id}/quantity`, { quantity });
+  async updateItemQuantity(
+    id: string,
+    quantity: number,
+    purchase?: { payment_method?: string; pot?: string; on_credit?: boolean },
+  ): Promise<Item> {
+    const response = await this.client.put<APIResponse<Item>>(`/api/v1/items/${id}/quantity`, { quantity, ...purchase });
     return this.handleResponse<Item>(response);
   }
 
@@ -288,14 +416,14 @@ class APIClient {
     return this.handleResponse<Item>(response);
   }
 
-  async sendToMaintenance(id: string, reason?: string): Promise<Item> {
-    const response = await this.client.put<APIResponse<Item>>(`/api/v1/items/${id}/maintenance`, { reason });
-    return this.handleResponse<Item>(response);
+  async sendToMaintenance(id: string, reason?: string, quantity = 1): Promise<Item> {
+    const response = await this.client.put<APIResponse<Item | { item: Item }>>(`/api/v1/items/${id}/maintenance`, { reason, quantity });
+    return this.unwrapItem(this.handleResponse<Item | { item: Item }>(response));
   }
 
-  async returnFromMaintenance(id: string): Promise<Item> {
-    const response = await this.client.put<APIResponse<Item>>(`/api/v1/items/${id}/maintenance/return`);
-    return this.handleResponse<Item>(response);
+  async returnFromMaintenance(id: string, quantity = 1): Promise<Item> {
+    const response = await this.client.put<APIResponse<Item | { item: Item }>>(`/api/v1/items/${id}/maintenance/return`, { quantity });
+    return this.unwrapItem(this.handleResponse<Item | { item: Item }>(response));
   }
 
   async addItemDiscount(id: string, discountPercentage: number): Promise<Item> {
@@ -317,15 +445,79 @@ class APIClient {
     return response.data.data!.image_url;
   }
 
-  async syncItemsFromCSVUpload(file: File): Promise<{ source: unknown; result: { created: number; updated: number; skipped: number; errors?: unknown[] } }> {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await this.client.post<APIResponse<{ source: unknown; result: { created: number; updated: number; skipped: number; errors?: unknown[] } }>>(
-      '/api/v1/items/sync-sheet/upload',
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+  async getGoogleSheetsStatus(): Promise<GoogleSheetsStatus> {
+    const response = await this.client.get<APIResponse<GoogleSheetsStatus>>('/api/v1/admin/google-sheets/status');
+    return this.handleResponse<GoogleSheetsStatus>(response);
+  }
+
+  async getGoogleSheetsRuns(jobType?: GoogleSyncJobType, limit = 20): Promise<GoogleSyncRun[]> {
+    const response = await this.client.get<APIResponse<{ runs: GoogleSyncRun[] }>>('/api/v1/admin/google-sheets/runs', {
+      params: { job_type: jobType, limit },
+    });
+    return response.data.data?.runs || [];
+  }
+
+  async syncItemsFromGoogleSheets(branchId?: string): Promise<{ result: ItemSyncResult; run: GoogleSyncRun }> {
+    const response = await this.client.post<APIResponse<{ result: ItemSyncResult; run: GoogleSyncRun }>>(
+      '/api/v1/admin/google-sheets/items/sync',
+      branchId ? { branch_id: branchId } : {}
     );
-    return response.data.data!;
+    return this.handleResponse<{ result: ItemSyncResult; run: GoogleSyncRun }>(response);
+  }
+
+  async retryGoogleSheetsBookingExport(runId: string): Promise<GoogleSyncRun> {
+    const response = await this.client.post<APIResponse<{ run: GoogleSyncRun }>>(
+      `/api/v1/admin/google-sheets/booking-exports/${runId}/retry`
+    );
+    return response.data.data!.run;
+  }
+
+  async getWAReminderStatus(): Promise<WAReminderStatusInfo> {
+    const response = await this.client.get<APIResponse<WAReminderStatusInfo>>('/api/v1/admin/wa-reminders/status');
+    return this.handleResponse<WAReminderStatusInfo>(response);
+  }
+
+  async getWAReminders(limit = 30): Promise<WAReminder[]> {
+    const response = await this.client.get<APIResponse<{ reminders: WAReminder[] }>>('/api/v1/admin/wa-reminders', {
+      params: { limit },
+    });
+    return response.data.data?.reminders || [];
+  }
+
+  /** Prices the Late Fee for a return now, or at the given ISO time. */
+  async previewLateFee(rentalId: string, at?: string): Promise<LateFeePreview> {
+    const response = await this.client.get<APIResponse<LateFeePreview>>(`/api/v1/rentals/${rentalId}/late-fee`, {
+      params: at ? { at } : undefined,
+    });
+    return this.handleResponse<LateFeePreview>(response);
+  }
+
+  async getFeeWaivers(rentalId: string): Promise<FeeWaiver[]> {
+    const response = await this.client.get<APIResponse<{ waivers: FeeWaiver[] }>>(`/api/v1/rentals/${rentalId}/fee-waivers`);
+    return response.data.data?.waivers || [];
+  }
+
+  /** Admin only: writes off a missing Item with no Sale. */
+  async waiveReplacementFee(rentalId: string, itemId: string, reason: string): Promise<FeeWaiver> {
+    const response = await this.client.post<APIResponse<{ waiver: FeeWaiver }>>(
+      `/api/v1/rentals/${rentalId}/items/${itemId}/waive-replacement`,
+      { reason },
+    );
+    return this.handleResponse<{ waiver: FeeWaiver }>(response).waiver;
+  }
+
+  async getWAMessages(
+    filter: { kind?: WAMessageKindFilter; status?: 'sent' | 'failed'; limit?: number } = {},
+  ): Promise<WAMessageLog[]> {
+    const response = await this.client.get<APIResponse<{ messages: WAMessageLog[] }>>('/api/v1/admin/wa-messages', {
+      params: { limit: filter.limit ?? 50, kind: filter.kind || undefined, status: filter.status || undefined },
+    });
+    return response.data.data?.messages || [];
+  }
+
+  async sendWARemindersNow(): Promise<WAReminderRunResult> {
+    const response = await this.client.post<APIResponse<WAReminderRunResult>>('/api/v1/admin/wa-reminders/send');
+    return this.handleResponse<WAReminderRunResult>(response);
   }
 
   async uploadIdentityCard(file: File): Promise<string> {
@@ -347,6 +539,10 @@ class APIClient {
   async generateItemBarcode(id: string): Promise<Item> {
     const response = await this.client.post<APIResponse<Item>>(`/api/v1/items/${id}/generate-barcode`);
     return this.handleResponse<Item>(response);
+  }
+
+  async cacheItemLabelImage(id: string, image: string): Promise<void> {
+    await this.client.post(`/api/v1/items/${id}/label-image`, { image });
   }
 
   async getItemsByType(type: string): Promise<Item[]> {
@@ -384,18 +580,18 @@ class APIClient {
   }
 
   async getCustomer(id: string): Promise<Customer> {
-    const response = await this.client.get<APIResponse<Customer>>(`/api/v1/customers/${id}`);
-    return response.data.data!;
+    const response = await this.client.get<APIResponse<{ customer: Customer } | Customer>>(`/api/v1/customers/${id}`);
+    return unwrapNamedRecord<Customer>(response.data.data, 'customer');
   }
 
   async createCustomer(customer: CreateCustomerRequest): Promise<Customer> {
-    const response = await this.client.post<CreateResponse<Customer>>('/api/v1/customers', customer);
-    return response.data.data;
+    const response = await this.client.post<CreateResponse<{ customer: Customer } | Customer>>('/api/v1/customers', customer);
+    return unwrapNamedRecord<Customer>(response.data.data, 'customer');
   }
 
   async updateCustomer(id: string, customer: Partial<CreateCustomerRequest>): Promise<Customer> {
-    const response = await this.client.put<UpdateResponse<Customer>>(`/api/v1/customers/${id}`, customer);
-    return response.data.data;
+    const response = await this.client.put<UpdateResponse<{ customer: Customer } | Customer>>(`/api/v1/customers/${id}`, customer);
+    return unwrapNamedRecord<Customer>(response.data.data, 'customer');
   }
 
   async deleteCustomer(id: string): Promise<void> {
@@ -403,8 +599,8 @@ class APIClient {
   }
 
   async findOrCreateCustomer(customerData: CreateCustomerRequest): Promise<Customer> {
-    const response = await this.client.post<APIResponse<Customer>>('/api/v1/customers/find-or-create', customerData);
-    return response.data.data!;
+    const response = await this.client.post<APIResponse<{ customer: Customer } | Customer>>('/api/v1/customers/find-or-create', customerData);
+    return unwrapNamedRecord<Customer>(response.data.data, 'customer');
   }
 
   async searchCustomers(query: string): Promise<Customer[]> {
@@ -419,8 +615,14 @@ class APIClient {
     const params = new URLSearchParams();
     if (email) params.append('email', email);
     if (phone) params.append('phone', phone);
-    const response = await this.client.get<APIResponse<Customer>>(`/api/v1/customers/find?${params}`);
-    return response.data.data || null;
+    const response = await this.client.get<APIResponse<{ customer?: Customer; can_create?: boolean } | Customer>>(`/api/v1/customers/find?${params}`);
+    const payload = response.data.data;
+    if (!payload) return null;
+    if (typeof payload === 'object' && 'can_create' in payload && !('customer' in payload && payload.customer)) {
+      return null;
+    }
+    const customer = unwrapNamedRecord<Customer>(payload, 'customer');
+    return customer?.id ? customer : null;
   }
 
   async getCustomerBookings(customerId: string): Promise<Booking[]> {
@@ -461,6 +663,13 @@ class APIClient {
 
   async getBooking(id: string): Promise<Booking> {
     const response = await this.client.get<APIResponse<Booking>>(`/api/v1/bookings/${id}`);
+    return response.data.data!;
+  }
+
+  async getBookingByInvoice(barcode: string): Promise<Booking> {
+    const response = await this.client.get<APIResponse<Booking>>(
+      `/api/v1/bookings/by-invoice?barcode=${encodeURIComponent(barcode)}`,
+    );
     return response.data.data!;
   }
 
@@ -514,12 +723,53 @@ class APIClient {
     return response.data.data?.data?.bookings || [];
   }
 
-  async addPayment(bookingId: string, amount: number, paymentMethod: string): Promise<Booking> {
+  async addPayment(
+    bookingId: string,
+    amount: number,
+    paymentMethod: string,
+    paidOn?: string,
+    paymentProofUrl?: string,
+    feeRuleId?: string,
+    pot?: string,
+  ): Promise<Booking> {
     const response = await this.client.put<APIResponse<Booking>>(`/api/v1/bookings/${bookingId}/payment`, {
       amount,
-      payment_method: paymentMethod
+      payment_method: paymentMethod,
+      fee_rule_id: feeRuleId || undefined,
+      pot: pot || undefined,
+      paid_on: paidOn,
+      payment_proof_url: paymentProofUrl,
     });
     return response.data.data!;
+  }
+
+  // uploadProofFile stores one receipt and returns its URL. Send that URL with
+  // the payment, the deposit, or the refund. Proof is optional everywhere.
+  async uploadProofFile(file: File, kind: PaymentProofKind, ownerId?: string): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('kind', kind);
+    if (ownerId) formData.append('owner_id', ownerId);
+    const response = await this.client.post<APIResponse<{ url: string }>>('/api/v1/upload/payment-proof', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data!.url;
+  }
+
+  /**
+   * Sends a rendered receipt image to the customer on WhatsApp. Staff or Admin
+   * trigger it by hand. `phone` is optional when the record has a customer.
+   */
+  async sendReceiptWhatsApp(kind: ReceiptKind, ownerId: string, image: File, phone?: string): Promise<WAReceipt> {
+    const formData = new FormData();
+    formData.append('file', image);
+    if (phone) formData.append('phone', phone);
+    const response = await this.client.post<APIResponse<{ receipt: WAReceipt }>>(
+      `/api/v1/receipts/${kind}/${ownerId}/whatsapp`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data.data!.receipt;
   }
 
   async uploadPaymentProof(bookingId: string, file: File): Promise<void> {
@@ -528,6 +778,39 @@ class APIClient {
     await this.client.post(`/api/v1/bookings/${bookingId}/payment-proof`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
+  }
+
+  async attachPaymentProof(bookingId: string, paymentProofUrl: string): Promise<Booking> {
+    const response = await this.client.put<APIResponse<{ booking: Booking }>>(
+      `/api/v1/bookings/${bookingId}/payment-proof`,
+      { payment_proof_url: paymentProofUrl },
+    );
+    return response.data.data!.booking;
+  }
+
+  async clearPaymentProof(bookingId: string): Promise<Booking> {
+    const response = await this.client.delete<APIResponse<{ booking: Booking }>>(
+      `/api/v1/bookings/${bookingId}/payment-proof`,
+    );
+    return response.data.data!.booking;
+  }
+
+  async getBookingPaymentProofs(bookingId: string): Promise<PaymentProof[]> {
+    const response = await this.client.get<APIResponse<{ proofs: PaymentProof[] }>>(
+      `/api/v1/bookings/${bookingId}/payment-proofs`,
+    );
+    return response.data.data?.proofs || [];
+  }
+
+  async getRentalPaymentProofs(rentalId: string): Promise<PaymentProof[]> {
+    const response = await this.client.get<APIResponse<{ proofs: PaymentProof[] }>>(
+      `/api/v1/rentals/${rentalId}/payment-proofs`,
+    );
+    return response.data.data?.proofs || [];
+  }
+
+  async deletePaymentProof(proofId: string): Promise<void> {
+    await this.client.delete(`/api/v1/payment-proofs/${proofId}`);
   }
 
   async submitForApproval(bookingId: string): Promise<Booking> {
@@ -546,7 +829,20 @@ class APIClient {
   }
 
   // Rentals
-  async getRentals(params?: { page?: number; limit?: number; status?: string; user_id?: string }): Promise<RentalPaginatedResponse> {
+  async getRentals(params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    user_id?: string;
+    search?: string;
+    deposit_refunded_from?: string;
+    deposit_refunded_to?: string;
+    /**
+     * 'held' is money owed on a suit that is still out, 'released' has gone
+     * back, 'unreleased' is a completed rental whose deposit never went back.
+     */
+    deposit_state?: 'held' | 'awaiting_check' | 'released' | 'auto_released';
+  }): Promise<RentalPaginatedResponse> {
     const search = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -567,12 +863,8 @@ class APIClient {
     return response.data.data!;
   }
 
-  async createRentalFromBooking(bookingId: string, userId: string): Promise<Rental> {
-    const response = await this.client.post<APIResponse<Rental>>(`/api/v1/rentals/from-booking/${bookingId}`, {}, {
-      headers: {
-        'X-User-ID': userId
-      }
-    });
+  async createRentalFromBooking(bookingId: string): Promise<Rental> {
+    const response = await this.client.post<APIResponse<Rental>>(`/api/v1/rentals/from-booking/${bookingId}`, {});
     return response.data.data!;
   }
 
@@ -581,22 +873,266 @@ class APIClient {
     return response.data.data!;
   }
 
-  async activateRental(rentalId: string, userId: string, identityCardUrl?: string): Promise<Rental> {
+  async activateRental(
+    rentalId: string,
+    userId: string,
+    identityCardUrl?: string,
+    deposit?: {
+      deposit_payment_method?: string;
+      deposit_bank_name?: string;
+      deposit_account_name?: string;
+      deposit_account_number?: string;
+    },
+    remainingPaymentMethod?: string,
+    proofs?: {
+      deposit_proof_url?: string;
+      remaining_payment_proof_url?: string;
+    },
+    remainingFeeRuleId?: string,
+    pots?: { remaining_pot?: string; deposit_pot?: string },
+  ): Promise<Rental> {
     const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/activate`, {
       user_id: userId,
-      identity_card_url: identityCardUrl
+      identity_card_url: identityCardUrl,
+      remaining_payment_method: remainingPaymentMethod,
+      remaining_fee_rule_id: remainingFeeRuleId || undefined,
+      ...pots,
+      ...deposit,
+      ...proofs,
     });
     return response.data.data!;
   }
 
-  async completeRental(rentalId: string, userId: string, actualReturnDate?: string, damageCharges?: number, damageNotes?: string): Promise<Rental> {
+  async completeRental(
+    rentalId: string,
+    userId: string,
+    actualReturnDate?: string,
+    damageCharges?: number,
+    damageNotes?: string,
+    paymentMethod?: string,
+    depositRefundMethod?: string,
+    depositRefundProofUrl?: string,
+    feeRuleId?: string,
+    pot?: string,
+    lateFeeWaiver?: { amount: number; reason: string },
+  ): Promise<Rental> {
     const body: Record<string, unknown> = {
       user_id: userId
     };
+    if (lateFeeWaiver && lateFeeWaiver.amount > 0) {
+      body.late_fee_waived = lateFeeWaiver.amount;
+      body.late_fee_waiver_reason = lateFeeWaiver.reason;
+    }
     if (actualReturnDate) body.actual_return_date = actualReturnDate;
     if (typeof damageCharges === 'number') body.damage_charges = damageCharges;
     if (damageNotes) body.damage_notes = damageNotes;
+    if (paymentMethod) body.payment_method = paymentMethod;
+    if (feeRuleId) body.fee_rule_id = feeRuleId;
+    if (pot) body.pot = pot;
+    if (depositRefundMethod) body.deposit_refund_method = depositRefundMethod;
+    if (depositRefundProofUrl) body.deposit_refund_proof_url = depositRefundProofUrl;
     const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/complete`, body);
+    return response.data.data!;
+  }
+
+  /**
+   * Settles a held deposit after the item is checked. Damage comes off the
+   * deposit first, anything above it the customer pays, and the rest goes back.
+   */
+  async releaseDeposit(
+    rentalId: string,
+    payload: {
+      damage_charges?: number;
+      damage_notes?: string;
+      payment_method?: string;
+      fee_rule_id?: string;
+      pot?: string;
+      refund_pot?: string;
+      deposit_refund_method?: string;
+      deposit_refund_proof_url?: string;
+    },
+  ): Promise<Rental> {
+    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/release-deposit`, payload);
+    return response.data.data!;
+  }
+
+  async getDepositSettings(): Promise<{ percent: number; enabled: boolean }> {
+    const response = await this.client.get<APIResponse<{ percent: number; enabled: boolean }>>('/api/v1/rentals/deposit-settings');
+    return response.data.data!;
+  }
+
+  async sendDepositAgreement(rentalId: string): Promise<Rental> {
+    const response = await this.client.post<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/deposit-agreement`, {});
+    return response.data.data!;
+  }
+
+  async sendRentalWAReminder(rentalId: string): Promise<WAReminder> {
+    const response = await this.client.post<APIResponse<{ reminder: WAReminder }>>(`/api/v1/rentals/${rentalId}/wa-reminder`, {});
+    return response.data.data!.reminder;
+  }
+
+  // Pot Transfers: money moved between the Cash Drawer, BCA, and BNI.
+  async getPotTransfers(startDate?: string, endDate?: string): Promise<PotTransfer[]> {
+    const search = new URLSearchParams();
+    if (startDate) search.set('start_date', startDate);
+    if (endDate) search.set('end_date', endDate);
+    const response = await this.client.get<APIResponse<{ transfers: PotTransfer[] }>>(
+      `/api/v1/pot-transfers${search.toString() ? `?${search}` : ''}`,
+    );
+    return response.data.data?.transfers || [];
+  }
+
+  async createPotTransfer(input: {
+    transfer_date?: string;
+    from_pot: string;
+    to_pot: string;
+    amount: number;
+    note?: string;
+  }): Promise<PotTransfer> {
+    const response = await this.client.post<APIResponse<{ transfer: PotTransfer }>>('/api/v1/pot-transfers', input);
+    return response.data.data!.transfer;
+  }
+
+  async voidPotTransfer(id: string): Promise<PotTransfer> {
+    const response = await this.client.post<APIResponse<{ transfer: PotTransfer }>>(`/api/v1/admin/pot-transfers/${id}/void`, {});
+    return response.data.data!.transfer;
+  }
+
+  async getPotBalances(asOf?: string): Promise<PotBalances> {
+    const response = await this.client.get<APIResponse<PotBalances>>(
+      `/api/v1/admin/pot-balances${asOf ? `?as_of=${asOf}` : ''}`,
+    );
+    return response.data.data!;
+  }
+
+  async splitBankBalance(input: { as_of_date?: string; bca_amount: number; bni_amount: number }): Promise<PotTransfer[]> {
+    const response = await this.client.post<APIResponse<{ transfers: PotTransfer[] }>>(
+      '/api/v1/admin/pot-transfers/split-bank',
+      input,
+    );
+    return response.data.data?.transfers || [];
+  }
+
+  // Daily Close: Admin counts the Cash Drawer of the shop in the header at the
+  // end of a day. It locks nothing.
+  async getDailyClose(date?: string): Promise<DailyCloseSummary> {
+    const response = await this.client.get<APIResponse<DailyCloseSummary>>(
+      `/api/v1/admin/daily-close${date ? `?date=${date}` : ''}`,
+    );
+    return response.data.data!;
+  }
+
+  async closeDay(input: {
+    date?: string;
+    counted_cash: number;
+    start_cash?: number;
+    tips_cash?: number;
+    tips_bca?: number;
+    tips_bni?: number;
+    edc_slip_bca?: number | null;
+    edc_slip_bni?: number | null;
+    checked_lines?: string[];
+    note?: string;
+  }): Promise<DailyCloseSummary> {
+    const response = await this.client.post<APIResponse<DailyCloseSummary>>('/api/v1/admin/daily-close', input);
+    return response.data.data!;
+  }
+
+  async shareTips(input: { month: string; note?: string }): Promise<TipMonth> {
+    const response = await this.client.post<APIResponse<TipMonth>>('/api/v1/admin/daily-close/tips/share', input);
+    return response.data.data!;
+  }
+
+  async getDailyCloses(startDate?: string, endDate?: string): Promise<DailyClose[]> {
+    const search = new URLSearchParams();
+    if (startDate) search.set('start_date', startDate);
+    if (endDate) search.set('end_date', endDate);
+    const response = await this.client.get<APIResponse<{ closes: DailyClose[] }>>(
+      `/api/v1/admin/daily-closes${search.toString() ? `?${search}` : ''}`,
+    );
+    return response.data.data?.closes || [];
+  }
+
+  // Transaction Fee Rules. Staff gets the active rules; Admin may ask for all.
+  async getTransactionFeeRules(all = false): Promise<TransactionFeeRule[]> {
+    const response = await this.client.get<APIResponse<{ rules: TransactionFeeRule[] }>>(
+      `/api/v1/transaction-fee-rules${all ? '?all=true' : ''}`,
+    );
+    return response.data.data?.rules || [];
+  }
+
+  async createTransactionFeeRule(input: TransactionFeeRuleInput): Promise<TransactionFeeRule> {
+    const response = await this.client.post<APIResponse<{ rule: TransactionFeeRule }>>(
+      '/api/v1/admin/transaction-fee-rules',
+      input,
+    );
+    return response.data.data!.rule;
+  }
+
+  async updateTransactionFeeRule(id: string, input: TransactionFeeRuleInput): Promise<TransactionFeeRule> {
+    const response = await this.client.put<APIResponse<{ rule: TransactionFeeRule }>>(
+      `/api/v1/admin/transaction-fee-rules/${id}`,
+      input,
+    );
+    return response.data.data!.rule;
+  }
+
+  // H-1 Pickup checklist. With no date the backend returns tomorrow.
+  async getPickupPrepDay(date?: string): Promise<PickupPrepDay> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const response = await this.client.get<APIResponse<PickupPrepDay>>(`/api/v1/rentals/pickup-prep${query}`);
+    return response.data.data!;
+  }
+
+  async getPickupPrep(rentalId: string): Promise<PickupPrep> {
+    const response = await this.client.get<APIResponse<{ prep: PickupPrep }>>(`/api/v1/rentals/${rentalId}/pickup-prep`);
+    return response.data.data!.prep;
+  }
+
+  async checkPickupPrepItem(rentalId: string, itemId: string, check: PickupPrepItemCheck): Promise<PickupPrep> {
+    const response = await this.client.put<APIResponse<{ prep: PickupPrep }>>(
+      `/api/v1/rentals/${rentalId}/pickup-prep/items/${itemId}`,
+      check,
+    );
+    return response.data.data!.prep;
+  }
+
+  async setPickupPrepAddons(rentalId: string, ready: boolean): Promise<PickupPrep> {
+    const response = await this.client.put<APIResponse<{ prep: PickupPrep }>>(
+      `/api/v1/rentals/${rentalId}/pickup-prep/addons`,
+      { ready },
+    );
+    return response.data.data!.prep;
+  }
+
+  // Daily Return Check. With no date the backend returns today, with every
+  // older Rental that is still not back.
+  async getReturnCheckDay(date?: string): Promise<ReturnCheckDay> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const response = await this.client.get<APIResponse<ReturnCheckDay>>(`/api/v1/rentals/return-check${query}`);
+    return response.data.data!;
+  }
+
+  async getReturnCheck(rentalId: string): Promise<ReturnCheck> {
+    const response = await this.client.get<APIResponse<{ check: ReturnCheck }>>(`/api/v1/rentals/${rentalId}/return-check`);
+    return response.data.data!.check;
+  }
+
+  async checkReturnItem(rentalId: string, itemId: string, check: ReturnCheckItemInput): Promise<ReturnCheck> {
+    const response = await this.client.put<APIResponse<{ check: ReturnCheck }>>(
+      `/api/v1/rentals/${rentalId}/return-check/items/${itemId}`,
+      check,
+    );
+    return response.data.data!.check;
+  }
+
+  async getPublicDepositAgreement(token: string): Promise<DepositAgreementView> {
+    const response = await this.client.get<APIResponse<DepositAgreementView>>(`/api/v1/public/deposit-agreements/${token}`);
+    return response.data.data!;
+  }
+
+  async acceptPublicDepositAgreement(token: string): Promise<DepositAgreementView> {
+    const response = await this.client.post<APIResponse<DepositAgreementView>>(`/api/v1/public/deposit-agreements/${token}/accept`, {});
     return response.data.data!;
   }
 
@@ -862,6 +1398,24 @@ class APIClient {
     return response.data.data!;
   }
 
+  /**
+   * The discounts a booking would accept before it is saved.
+   *
+   * The create-booking form has no booking ID yet, so the customer, the running
+   * total and the picked items go up as query values. The backend runs the same
+   * eligibility rules it runs on save, so nothing in this list can be refused
+   * later.
+   */
+  async getEligibleBookingDiscounts(customerId: string, amount: number, itemIds: string[] = []): Promise<Discount[]> {
+    const params = new URLSearchParams({ amount: String(Math.max(0, Math.round(amount))) });
+    if (customerId) params.set('customer_id', customerId);
+    // The category, item-type and specific-item rules read the items, so the
+    // form sends the ones it has picked so far.
+    if (itemIds.length > 0) params.set('item_ids', itemIds.join(','));
+    const response = await this.client.get<APIResponse<Discount[]>>(`/api/v1/discounts/eligible?${params.toString()}`);
+    return response.data.data ?? [];
+  }
+
   async getBookingDiscountApplications(bookingId: string): Promise<DiscountApplication[]> {
     const response = await this.client.get<APIResponse<DiscountApplication[]>>(`/api/v1/discounts/booking/${bookingId}/applications`);
     return response.data.data!;
@@ -931,6 +1485,7 @@ class APIClient {
       postal_code?: string;
       country?: string;
     };
+    branch_ids?: string[];
   }): Promise<User> {
     const response = await this.client.post<CreateResponse<User>>('/api/v1/users', user);
     return response.data.data;
@@ -939,6 +1494,37 @@ class APIClient {
   async updateUserRole(userId: string, role: string): Promise<User> {
     const response = await this.client.put<APIResponse<User>>(`/api/v1/users/${userId}/role`, { role });
     return response.data.data!;
+  }
+
+  async assignUserBranches(userId: string, branchIds: string[]): Promise<User> {
+    const response = await this.client.put<APIResponse<User>>(`/api/v1/users/${userId}/branches`, { branch_ids: branchIds });
+    return response.data.data!;
+  }
+
+  async getBranches(activeOnly = false): Promise<Branch[]> {
+    const response = await this.client.get<APIResponse<{ branches: Branch[] }>>(`/api/v1/branches${activeOnly ? '?active=true' : ''}`);
+    return response.data.data?.branches || [];
+  }
+
+  async getBranch(id: string): Promise<Branch> {
+    const response = await this.client.get<APIResponse<{ branch: Branch }>>(`/api/v1/branches/${id}`);
+    return response.data.data!.branch;
+  }
+
+  async createBranch(payload: Partial<Branch> & { name: string; code: string; receipt_subtitle: string }): Promise<Branch> {
+    const response = await this.client.post<APIResponse<{ branch: Branch }>>('/api/v1/branches', payload);
+    return response.data.data!.branch;
+  }
+
+  async updateBranch(id: string, payload: Partial<Branch>): Promise<Branch> {
+    const response = await this.client.put<APIResponse<{ branch: Branch }>>(`/api/v1/branches/${id}`, payload);
+    return response.data.data!.branch;
+  }
+
+  async transferItem(itemId: string, toBranchId: string): Promise<Item> {
+    const response = await this.client.post<{ data: { item: Item } | Item }>(`/api/v1/items/${itemId}/transfer`, { to_branch_id: toBranchId });
+    const payload = response.data.data;
+    return payload && typeof payload === 'object' && 'item' in payload ? payload.item : payload as Item;
   }
 
   async activateUser(userId: string): Promise<User> {
@@ -992,6 +1578,26 @@ class APIClient {
     return response.data.data!;
   }
 
+  async getOwnerAnalytics(params: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<OwnerAnalytics> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    const response = await this.client.get<APIResponse<OwnerAnalytics>>(
+      `/api/v1/admin/analytics?${search.toString()}`
+    );
+    return response.data.data!;
+  }
+
+  async getRentalItemAnalytics(params: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<OwnerAnalytics> {
+    return this.getOwnerAnalytics(params);
+  }
+
   async downloadFinancialReportCSV(params: {
     startDate?: string; // YYYY-MM-DD
     endDate?: string;   // YYYY-MM-DD
@@ -1035,6 +1641,275 @@ class APIClient {
     return response.data.data!;
   }
 
+  async getProfitAndLoss(params: {
+    startDate?: string;
+    endDate?: string;
+    groupBy?: FinancialGroupBy;
+  }): Promise<ProfitAndLossReport> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    search.set('group_by', params.groupBy || 'month');
+
+    const response = await this.client.get<APIResponse<ProfitAndLossReport>>(
+      `/api/v1/expenses/profit-and-loss?${search.toString()}`
+    );
+    return response.data.data!;
+  }
+
+  async getAccountingReport(params: { startDate?: string; endDate?: string }): Promise<AccountingReport> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    const response = await this.client.get<APIResponse<AccountingReport>>(
+      `/api/v1/admin/accounting?${search.toString()}`
+    );
+    return response.data.data!;
+  }
+
+  async downloadAccountingExcel(params: { startDate?: string; endDate?: string }): Promise<Blob> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    const response = await this.client.get(`/api/v1/admin/accounting/export.xlsx?${search.toString()}`, {
+      responseType: 'blob',
+      headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    });
+    return response.data as Blob;
+  }
+
+  async getClosedMonths(): Promise<ClosedMonth[]> {
+    const response = await this.client.get<APIResponse<{ closed_months: ClosedMonth[] }>>(
+      '/api/v1/admin/closed-months'
+    );
+    return response.data.data?.closed_months || [];
+  }
+
+  async closeMonth(year: number, month: number): Promise<ClosedMonth> {
+    const response = await this.client.post<APIResponse<{ closed_month: ClosedMonth }>>(
+      '/api/v1/admin/closed-months',
+      { year, month }
+    );
+    return response.data.data!.closed_month;
+  }
+
+  async openMonth(year: number, month: number): Promise<void> {
+    await this.client.delete(`/api/v1/admin/closed-months/${year}/${month}`);
+  }
+
+  async getOpeningBalances(): Promise<OpeningBalance[]> {
+    const response = await this.client.get<APIResponse<{ opening_balances: OpeningBalance[] }>>(
+      '/api/v1/admin/opening-balances'
+    );
+    return response.data.data?.opening_balances || [];
+  }
+
+  async createOpeningBalance(payload: { as_of_date: string; cash_amount: number; bank_amount?: number; notes?: string }): Promise<OpeningBalance> {
+    const response = await this.client.post<APIResponse<{ opening_balance: OpeningBalance }>>(
+      '/api/v1/admin/opening-balances',
+      payload
+    );
+    return response.data.data!.opening_balance;
+  }
+
+  async updateOpeningBalance(id: string, payload: { cash_amount?: number; bank_amount?: number; notes?: string }): Promise<OpeningBalance> {
+    const response = await this.client.put<APIResponse<{ opening_balance: OpeningBalance }>>(
+      `/api/v1/admin/opening-balances/${id}`,
+      payload
+    );
+    return response.data.data!.opening_balance;
+  }
+
+  async deleteOpeningBalance(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/admin/opening-balances/${id}`);
+  }
+
+  async getDividends(): Promise<Dividend[]> {
+    const response = await this.client.get<APIResponse<{ dividends: Dividend[] }>>('/api/v1/admin/dividends');
+    return response.data.data?.dividends || [];
+  }
+
+  async createDividend(payload: {
+    dividend_date: string;
+    amount: number;
+    fiscal_year?: number;
+    shareholder?: string;
+    pot?: string;
+    notes?: string;
+  }): Promise<Dividend> {
+    const response = await this.client.post<APIResponse<{ dividend: Dividend }>>(
+      '/api/v1/admin/dividends',
+      payload
+    );
+    return response.data.data!.dividend;
+  }
+
+  async deleteDividend(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/admin/dividends/${id}`);
+  }
+
+  async getPayables(): Promise<Payable[]> {
+    const response = await this.client.get<APIResponse<{ payables: Payable[] }>>('/api/v1/admin/payables');
+    return response.data.data?.payables || [];
+  }
+
+  async createPayable(payload: {
+    payable_date: string;
+    due_date?: string;
+    description: string;
+    vendor?: string;
+    amount: number;
+    notes?: string;
+  }): Promise<Payable> {
+    const response = await this.client.post<APIResponse<{ payable: Payable }>>('/api/v1/admin/payables', payload);
+    return response.data.data!.payable;
+  }
+
+  async payPayable(id: string, payload: { amount: number; payment_method?: string; pot?: string; paid_on?: string }): Promise<Payable> {
+    const response = await this.client.post<APIResponse<{ payable: Payable }>>(`/api/v1/admin/payables/${id}/pay`, payload);
+    return response.data.data!.payable;
+  }
+
+  async deletePayable(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/admin/payables/${id}`);
+  }
+
+  async getLoans(): Promise<Loan[]> {
+    const response = await this.client.get<APIResponse<{ loans: Loan[] }>>('/api/v1/admin/loans');
+    return response.data.data?.loans || [];
+  }
+
+  async createLoan(payload: {
+    loan_date: string;
+    lender: string;
+    principal: number;
+    payment_method?: string;
+    pot?: string;
+    notes?: string;
+  }): Promise<Loan> {
+    const response = await this.client.post<APIResponse<{ loan: Loan }>>('/api/v1/admin/loans', payload);
+    return response.data.data!.loan;
+  }
+
+  async repayLoan(id: string, payload: { amount: number; payment_method?: string; pot?: string; paid_on?: string }): Promise<Loan> {
+    const response = await this.client.post<APIResponse<{ loan: Loan }>>(`/api/v1/admin/loans/${id}/repay`, payload);
+    return response.data.data!.loan;
+  }
+
+  async deleteLoan(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/admin/loans/${id}`);
+  }
+
+  async getExpenses(filters?: ExpenseFilters): Promise<ExpensePaginatedResponse> {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') params.append(key, String(value));
+      });
+    }
+    const response = await this.client.get<ExpensePaginatedResponse>(`/api/v1/expenses?${params}`);
+    return response.data;
+  }
+
+  async getExpense(id: string): Promise<Expense> {
+    const response = await this.client.get<APIResponse<{ expense: Expense }>>(`/api/v1/expenses/${id}`);
+    return response.data.data!.expense;
+  }
+
+  async createExpense(payload: CreateExpenseRequest): Promise<Expense> {
+    const response = await this.client.post<APIResponse<{ expense: Expense }>>('/api/v1/expenses', payload);
+    return response.data.data!.expense;
+  }
+
+  async updateExpense(id: string, payload: UpdateExpenseRequest): Promise<Expense> {
+    const response = await this.client.put<APIResponse<{ expense: Expense }>>(`/api/v1/expenses/${id}`, payload);
+    return response.data.data!.expense;
+  }
+
+  async voidExpense(id: string): Promise<Expense> {
+    const response = await this.client.put<APIResponse<{ expense: Expense }>>(`/api/v1/expenses/${id}/void`);
+    return response.data.data!.expense;
+  }
+
+  async getExpenseSummary(params: { startDate?: string; endDate?: string }): Promise<ExpenseSummary> {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set('start_date', params.startDate);
+    if (params.endDate) search.set('end_date', params.endDate);
+    const response = await this.client.get<APIResponse<ExpenseSummary>>(
+      `/api/v1/expenses/summary?${search.toString()}`
+    );
+    return response.data.data!;
+  }
+
+  async getRecurringExpenses(): Promise<RecurringExpense[]> {
+    const response = await this.client.get<APIResponse<{ recurring_expenses: RecurringExpense[] }>>(
+      '/api/v1/recurring-expenses'
+    );
+    return response.data.data?.recurring_expenses || [];
+  }
+
+  async createRecurringExpense(payload: CreateRecurringExpenseRequest): Promise<RecurringExpense> {
+    const response = await this.client.post<APIResponse<{ recurring_expense: RecurringExpense }>>(
+      '/api/v1/recurring-expenses',
+      payload
+    );
+    return response.data.data!.recurring_expense;
+  }
+
+  async updateRecurringExpense(id: string, payload: Partial<CreateRecurringExpenseRequest> & { is_active?: boolean }): Promise<RecurringExpense> {
+    const response = await this.client.put<APIResponse<{ recurring_expense: RecurringExpense }>>(
+      `/api/v1/recurring-expenses/${id}`,
+      payload
+    );
+    return response.data.data!.recurring_expense;
+  }
+
+  async deleteRecurringExpense(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/recurring-expenses/${id}`);
+  }
+
+  async postRecurringExpense(id: string): Promise<Expense> {
+    const response = await this.client.post<APIResponse<{ expense: Expense }>>(
+      `/api/v1/recurring-expenses/${id}/post`
+    );
+    return response.data.data!.expense;
+  }
+
+  async getInventoryAssets(): Promise<InventoryAssetReport> {
+    const report = await this.getAssets();
+    return report.inventory;
+  }
+
+  async getAssets(): Promise<AssetReport> {
+    const response = await this.client.get<APIResponse<AssetReport>>('/api/v1/admin/assets');
+    return response.data.data!;
+  }
+
+  async getFixedAssets(): Promise<FixedAsset[]> {
+    const response = await this.client.get<APIResponse<{ fixed_assets: FixedAsset[] }>>('/api/v1/fixed-assets');
+    return response.data.data?.fixed_assets || [];
+  }
+
+  async createFixedAsset(payload: CreateFixedAssetRequest): Promise<FixedAsset> {
+    const response = await this.client.post<APIResponse<{ fixed_asset: FixedAsset }>>(
+      '/api/v1/fixed-assets',
+      payload
+    );
+    return response.data.data!.fixed_asset;
+  }
+
+  async updateFixedAsset(id: string, payload: Partial<CreateFixedAssetRequest> & { status?: string }): Promise<FixedAsset> {
+    const response = await this.client.put<APIResponse<{ fixed_asset: FixedAsset }>>(
+      `/api/v1/fixed-assets/${id}`,
+      payload
+    );
+    return response.data.data!.fixed_asset;
+  }
+
+  async deleteFixedAsset(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/fixed-assets/${id}`);
+  }
+
   async downloadFinancialReportBookingsCSV(params: {
     startDate?: string; // YYYY-MM-DD
     endDate?: string;   // YYYY-MM-DD
@@ -1068,11 +1943,20 @@ class APIClient {
   // Dashboard Stats
   async getDashboardStats(): Promise<import('@/types').DashboardStats> {
     try {
+      const today = (() => {
+        const d = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      })();
+
       // Aggregate data from existing endpoints
-      const [itemsResponse, bookingsResponse, rentalsResponse] = await Promise.allSettled([
+      const [itemsResponse, bookingsResponse, rentalsResponse, depositReleasesResponse] = await Promise.allSettled([
         this.client.get<ItemPaginatedResponse>('/api/v1/items?limit=1'),
         this.client.get<BookingPaginatedResponse>('/api/v1/bookings?limit=1'),
-        this.client.get<RentalPaginatedResponse>('/api/v1/rentals')
+        this.client.get<RentalPaginatedResponse>('/api/v1/rentals'),
+        this.client.get<RentalPaginatedResponse>(
+          `/api/v1/rentals?limit=1&deposit_refunded_from=${today}&deposit_refunded_to=${today}`
+        ),
       ]);
 
       // Calculate stats from responses
@@ -1088,10 +1972,13 @@ class APIClient {
         ? (rentalsResponse.value.data?.data?.data?.rentals || []).filter((rental: Rental) => rental.status === 'active').length || 0 
         : 0;
 
+      const todayDepositReleases = depositReleasesResponse.status === 'fulfilled'
+        ? depositReleasesResponse.value.data?.data?.pagination?.total || 0
+        : 0;
+
       // Calculate today's revenue from bookings
       let todayRevenue = 0;
       if (bookingsResponse.status === 'fulfilled') {
-        const today = new Date().toISOString().split('T')[0];
         const todayBookings = bookingsResponse.value.data?.data?.data?.bookings?.filter((booking: Booking) => 
           booking.booking_date && booking.booking_date.startsWith(today) && booking.status === 'completed'
         ) || [];
@@ -1126,6 +2013,7 @@ class APIClient {
         totalBookings,
         activeRentals,
         todayRevenue,
+        todayDepositReleases,
         lowStockItems,
         maintenanceItems,
       };
@@ -1137,6 +2025,7 @@ class APIClient {
         totalBookings: 0,
         activeRentals: 0,
         todayRevenue: 0,
+        todayDepositReleases: 0,
         lowStockItems: 0,
         maintenanceItems: 0,
       };

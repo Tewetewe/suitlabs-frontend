@@ -37,7 +37,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-12">
+    <div className="min-h-dvh flex items-center justify-center px-6 py-12">
       <div className="w-full max-w-md">
         <div className="mb-7 flex items-center justify-center gap-3">
           <Image
@@ -71,6 +71,7 @@ export default function LoginPage() {
               required
               autoComplete="email"
               placeholder="you@example.com"
+              enterKeyHint="next"
               prefixIcon={<Mail className="h-4 w-4" />}
             />
 
@@ -82,6 +83,7 @@ export default function LoginPage() {
               required
               autoComplete="current-password"
               placeholder="••••••••"
+              enterKeyHint="go"
               prefixIcon={<Lock className="h-4 w-4" />}
             />
 

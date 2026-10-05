@@ -3,10 +3,58 @@
  * Supports 58mm thermal printers with ESC/POS compatible command set
  */
 
+import { formatCurrency } from './currency';
+
 // ESC/POS Command Constants
 const ESC = '\x1B';
 const GS = '\x1D';
 const LF = '\x0A';
+
+/**
+ * Blank lines to feed after the last printed line, before the cut command.
+ *
+ * The print head sits about 15 mm behind the tear bar, so the last lines stay
+ * inside the printer when the paper stops. Without this gap the operator holds
+ * the feed button on the device to pull the receipt out. 12 lines is about
+ * 45 mm at 203 dpi, which clears the tear bar on every 58 mm printer in the
+ * shop. The backend sends the same 12 blank lines on the bprint route, so all
+ * routes tear at the same place.
+ */
+export const CUT_MARGIN_LINES = 12;
+
+/**
+ * The same gap for a barcode label, which needs far less of it.
+ *
+ * An invoice is torn off once per sale, so its 12 lines cost nothing. A label is
+ * printed a rack at a time, and 5 lines is about 19 mm — enough to tear, and no
+ * more. The backend sends 2 on the bprint route because the Android print bridge
+ * feeds 3 of its own before the cut; this route has no such top-up, so the
+ * number here is the whole gap.
+ */
+export const LABEL_CUT_MARGIN_LINES = 5;
+
+/**
+ * The widest module width that fits a CODE128 of `chars` on 58 mm paper, or 0
+ * when even the narrowest bars overflow.
+ *
+ * 58 mm at 203 dpi is 384 dots. CODE128-B spends 11 modules a character plus
+ * start, checksum and stop. A symbol wider than the paper makes the printer
+ * report an error instead of printing the rest of the job, so the caller checks
+ * first and prints the number as text instead.
+ */
+export function barcodeModuleWidth(chars: number, preferred = 3): number {
+  if (chars < 1) return 0;
+  const modules = 11 * chars + 35;
+  for (let width = Math.max(1, preferred); width >= 1; width--) {
+    if (modules * width <= 384) return width;
+  }
+  return 0;
+}
+
+/** Can this code be drawn as bars on 58 mm paper at all? */
+export function canPrintBarcode(code: string, preferred = 3): boolean {
+  return barcodeModuleWidth(code.length, preferred) > 0;
+}
 
 export interface ESCPOSCommands {
   initialize(): Uint8Array;
@@ -29,6 +77,76 @@ function stringToBytes(str: string): Uint8Array {
   return new TextEncoder().encode(str);
 }
 
+const PRINTER_SYMBOLS: Array<[RegExp, string]> = [
+  [/[•·●◦–—−‑]/g, '-'],
+  [/[‘’‚‛]/g, "'"],
+  [/[“”„‟]/g, '"'],
+  [/…/g, '...'],
+  [/×/g, 'x'],
+  [/[\u00a0\u202f]/g, ' '],
+];
+
+/** Map Unicode onto the ASCII a 58 mm ESC/POS printer can actually print. */
+export function toPrinterText(text: string): string {
+  let out = text.normalize('NFKD');
+  for (const [pattern, replacement] of PRINTER_SYMBOLS) {
+    out = out.replace(pattern, replacement);
+  }
+  return out.replace(/[^\n\r\t\x20-\x7e]/g, '').replace(/\t/g, ' ');
+}
+
+export function wrapPrinterText(
+  text: string,
+  width: number,
+  hangingIndent: boolean,
+): string[] {
+  const cols = Math.max(8, width);
+  const parts = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const lines: string[] = [];
+  for (const part of parts) {
+    lines.push(...wrapPrinterParagraph(part, cols, hangingIndent));
+  }
+  return lines.length > 0 ? lines : [''];
+}
+
+function wrapPrinterParagraph(para: string, width: number, hangingIndent: boolean): string[] {
+  if (para.length <= width) {
+    return [para];
+  }
+  const leading = para.match(/^ */)?.[0].length ?? 0;
+  const prefix = para.slice(0, leading);
+  let remaining = para.slice(leading);
+  const contPrefix =
+    hangingIndent && leading > 0 && leading + 2 <= width - 8
+      ? ' '.repeat(leading + 2)
+      : prefix;
+  const lines: string[] = [];
+  let first = true;
+  while (remaining) {
+    const pfx = first ? prefix : contPrefix;
+    first = false;
+    const avail = Math.max(1, width - pfx.length);
+    if (remaining.length <= avail) {
+      lines.push(pfx + remaining);
+      break;
+    }
+    const chunk = remaining.slice(0, avail);
+    const sp = chunk.lastIndexOf(' ');
+    if (sp > 0) {
+      lines.push(pfx + remaining.slice(0, sp).trimEnd());
+      remaining = remaining.slice(sp).trimStart();
+      continue;
+    }
+    lines.push(pfx + chunk);
+    remaining = remaining.slice(avail);
+  }
+  return lines;
+}
+
+function printerColumnsForFont(width: number): number {
+  return width >= 2 ? 16 : 32;
+}
+
 /**
  * Combine multiple Uint8Arrays into one
  */
@@ -48,12 +166,17 @@ function combineBytes(...arrays: Uint8Array[]): Uint8Array {
  */
 export class ESCPOSGenerator {
   private commands: Uint8Array[] = [];
+  private charWidth = 32;
+  private hangingIndent = true;
 
   /**
    * Initialize printer
    */
   initialize(): this {
     this.commands.push(stringToBytes(ESC + '@'));
+    this.commands.push(stringToBytes(ESC + 't' + String.fromCharCode(0)));
+    this.charWidth = 32;
+    this.hangingIndent = true;
     return this;
   }
 
@@ -63,6 +186,7 @@ export class ESCPOSGenerator {
    */
   setAlign(align: 'left' | 'center' | 'right'): this {
     const alignCodes = { left: 0, center: 1, right: 2 };
+    this.hangingIndent = align === 'left';
     this.commands.push(stringToBytes(ESC + 'a' + String.fromCharCode(alignCodes[align])));
     return this;
   }
@@ -73,6 +197,7 @@ export class ESCPOSGenerator {
   setFontSize(width: number = 1, height: number = 1): this {
     const w = Math.max(1, Math.min(8, width));
     const h = Math.max(1, Math.min(8, height));
+    this.charWidth = printerColumnsForFont(w);
     this.commands.push(stringToBytes(ESC + '!' + String.fromCharCode((w - 1) | ((h - 1) << 4))));
     return this;
   }
@@ -94,10 +219,11 @@ export class ESCPOSGenerator {
   }
 
   /**
-   * Add text
+   * Add text. Long lines wrap on word boundaries for 58 mm paper.
    */
   text(text: string): this {
-    this.commands.push(stringToBytes(text));
+    const lines = wrapPrinterText(toPrinterText(text), this.charWidth, this.hangingIndent);
+    this.commands.push(stringToBytes(lines.join(LF)));
     return this;
   }
 
@@ -122,7 +248,11 @@ export class ESCPOSGenerator {
   /**
    * Print barcode
    */
-  barcode(code: string, type: 'CODE128' | 'CODE39' | 'EAN13' | 'EAN8' = 'CODE128'): this {
+  barcode(
+    code: string,
+    type: 'CODE128' | 'CODE39' | 'EAN13' | 'EAN8' = 'CODE128',
+    options?: { height?: number; width?: number; hri?: boolean },
+  ): this {
     if (!code || code.length === 0) {
       console.warn('Empty barcode code provided');
       return this;
@@ -136,16 +266,22 @@ export class ESCPOSGenerator {
     };
 
     const typeCode = typeCodes[type] || 73;
+    const height = options?.height ?? 80;
+    const hri = options?.hri !== false;
+    const width = barcodeModuleWidth(code.length, options?.width ?? 3);
+    if (width < 1) {
+      console.warn(`Barcode too wide for 58mm paper (${code.length} chars)`);
+      return this;
+    }
 
     // Set barcode height (50-255, default 80 for better visibility)
-    this.commands.push(stringToBytes(GS + 'h' + String.fromCharCode(80)));
+    this.commands.push(stringToBytes(GS + 'h' + String.fromCharCode(height)));
 
     // Set barcode width (2-6, default 3)
-    this.commands.push(stringToBytes(GS + 'w' + String.fromCharCode(3)));
+    this.commands.push(stringToBytes(GS + 'w' + String.fromCharCode(width)));
 
     // Set HRI (Human Readable Interpretation) position (0=none, 1=above, 2=below, 3=above+below)
-    // Using 2 (below) so the barcode number appears below the barcode
-    this.commands.push(stringToBytes(GS + 'H' + String.fromCharCode(2)));
+    this.commands.push(stringToBytes(GS + 'H' + String.fromCharCode(hri ? 2 : 0)));
 
     // Print barcode
     // For CODE128: GS k n d1...dk
@@ -221,6 +357,8 @@ export class ESCPOSGenerator {
    */
   reset(): this {
     this.commands = [];
+    this.charWidth = 32;
+    this.hangingIndent = true;
     return this;
   }
 }
@@ -229,12 +367,7 @@ export class ESCPOSGenerator {
  * Format currency for printing
  */
 export function formatCurrencyForPrint(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return formatCurrency(amount);
 }
 
 /**

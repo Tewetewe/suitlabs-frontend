@@ -32,6 +32,7 @@ export function Barcode({
 
   useEffect(() => {
     if (canvasRef.current && value) {
+      canvasRef.current.dataset.barcodeStatus = 'pending';
       try {
         // Clean the barcode value: remove leading/trailing escaped quotes if present
         let cleanedValue = value.trim();
@@ -60,6 +61,7 @@ export function Barcode({
         // For CODE128, just ensure it's not empty
         if (barcodeFormat === 'CODE128' && cleanedValue.length === 0) {
           console.warn('Empty barcode value for CODE128');
+          canvasRef.current.dataset.barcodeStatus = 'error';
           return;
         }
 
@@ -77,8 +79,10 @@ export function Barcode({
           textPosition: 'bottom',
           textMargin: 2
         });
+        canvasRef.current.dataset.barcodeStatus = 'ready';
       } catch (error) {
         console.error('Failed to generate barcode:', error);
+        canvasRef.current.dataset.barcodeStatus = 'error';
         // Clear canvas and show error message
         if (canvasRef.current) {
           const ctx = canvasRef.current.getContext('2d');
@@ -97,7 +101,7 @@ export function Barcode({
   if (!value || value.trim() === '') {
     return (
       <div className={`inline-block ${className}`}>
-        <div className="bg-gray-100 border border-gray-300 rounded p-4 text-center text-gray-500 text-sm">
+        <div className="rounded-xl border border-black/5 bg-slate-50 p-4 text-center text-sm text-slate-500">
           No barcode available
         </div>
       </div>
@@ -109,14 +113,14 @@ export function Barcode({
       {(itemName || itemCode) && (
         <div className="text-center mb-2">
           {itemName && (
-            <div className="text-sm font-medium text-gray-900">{itemName}</div>
+            <div className="text-sm font-medium text-slate-900">{itemName}</div>
           )}
           {itemCode && (
-            <div className="text-xs text-gray-500">#{itemCode}</div>
+            <div className="text-xs text-slate-500">#{itemCode}</div>
           )}
         </div>
       )}
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} data-receipt-barcode data-barcode-status="pending" />
     </div>
   );
 }

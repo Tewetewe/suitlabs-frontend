@@ -3,6 +3,35 @@
 import React, { createContext, useCallback, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
 import { apiClient } from '@/lib/api';
+import { persistBranchScope, readStoredBranchId, ALL_BRANCHES_ID } from '@/lib/branch-scope';
+
+function applyUserBranchStorage(user: User | null) {
+  if (!user) return;
+  const assigned = user.branches || [];
+  const allowed = new Set(assigned.map((branch) => branch.id));
+  const stored = readStoredBranchId();
+
+  if (user.role === 'admin') {
+    if (stored === ALL_BRANCHES_ID) {
+      persistBranchScope(ALL_BRANCHES_ID, assigned[0]?.id ?? undefined);
+      return;
+    }
+    // Admins can open any shop, not only assigned ones. Keep the saved
+    // selection across refresh; BranchContext validates it against the live list.
+    // With nothing saved, BranchContext opens the default shop, Jimbaran.
+    if (stored) {
+      persistBranchScope(stored, stored);
+    }
+    return;
+  }
+
+  const first = assigned[0]?.id;
+  if (stored && stored !== ALL_BRANCHES_ID && allowed.has(stored)) {
+    persistBranchScope(stored, stored);
+    return;
+  }
+  persistBranchScope(first ?? null, first ?? null);
+}
 
 interface AuthContextType {
   user: User | null;
@@ -44,12 +73,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const response = await apiClient.login({ email, password });
+    applyUserBranchStorage(response.user);
     setUser(response.user);
   };
 
   const logout = () => {
     apiClient.clearToken();
     localStorage.removeItem('auth_token');
+    // The shop stays saved in this browser, so the next login opens the same
+    // shop. BranchContext checks it against what that user may open.
     setUser(null);
   };
 

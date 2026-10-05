@@ -11,6 +11,18 @@ function getApiBase(): string {
 
 const IOS_SCHEME = 'bprint://';
 const ANDROID_SCHEME = 'my.bluetoothprint.scheme://';
+const SUITLABS_PRINT_BRIDGE_SCHEME = 'suitlabs-print://print';
+
+export const THERMER_ANDROID_PACKAGE = 'mate.bluetoothprint';
+export const PRINT_BRIDGE_ANDROID_PACKAGE = 'com.suitlabs.printbridge';
+
+export function isAndroidDevice(): boolean {
+  return typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+}
+
+export function isIOSDevice(): boolean {
+  return typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
 
 function buildResponseUrl(path: string, query: string): string {
   return `${getApiBase()}${path}${query}`;
@@ -24,14 +36,82 @@ function buildAndroidUrl(path: string, query: string): string {
   return `${ANDROID_SCHEME}${buildResponseUrl(path, query)}`;
 }
 
-export function getBprintBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
-  const fmt = format ? `&format=${format}` : '';
-  return buildIosUrl('/api/v1/bprint/booking-invoice', `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`);
+function buildAndroidBridgeUrl(path: string, query: string): string {
+  const responseUrl = buildResponseUrl(path, `${query}&format=array`);
+  return `${SUITLABS_PRINT_BRIDGE_SCHEME}?url=${encodeURIComponent(responseUrl)}`;
 }
 
-export function getBprintRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
+function barcodeOnlyQuery(barcodeOnly?: boolean): string {
+  return barcodeOnly ? '&barcode_only=1' : '';
+}
+
+export function getAndroidBridgeBookingInvoiceUrl(
+  bookingId: string,
+  type: 'dp' | 'full',
+  barcodeOnly = false,
+): string {
+  return buildAndroidBridgeUrl(
+    '/api/v1/bprint/booking-invoice',
+    `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
+}
+
+export function getAndroidBridgeRentalInvoiceUrl(rentalId: string, barcodeOnly = false): string {
+  return buildAndroidBridgeUrl(
+    '/api/v1/bprint/rental-invoice',
+    `?rental_id=${encodeURIComponent(rentalId)}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
+}
+
+export function getAndroidBridgeSaleInvoiceUrl(saleId: string, barcodeOnly = false): string {
+  return buildAndroidBridgeUrl(
+    '/api/v1/bprint/sale-invoice',
+    `?sale_id=${encodeURIComponent(saleId)}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
+}
+
+export function getAndroidBridgeProductLabelUrl(itemId: string): string {
+  return buildAndroidBridgeUrl(
+    '/api/v1/bprint/product-label',
+    `?item_id=${encodeURIComponent(itemId)}`,
+  );
+}
+
+export function getBprintBookingInvoiceUrl(
+  bookingId: string,
+  type: 'dp' | 'full',
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
   const fmt = format ? `&format=${format}` : '';
-  return buildIosUrl('/api/v1/bprint/rental-invoice', `?rental_id=${encodeURIComponent(rentalId)}${fmt}`);
+  return buildIosUrl(
+    '/api/v1/bprint/booking-invoice',
+    `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
+}
+
+export function getBprintRentalInvoiceUrl(
+  rentalId: string,
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
+  const fmt = format ? `&format=${format}` : '';
+  return buildIosUrl(
+    '/api/v1/bprint/rental-invoice',
+    `?rental_id=${encodeURIComponent(rentalId)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
+}
+
+export function getBprintSaleInvoiceUrl(
+  saleId: string,
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
+  const fmt = format ? `&format=${format}` : '';
+  return buildIosUrl(
+    '/api/v1/bprint/sale-invoice',
+    `?sale_id=${encodeURIComponent(saleId)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
 }
 
 export function getBprintProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {
@@ -39,17 +119,96 @@ export function getBprintProductLabelUrl(itemId: string, format?: 'entries' | 'o
   return buildIosUrl('/api/v1/bprint/product-label', `?item_id=${encodeURIComponent(itemId)}${fmt}`);
 }
 
-export function getAndroidBluetoothBookingInvoiceUrl(bookingId: string, type: 'dp' | 'full', format?: 'entries' | 'object' | 'array'): string {
+export function getAndroidBluetoothBookingInvoiceUrl(
+  bookingId: string,
+  type: 'dp' | 'full',
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
   const fmt = format ? `&format=${format}` : '';
-  return buildAndroidUrl('/api/v1/bprint/booking-invoice', `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}`);
+  return buildAndroidUrl(
+    '/api/v1/bprint/booking-invoice',
+    `?booking_id=${encodeURIComponent(bookingId)}&type=${encodeURIComponent(type)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
 }
 
-export function getAndroidBluetoothRentalInvoiceUrl(rentalId: string, format?: 'entries' | 'object' | 'array'): string {
+export function getAndroidBluetoothRentalInvoiceUrl(
+  rentalId: string,
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
   const fmt = format ? `&format=${format}` : '';
-  return buildAndroidUrl('/api/v1/bprint/rental-invoice', `?rental_id=${encodeURIComponent(rentalId)}${fmt}`);
+  return buildAndroidUrl(
+    '/api/v1/bprint/rental-invoice',
+    `?rental_id=${encodeURIComponent(rentalId)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
+}
+
+export function getAndroidBluetoothSaleInvoiceUrl(
+  saleId: string,
+  format?: 'entries' | 'object' | 'array',
+  barcodeOnly = false,
+): string {
+  const fmt = format ? `&format=${format}` : '';
+  return buildAndroidUrl(
+    '/api/v1/bprint/sale-invoice',
+    `?sale_id=${encodeURIComponent(saleId)}${fmt}${barcodeOnlyQuery(barcodeOnly)}`,
+  );
 }
 
 export function getAndroidBluetoothProductLabelUrl(itemId: string, format?: 'entries' | 'object' | 'array'): string {
   const fmt = format ? `&format=${format}` : '';
   return buildAndroidUrl('/api/v1/bprint/product-label', `?item_id=${encodeURIComponent(itemId)}${fmt}`);
+}
+
+/**
+ * Chrome intercepts intent:// and starts the print app without navigating
+ * away from SuitLabs. Custom schemes via location.href replace the page.
+ */
+export function toAndroidIntentUrl(customUrl: string, packageName: string): string {
+  const separator = '://';
+  const index = customUrl.indexOf(separator);
+  if (index < 0) {
+    return customUrl;
+  }
+  const scheme = customUrl.slice(0, index);
+  const rest = customUrl.slice(index + separator.length).replace(/#/g, '%23');
+  return `intent://${rest}#Intent;scheme=${scheme};package=${packageName};end`;
+}
+
+export function launchPrintUrl(url: string, androidPackage?: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const isAndroid = /android/i.test(navigator.userAgent);
+  const launched = isAndroid && androidPackage ? toAndroidIntentUrl(url, androidPackage) : url;
+  // Playwright records launches here; Chromium will not navigate to intent:/bprint: schemes.
+  const sink = (window as Window & { __e2ePrintHrefs?: string[] }).__e2ePrintHrefs;
+  if (Array.isArray(sink)) {
+    sink.push(launched);
+  }
+  window.location.href = launched;
+}
+
+/** Open Thermer / Bluetooth Print without replacing the SuitLabs page on Android. */
+export function openBprint(iosUrl: string, androidUrl: string): boolean {
+  if (typeof window === 'undefined') return false;
+  if (isAndroidDevice()) {
+    launchPrintUrl(androidUrl, THERMER_ANDROID_PACKAGE);
+    return true;
+  }
+  if (isIOSDevice()) {
+    launchPrintUrl(iosUrl);
+    return true;
+  }
+  return false;
+}
+
+/** Open the SuitLabs Print Bridge without replacing the SuitLabs page. */
+export function openPrintBridge(url: string): boolean {
+  if (typeof window === 'undefined' || !isAndroidDevice()) {
+    return false;
+  }
+  launchPrintUrl(url, PRINT_BRIDGE_ANDROID_PACKAGE);
+  return true;
 }
