@@ -81,6 +81,7 @@ import {
   WAReminderRunResult,
   WAMessageLog,
   WAMessageKindFilter,
+  WAReminderDraft,
   FeeWaiver,
   LateFeePreview,
   DepositAgreementView,
@@ -262,9 +263,17 @@ class APIClient {
   }
 
   // Items
-  async getItemFacets(allBranches = false): Promise<ItemFacets> {
+  /**
+   * Item values for selects. Filters pass dataOnly, so they offer only the
+   * values that Items have. Forms leave it off and also get every valid type,
+   * status, and condition.
+   */
+  async getItemFacets(allBranches = false, dataOnly = false): Promise<ItemFacets> {
+    const params: Record<string, boolean> = {};
+    if (allBranches) params.all_branches = true;
+    if (dataOnly) params.data_only = true;
     const response = await this.client.get<APIResponse<ItemFacets>>('/api/v1/items/facets', {
-      params: allBranches ? { all_branches: true } : undefined,
+      params: Object.keys(params).length ? params : undefined,
     });
     return response.data.data || { types: [], brands: [], colors: [], sizes: [], statuses: [], conditions: [] };
   }
@@ -473,12 +482,12 @@ class APIClient {
   }
 
   async getWAReminderStatus(): Promise<WAReminderStatusInfo> {
-    const response = await this.client.get<APIResponse<WAReminderStatusInfo>>('/api/v1/admin/wa-reminders/status');
+    const response = await this.client.get<APIResponse<WAReminderStatusInfo>>('/api/v1/wa/status');
     return this.handleResponse<WAReminderStatusInfo>(response);
   }
 
   async getWAReminders(limit = 30): Promise<WAReminder[]> {
-    const response = await this.client.get<APIResponse<{ reminders: WAReminder[] }>>('/api/v1/admin/wa-reminders', {
+    const response = await this.client.get<APIResponse<{ reminders: WAReminder[] }>>('/api/v1/wa/reminders', {
       params: { limit },
     });
     return response.data.data?.reminders || [];
@@ -509,10 +518,24 @@ class APIClient {
   async getWAMessages(
     filter: { kind?: WAMessageKindFilter; status?: 'sent' | 'failed'; limit?: number } = {},
   ): Promise<WAMessageLog[]> {
-    const response = await this.client.get<APIResponse<{ messages: WAMessageLog[] }>>('/api/v1/admin/wa-messages', {
+    const response = await this.client.get<APIResponse<{ messages: WAMessageLog[] }>>('/api/v1/wa/messages', {
       params: { limit: filter.limit ?? 50, kind: filter.kind || undefined, status: filter.status || undefined },
     });
     return response.data.data?.messages || [];
+  }
+
+  /** Today's reminders as text to copy and send by hand. Works when Wablas is down. */
+  async getWAReminderDrafts(): Promise<WAReminderDraft[]> {
+    const response = await this.client.get<APIResponse<{ drafts: WAReminderDraft[] }>>('/api/v1/wa/reminder-drafts');
+    return response.data.data?.drafts || [];
+  }
+
+  /** Records a reminder that Staff sent from the shop phone. */
+  async markWAReminderSentByHand(rentalId: string): Promise<WAReminder> {
+    const response = await this.client.post<APIResponse<{ reminder: WAReminder }>>(
+      `/api/v1/rentals/${rentalId}/wa-reminder/manual`,
+    );
+    return this.handleResponse<{ reminder: WAReminder }>(response).reminder;
   }
 
   async sendWARemindersNow(): Promise<WAReminderRunResult> {

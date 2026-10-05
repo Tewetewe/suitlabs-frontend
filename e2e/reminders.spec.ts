@@ -25,7 +25,7 @@ test.describe('WhatsApp reminders', () => {
       sent_at: '2026-08-20T10:00:01Z',
     };
 
-    await page.route('**/api/v1/admin/wa-reminders/status', async (route) => {
+    await page.route('**/api/v1/wa/status', async (route) => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
@@ -34,7 +34,7 @@ test.describe('WhatsApp reminders', () => {
         }),
       });
     });
-    await page.route(/\/api\/v1\/admin\/wa-reminders(\?.*)?$/, async (route) => {
+    await page.route(/\/api\/v1\/wa\/reminders(\?.*)?$/, async (route) => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({ success: true, data: { reminders: sendCount ? [reminder] : [] } }),
@@ -51,7 +51,7 @@ test.describe('WhatsApp reminders', () => {
       });
     });
 
-    await page.goto('/dashboard/admin/wa-reminders');
+    await page.goto('/dashboard/wa-reminders');
 
     await expect(page.getByText('Connected')).toBeVisible();
     const sendButton = page.getByTestId('wa-reminders-send');
@@ -64,7 +64,7 @@ test.describe('WhatsApp reminders', () => {
   });
 
   test('disables sending when Wablas is not configured', async ({ page }) => {
-    await page.route('**/api/v1/admin/wa-reminders/status', async (route) => {
+    await page.route('**/api/v1/wa/status', async (route) => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
@@ -73,14 +73,14 @@ test.describe('WhatsApp reminders', () => {
         }),
       });
     });
-    await page.route(/\/api\/v1\/admin\/wa-reminders(\?.*)?$/, async (route) => {
+    await page.route(/\/api\/v1\/wa\/reminders(\?.*)?$/, async (route) => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({ success: true, data: { reminders: [] } }),
       });
     });
 
-    await page.goto('/dashboard/admin/wa-reminders');
+    await page.goto('/dashboard/wa-reminders');
 
     await expect(page.getByText('Not configured')).toBeVisible();
     await expect(page.getByTestId('wa-reminders-send')).toBeDisabled();

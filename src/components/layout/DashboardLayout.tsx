@@ -68,6 +68,7 @@ const navigationSections: NavigationSection[] = [
       { name: 'Rentals', href: '/dashboard/rentals', icon: FileText, roles: ['admin', 'staff'] },
       { name: 'Pickup Prep', href: '/dashboard/pickup-prep', icon: ClipboardCheck, roles: ['admin', 'staff'] },
       { name: 'Return Check', href: '/dashboard/return-check', icon: PackageCheck, roles: ['admin', 'staff'] },
+      { name: 'WA Reminders', href: '/dashboard/wa-reminders', icon: MessageCircle, roles: ['admin', 'staff'] },
       { name: 'Expenses', href: '/dashboard/expenses', icon: Wallet, roles: ['admin', 'staff'] },
       { name: 'Pot Transfers', href: '/dashboard/pot-transfers', icon: ArrowLeftRight, roles: ['admin', 'staff'] },
       { name: 'Sales', href: '/dashboard/sales', icon: ShoppingBag, roles: ['admin', 'staff'] },
@@ -89,7 +90,6 @@ const navigationSections: NavigationSection[] = [
     items: [
       { name: 'Daily Close', href: '/dashboard/admin/daily-close', icon: CalendarCheck, roles: ['admin'] },
       { name: 'Bulk Input Sync', href: '/dashboard/admin/bulk-input-sync', icon: FileSpreadsheet, roles: ['admin'] },
-      { name: 'WA Reminders', href: '/dashboard/admin/wa-reminders', icon: MessageCircle, roles: ['admin'] },
       { name: 'Transaction Fees', href: '/dashboard/admin/transaction-fees', icon: Percent, roles: ['admin'] },
       { name: 'Assets', href: '/dashboard/admin/assets', icon: Landmark, roles: ['admin'] },
       { name: 'Analytics', href: '/dashboard/admin/rental-analytics', icon: TrendingUp, roles: ['admin'] },

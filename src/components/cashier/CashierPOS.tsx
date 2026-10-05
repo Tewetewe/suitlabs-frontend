@@ -328,7 +328,7 @@ export function CashierPOS() {
     apiClient.getPackagePricing().then((rows) => {
       setPackages(rows.filter((row) => row.is_active));
     }).catch(() => setPackages([]));
-    apiClient.getItemFacets().then((facets) => {
+    apiClient.getItemFacets(false, true).then((facets) => {
       setTypeOptions([
         { value: '', label: 'All types' },
         ...facets.types.map((value) => ({ value, label: facetLabel(value) })),
