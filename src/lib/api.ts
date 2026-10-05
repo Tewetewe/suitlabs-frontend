@@ -263,9 +263,17 @@ class APIClient {
   }
 
   // Items
-  async getItemFacets(allBranches = false): Promise<ItemFacets> {
+  /**
+   * Item values for selects. Filters pass dataOnly, so they offer only the
+   * values that Items have. Forms leave it off and also get every valid type,
+   * status, and condition.
+   */
+  async getItemFacets(allBranches = false, dataOnly = false): Promise<ItemFacets> {
+    const params: Record<string, boolean> = {};
+    if (allBranches) params.all_branches = true;
+    if (dataOnly) params.data_only = true;
     const response = await this.client.get<APIResponse<ItemFacets>>('/api/v1/items/facets', {
-      params: allBranches ? { all_branches: true } : undefined,
+      params: Object.keys(params).length ? params : undefined,
     });
     return response.data.data || { types: [], brands: [], colors: [], sizes: [], statuses: [], conditions: [] };
   }
