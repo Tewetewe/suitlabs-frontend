@@ -86,7 +86,7 @@ export default function ItemsPage() {
 
   const loadFacets = async () => {
     try {
-      const data = await apiClient.getItemFacets(true);
+      const data = await apiClient.getItemFacets(true, true);
       setFacets(data);
     } catch (err) {
       console.error('Failed to load item facets:', err);
@@ -251,6 +251,7 @@ export default function ItemsPage() {
   const conditionOptions = facetOptions(facets.conditions, 'All Conditions');
   const brandOptions = facetOptions(facets.brands, 'All Brands', false);
   const colorOptions = facetOptions(facets.colors, 'All Colors', false);
+  const sizeOptions = facetOptions(facets.sizes, 'All Sizes', false);
 
   const itemFacts = (item: Item) =>
     [item.color, item.size?.label, `Qty ${item.quantity}`].filter(Boolean).join(' · ');
@@ -508,6 +509,12 @@ export default function ItemsPage() {
                       options={colorOptions}
                       value={filters.color || ''}
                       onChange={(e) => setFilters({ ...filters, color: e.target.value || undefined })}
+                    />
+                    <Select
+                      label="Size"
+                      options={sizeOptions}
+                      value={filters.size || ''}
+                      onChange={(e) => setFilters({ ...filters, size: e.target.value || undefined })}
                     />
                     <Select
                       label="Category"

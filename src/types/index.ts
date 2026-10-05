@@ -1632,6 +1632,8 @@ export interface ItemFilters {
   type?: string;
   brand?: string;
   color?: string;
+  /** Size label, matched exactly (backend ?size=). */
+  size?: string;
   status?: string;
   condition?: string;
   category_id?: string;
