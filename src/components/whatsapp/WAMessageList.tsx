@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { MessageCircle, RefreshCw } from 'lucide-react';
+import { Copy, ExternalLink, MessageCircle, RefreshCw } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/DataDisplay';
 import apiClient from '@/lib/api';
 import { waDeliveryLabel } from '@/lib/wa-delivery';
+import { copyText, waChatLink } from '@/lib/wa-link';
+import { useToast } from '@/contexts/ToastContext';
 import type { WAMessageKind, WAMessageKindFilter, WAMessageLog } from '@/types';
 
 const KIND_LABELS: Record<WAMessageKind, string> = {
@@ -32,6 +34,7 @@ const FILTERS: Filter[] = [
 
 /** Every WhatsApp message the system gave to Wablas, newest first. */
 export function WAMessageList() {
+  const { success, error: toastError } = useToast();
   const [filter, setFilter] = useState<Filter>(FILTERS[0]);
   const [messages, setMessages] = useState<WAMessageLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,6 +126,28 @@ export function WAMessageList() {
                     )}
                     {row.message && (
                       <pre className="whitespace-pre-wrap text-xs text-slate-500 max-h-24 overflow-auto">{row.message}</pre>
+                    )}
+                    {/* A message that failed or waits in the Wablas queue can go by hand. */}
+                    {row.message && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={async () => {
+                            if (await copyText(row.message)) success('Message copied', 'Paste it in WhatsApp on the shop phone.');
+                            else toastError('Could not copy', 'Select the text and copy it by hand.');
+                          }}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          Copy
+                        </Button>
+                        <a href={waChatLink(row.phone, row.message)} target="_blank" rel="noreferrer">
+                          <Button size="sm" variant="ghost">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Open WhatsApp
+                          </Button>
+                        </a>
+                      </div>
                     )}
                   </div>
                   <div className="shrink-0 text-xs text-slate-400">{new Date(row.created_at).toLocaleString()}</div>

@@ -30,6 +30,8 @@ export function waDeliveryLabel(status?: string | null): WADeliveryLabel | null 
       return { label: 'Delivered', variant: 'success', failed: false, queued: false };
     case 'read':
       return { label: 'Read', variant: 'success', failed: false, queued: false };
+    case 'manual':
+      return { label: 'Sent by hand', variant: 'success', failed: false, queued: false };
     default:
       return { label: value, variant: 'default', failed: false, queued: false };
   }

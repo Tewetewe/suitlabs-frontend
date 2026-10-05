@@ -51,7 +51,7 @@ export interface WAReminder {
   trigger: WAReminderTrigger;
   wablas_id?: string;
   error_summary?: string;
-  /** Newest WhatsApp status from Wablas. Empty until the first status arrives. */
+  /** Newest WhatsApp status from Wablas, or "manual" when sent by hand. */
   delivery_status?: string;
   delivery_note?: string;
   delivery_updated_at?: string;
@@ -59,6 +59,23 @@ export interface WAReminder {
   sent_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+/** One of today's reminders, ready to copy and send by hand (backend usecase.ReminderDraft). */
+export interface WAReminderDraft {
+  rental_id: string;
+  branch_id: string;
+  invoice_number?: string;
+  type: WAReminderType;
+  customer_name: string;
+  /** International digits. Empty or raw when skip_reason is set. */
+  phone: string;
+  language: string;
+  message: string;
+  /** Why no reminder goes to this Customer, for example an opt-out. */
+  skip_reason?: string;
+  /** True when a reminder already went out today, by Wablas or by hand. */
+  sent_today: boolean;
 }
 
 /** A Late Fee or replacement fee that Admin waived (backend entity/fee_waiver.go). */
