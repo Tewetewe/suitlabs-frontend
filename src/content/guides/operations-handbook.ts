@@ -810,7 +810,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <h3>What is on a printed receipt</h3>
   <ul class="plain">
-    <li>A fixed <b>SUITLABS BALI</b> heading, then the <b>branch receipt subtitle, address and phone</b> — those three are edited on the Branches page, so check a real print after any branch edit. Booking, rental and sale receipts all print the same block now. The <code>TEL:</code> line is dropped when the branch has no phone, rather than printing a placeholder.</li>
+    <li>A fixed <b>SUITLABS BALI</b> heading, then the <b>branch receipt subtitle, address, phone and opening hours</b> — those are edited on the Branches page, so check a real print after any branch edit. Booking, rental and sale receipts all print the same block. Indonesian phone numbers appear as <code>+62…</code> without a <code>TEL:</code> label, followed by separate weekday and weekend hours.</li>
     <li>A branch that fails to load falls back to the <b>Jimbaran</b> subtitle and address. That is deliberate — a receipt with the wrong address beats one with none — but it means a Nusa Dua receipt reading Jimbaran is a loading fault, not a data-entry mistake.</li>
     <li>Invoice number, date, the last eight of the booking id, DP or FULL, payment status, the customer's name, the item lines, and the totals. It closes with a thank-you and <code>suitlabs.bali</code>.</li>
     <li><b>Invoice barcode (CODE128)</b> under the invoice number — scan it at the POS to open that booking or rental. Hyphens are stripped so the scanner can read it. Item labels stay the CODE128 barcode from the item page.</li>

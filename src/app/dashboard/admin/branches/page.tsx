@@ -220,7 +220,7 @@ export default function BranchesPage() {
             <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           </div>
           <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <Input label="Opening hours" value={form.opening_hours} onChange={(e) => setForm({ ...form, opening_hours: e.target.value })} helperText="Shown in the WhatsApp pickup and return reminders. Leave empty to hide the line." />
+          <Input label="Opening hours" value={form.opening_hours} onChange={(e) => setForm({ ...form, opening_hours: e.target.value })} helperText="Shown on receipts and in WhatsApp pickup and return reminders. Separate receipt lines with |. Leave empty to hide the line." />
           <Input label="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input label="Website" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
           <Input label="Geofence (km)" value={form.geofence_km} onChange={(e) => setForm({ ...form, geofence_km: e.target.value })} />

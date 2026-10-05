@@ -63,6 +63,7 @@ export const RECEIPT_BRAND_NAME = 'SUITLABS BALI';
 export const RECEIPT_FALLBACK_SUBTITLE = 'Sewa Jas Jimbaran';
 export const RECEIPT_FALLBACK_ADDRESS =
   'Jl. Bukit Sari No.2, Jimbaran, Kec. Kuta Sel., Kabupaten Badung, Bali 80361';
+export const RECEIPT_FALLBACK_HOURS = 'MON-FRI: 12.00-20.00 | SAT-SUN: 12.00-18.00';
 
 export function receiptSubtitle(subtitle?: string | null): string {
   return subtitle?.trim() || RECEIPT_FALLBACK_SUBTITLE;
@@ -73,7 +74,20 @@ export function receiptAddress(address?: string | null): string {
 }
 
 export function receiptPhone(phone?: string | null): string {
-  return phone?.trim() || '';
+  const raw = phone?.trim() || '';
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('0')) return `+62${digits.slice(1)}`;
+  if (digits.startsWith('62')) return `+${digits}`;
+  if (raw.startsWith('+') && digits) return `+${digits}`;
+  return raw;
+}
+
+/** Split compact shop hours into lines that fit a 58 mm receipt. */
+export function receiptHours(hours?: string | null): string[] {
+  const value = hours == null ? RECEIPT_FALLBACK_HOURS : hours.trim();
+  if (!value) return [];
+  return value.split(/[|\r\n]+/).map((line) => line.trim()).filter(Boolean);
 }
 
 export function customerOriginName(customer?: { branch?: { name?: string } | null } | null): string {

@@ -13,7 +13,7 @@ import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
-import { receiptAddress, receiptSubtitle } from '@/lib/branch-scope';
+import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
 
 interface BookingInvoiceModalProps {
   isOpen: boolean;
@@ -27,6 +27,9 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
   const { error: toastError } = useToast();
 
   if (!isOpen || !invoice) return null;
+
+  const shopPhone = receiptPhone(invoice.company?.phone);
+  const shopHours = receiptHours(invoice.company?.hours);
 
   const rackItems = (invoice.items || [])
     .filter((item) => item.item_code || (item.description && !item.description.toUpperCase().includes('PACKAGE')))
@@ -105,7 +108,8 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
                     <div className="receipt-title">SUITLABS BALI</div>
                     <div className="receipt-subtitle">{receiptSubtitle(invoice.company?.subtitle)}</div>
                     <div className="receipt-line">{receiptAddress(invoice.company?.address)}</div>
-                    {invoice.company?.phone && <div className="receipt-line">TEL: {invoice.company.phone}</div>}
+                    {shopPhone && <div className="receipt-line">{shopPhone}</div>}
+                    {shopHours.map((hours) => <div key={hours} className="receipt-line">{hours}</div>)}
                   </div>
 
                   <div className="receipt-divider"></div>
@@ -196,4 +200,3 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
 }
 
 export default BookingInvoiceModal;
-

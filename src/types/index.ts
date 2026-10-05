@@ -1820,6 +1820,7 @@ export interface CompanyInfo {
   subtitle?: string;
   address: string;
   phone: string;
+  hours?: string;
   email: string;
   website: string;
 }

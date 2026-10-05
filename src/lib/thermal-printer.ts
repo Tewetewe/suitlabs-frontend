@@ -14,7 +14,7 @@ import {
 } from './escpos';
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
-import { receiptAddress, receiptPhone, receiptSubtitle } from './branch-scope';
+import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from './branch-scope';
 import { TRANSACTION_FEE_LABEL } from './transaction-fee';
 import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
 
@@ -380,6 +380,8 @@ export class ThermalPrinterService {
    */
   async printBookingInvoice(invoice: InvoiceData): Promise<void> {
     const generator = new ESCPOSGenerator();
+    const shopPhone = receiptPhone(invoice.company?.phone);
+    const shopHours = receiptHours(invoice.company?.hours);
 
     // Initialize printer
     generator.initialize();
@@ -402,8 +404,11 @@ export class ThermalPrinterService {
       .text(receiptAddress(invoice.company?.address))
       .lineFeed();
     
-    if (invoice.company?.phone) {
-      generator.text(`TEL: ${invoice.company.phone}`).lineFeed();
+    if (shopPhone) {
+      generator.text(shopPhone).lineFeed();
+    }
+    for (const hours of shopHours) {
+      generator.text(hours).lineFeed();
     }
     if (invoice.company?.email) {
       generator.text(`Email: ${invoice.company.email}`).lineFeed();
@@ -515,6 +520,7 @@ export class ThermalPrinterService {
     const shopSubtitle = receiptSubtitle(rental.branch?.receipt_subtitle);
     const shopAddress = receiptAddress(rental.branch?.address);
     const shopPhone = receiptPhone(rental.branch?.phone);
+    const shopHours = receiptHours(rental.branch?.opening_hours);
 
     // Initialize printer
     generator.initialize();
@@ -537,7 +543,10 @@ export class ThermalPrinterService {
       .text(shopAddress)
       .lineFeed();
     if (shopPhone) {
-      generator.text(`TEL: ${shopPhone}`).lineFeed();
+      generator.text(shopPhone).lineFeed();
+    }
+    for (const hours of shopHours) {
+      generator.text(hours).lineFeed();
     }
     generator.lineFeed();
 
@@ -674,6 +683,7 @@ export class ThermalPrinterService {
     const shopSubtitle = receiptSubtitle(sale.branch?.receipt_subtitle);
     const shopAddress = receiptAddress(sale.branch?.address);
     const shopPhone = receiptPhone(sale.branch?.phone);
+    const shopHours = receiptHours(sale.branch?.opening_hours);
     const customerName = sale.customer
       ? `${sale.customer.first_name} ${sale.customer.last_name}`.trim() || 'Walk-in'
       : 'Walk-in';
@@ -695,7 +705,10 @@ export class ThermalPrinterService {
       .text(shopAddress)
       .lineFeed();
     if (shopPhone) {
-      generator.text(`TEL: ${shopPhone}`).lineFeed();
+      generator.text(shopPhone).lineFeed();
+    }
+    for (const hours of shopHours) {
+      generator.text(hours).lineFeed();
     }
     generator.lineFeed();
 

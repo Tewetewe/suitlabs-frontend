@@ -13,7 +13,7 @@ import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
-import { receiptAddress, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
+import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
 
 interface RentalInvoiceModalProps {
   isOpen: boolean;
@@ -33,6 +33,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
   const shopSubtitle = receiptSubtitle(rental.branch?.receipt_subtitle);
   const shopAddress = receiptAddress(rental.branch?.address);
   const shopPhone = receiptPhone(rental.branch?.phone);
+  const shopHours = receiptHours(rental.branch?.opening_hours);
 
   // Bprint-style date formats (match backend bprint & booking invoice)
   const bprintDateTime = (d: string | Date) => {
@@ -109,7 +110,8 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
                 <div className="receipt-title">SUITLABS BALI</div>
                 <div className="receipt-subtitle">{shopSubtitle}</div>
                 <div className="receipt-line">{shopAddress}</div>
-                {shopPhone && <div className="receipt-line">TEL: {shopPhone}</div>}
+                {shopPhone && <div className="receipt-line">{shopPhone}</div>}
+                {shopHours.map((hours) => <div key={hours} className="receipt-line">{hours}</div>)}
               </div>
 
               <div className="receipt-divider"></div>
