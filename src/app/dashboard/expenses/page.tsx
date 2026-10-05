@@ -19,6 +19,7 @@ import { useBranch } from '@/contexts/BranchContext';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { apiClient } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-utils';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import type {
@@ -124,6 +125,8 @@ export default function ExpensesPage() {
   const [form, setForm] = useState<CreateExpenseRequest>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [voiding, setVoiding] = useState<Expense | null>(null);
+  const [deletingExpense, setDeletingExpense] = useState<Expense | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [voidLoading, setVoidLoading] = useState(false);
   const [recurring, setRecurring] = useState<RecurringExpense[]>([]);
   const [recurringOpen, setRecurringOpen] = useState(false);
@@ -255,6 +258,21 @@ export default function ExpensesPage() {
       error('Could not save expense', 'Check the form and try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!deletingExpense) return;
+    try {
+      setDeleteLoading(true);
+      await apiClient.deleteExpense(deletingExpense.id);
+      success('Expense deleted', deletingExpense.expense_number);
+      setDeletingExpense(null);
+      await refreshAll();
+    } catch (err) {
+      error('Could not delete expense', apiErrorMessage(err, 'Please try again.'));
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -530,16 +548,23 @@ export default function ExpensesPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {expense.status === 'recorded' && (
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => openEdit(expense)}>
-                            Edit
+                      <div className="flex justify-end gap-2">
+                        {expense.status === 'recorded' && (
+                          <>
+                            <Button size="sm" variant="secondary" onClick={() => openEdit(expense)}>
+                              Edit
+                            </Button>
+                            <Button size="sm" variant="danger" onClick={() => setVoiding(expense)}>
+                              Void
+                            </Button>
+                          </>
+                        )}
+                        {isAdmin && (
+                          <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setDeletingExpense(expense)}>
+                            Delete
                           </Button>
-                          <Button size="sm" variant="danger" onClick={() => setVoiding(expense)}>
-                            Void
-                          </Button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -641,6 +666,24 @@ export default function ExpensesPage() {
       >
         <p className="text-sm text-slate-600">
           Void {voiding?.expense_number}? It will stay in the list but will not count toward Profit & Loss.
+        </p>
+      </SimpleModal>
+
+      <SimpleModal
+        isOpen={!!deletingExpense}
+        title="Delete expense"
+        onClose={() => setDeletingExpense(null)}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeletingExpense(null)} disabled={deleteLoading}>Cancel</Button>
+            <Button variant="danger" loading={deleteLoading} onClick={handleDeleteExpense}>Delete</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-600">
+          Delete {deletingExpense?.expense_number}? A recorded expense is voided first, so its money is reversed. It then
+          leaves the list. Use this for test data only.
         </p>
       </SimpleModal>
 

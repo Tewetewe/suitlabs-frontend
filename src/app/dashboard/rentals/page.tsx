@@ -19,6 +19,7 @@ import { CreateRentalModal } from '@/components/modals/CreateRentalModal';
 import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { RentalDetailsModal } from '@/components/modals/RentalDetailsModal';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { EditRentalModal } from '@/components/modals/EditRentalModal';
 import { PickupRentalModal } from '@/components/modals/PickupRentalModal';
 import { CompleteRentalModal, DEPOSIT_GRACE_DAYS, isDepositHeld } from '@/components/modals/CompleteRentalModal';
@@ -46,6 +47,9 @@ function daysSinceReturn(rental: Rental): number | null {
 
 export default function RentalsPage() {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [deletingRental, setDeletingRental] = useState<Rental | null>(null);
+  const [deletingRentalBusy, setDeletingRentalBusy] = useState(false);
   const { warning, success, error: toastError } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebouncedValue(searchTerm, 400);
@@ -641,6 +645,32 @@ export default function RentalsPage() {
           onSuccess={() => { void reload(); }}
         />
 
+        <ConfirmModal
+          isOpen={!!deletingRental}
+          title="Delete rental"
+          description="Delete this rental? Its deposit, Late Fee, waivers, and add-on or lost-item Sales go too. The money is reversed and the stock comes back. Use this for test data only."
+          confirmLabel="Delete rental"
+          variant="danger"
+          loading={deletingRentalBusy}
+          onClose={() => setDeletingRental(null)}
+          onConfirm={async () => {
+            if (!deletingRental) return;
+            setDeletingRentalBusy(true);
+            try {
+              await apiClient.deleteRental(deletingRental.id);
+              success('Rental deleted');
+              setDeletingRental(null);
+              setShowDetailsModal(false);
+              setSelectedRental(null);
+              await reload();
+            } catch (e) {
+              toastError('Could not delete the rental', apiErrorMessage(e, 'Please try again.'));
+            } finally {
+              setDeletingRentalBusy(false);
+            }
+          }}
+        />
+
         <RentalDetailsModal
           isOpen={showDetailsModal}
           onClose={() => {
@@ -651,6 +681,8 @@ export default function RentalsPage() {
           onActivate={() => selectedRental && handleActivateRental(selectedRental.id)}
           onComplete={() => selectedRental && handleCompleteRental(selectedRental.id)}
           onCancel={() => selectedRental && handleCancelRental(selectedRental)}
+          // A Rental from a Booking goes with its Booking, on the Bookings page.
+          onDelete={isAdmin && selectedRental && !selectedRental.booking_id ? () => setDeletingRental(selectedRental) : undefined}
           onInvoice={() => {
             setShowDetailsModal(false);
             setShowInvoiceModal(true);
