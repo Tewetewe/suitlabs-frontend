@@ -17,6 +17,7 @@ import { formatPaymentMethod } from '@/lib/payment-methods';
 import { CreateSaleRequest, Rental, Sale, SaleSource } from '@/types';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { apiErrorMessage } from '@/lib/api-utils';
 import { SaleInvoiceModal } from '@/components/modals/SaleInvoiceModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { QrCode, ShoppingBag } from 'lucide-react';
@@ -80,6 +81,8 @@ function SalesPageInner() {
   const [source, setSource] = useState<SaleSource | ''>('');
   const [linkedRental, setLinkedRental] = useState<Rental | null>(null);
   const [cancellingSale, setCancellingSale] = useState<Sale | null>(null);
+  const [deletingSale, setDeletingSale] = useState<Sale | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [saleInvoice, setSaleInvoice] = useState<Sale | null>(null);
   /** True when the open invoice is for a sale just paid, so it goes to WhatsApp. */
@@ -197,6 +200,21 @@ function SalesPageInner() {
       error('Cancel failed', e instanceof Error ? e.message : 'Please try again.');
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingSale) return;
+    try {
+      setDeleting(true);
+      await apiClient.deleteSale(deletingSale.id);
+      success('Sale deleted', deletingSale.sale_number);
+      setDeletingSale(null);
+      await reload();
+    } catch (e) {
+      error('Delete failed', apiErrorMessage(e, 'Please try again.'));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -329,6 +347,11 @@ function SalesPageInner() {
                         Cancel
                       </Button>
                     )}
+                    {isAdmin && (
+                      <Button variant="ghost" size="sm" className="text-red-600" onClick={() => setDeletingSale(sale)}>
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -353,6 +376,20 @@ function SalesPageInner() {
       loading={cancelling}
       onClose={() => setCancellingSale(null)}
       onConfirm={handleCancel}
+    />
+    <ConfirmModal
+      isOpen={!!deletingSale}
+      title="Delete sale"
+      description={
+        deletingSale
+          ? `Delete ${deletingSale.sale_number}? A completed sale is cancelled first: the stock comes back and the money is reversed. Use this for test data only.`
+          : undefined
+      }
+      confirmLabel="Delete sale"
+      variant="danger"
+      loading={deleting}
+      onClose={() => setDeletingSale(null)}
+      onConfirm={handleDelete}
     />
     <BarcodeScanner
       isOpen={scannerOpen}

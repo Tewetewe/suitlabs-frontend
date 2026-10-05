@@ -99,6 +99,9 @@ export default function BookingsPage() {
   const { user } = useAuth();
   const { enabled: depositEnabled } = useDepositSettings();
   const { warning, success, error: toastError } = useToast();
+  const isAdmin = user?.role === 'admin';
+  const [deletingBooking, setDeletingBooking] = useState<Booking | null>(null);
+  const [deletingBookingBusy, setDeletingBookingBusy] = useState(false);
   const [filters, setFilters] = useState<BookingFilters>({});
   const [searchInput, setSearchInput] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -1082,6 +1085,37 @@ export default function BookingsPage() {
               ? () => { setPayFeeRuleId(''); setPayPot(''); setPayingBooking(activeBooking); }
               : undefined
           }
+          onDelete={isAdmin && activeBooking ? () => setDeletingBooking(activeBooking) : undefined}
+        />
+
+        <ConfirmModal
+          isOpen={!!deletingBooking}
+          title="Delete booking"
+          description={
+            deletingBooking
+              ? `Delete ${deletingBooking.invoice_number || 'this booking'}? Its Rental, deposit, Late Fee, waivers, and add-on or lost-item Sales go too. The money is reversed and the stock comes back. Use this for test data only.`
+              : undefined
+          }
+          confirmLabel="Delete booking"
+          variant="danger"
+          loading={deletingBookingBusy}
+          onClose={() => setDeletingBooking(null)}
+          onConfirm={async () => {
+            if (!deletingBooking) return;
+            setDeletingBookingBusy(true);
+            try {
+              await apiClient.deleteBooking(deletingBooking.id);
+              success('Booking deleted', deletingBooking.invoice_number || undefined);
+              setDeletingBooking(null);
+              setIsViewModalOpen(false);
+              setActiveBooking(null);
+              await reload();
+            } catch (e) {
+              toastError('Could not delete the booking', apiErrorMessage(e, 'Please try again.'));
+            } finally {
+              setDeletingBookingBusy(false);
+            }
+          }}
         />
 
         <InfiniteScrollSentinel

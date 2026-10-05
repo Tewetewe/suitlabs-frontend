@@ -35,6 +35,8 @@ interface RentalDetailsModalProps {
   onInvoice?: () => void;
   onSendWAReminder?: () => void;
   sendingWAReminder?: boolean;
+  /** Admin only: deletes a Rental that has no Booking. */
+  onDelete?: () => void;
 }
 
 function statusVariant(status: string): 'success' | 'warning' | 'primary' | 'default' | 'danger' {
@@ -67,6 +69,7 @@ export function RentalDetailsModal({
   onInvoice,
   onSendWAReminder,
   sendingWAReminder,
+  onDelete,
 }: RentalDetailsModalProps) {
   if (!rental) return null;
 
@@ -106,6 +109,11 @@ export function RentalDetailsModal({
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Close</Button>
+          {onDelete && (
+            <Button variant="ghost" className="text-red-600 hover:text-red-700" onClick={onDelete}>
+              Delete
+            </Button>
+          )}
           {canCancel && (
             <Button variant="ghost" className="text-red-600 hover:text-red-700" onClick={onCancel}>
               Cancel

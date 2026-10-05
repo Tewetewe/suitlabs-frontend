@@ -32,6 +32,8 @@ interface BookingDetailsModalProps {
   onEdit?: () => void;
   onInvoice?: (type: 'dp' | 'full') => void;
   onCollectBalance?: () => void;
+  /** Admin only: deletes the Booking with its Rental and Sales. */
+  onDelete?: () => void;
 }
 
 function statusVariant(status: string): 'success' | 'warning' | 'primary' | 'default' | 'danger' {
@@ -68,6 +70,7 @@ export function BookingDetailsModal({
   onEdit,
   onInvoice,
   onCollectBalance,
+  onDelete,
 }: BookingDetailsModalProps) {
   const { enabled: depositEnabled } = useDepositSettings();
   if (!booking) return null;
@@ -91,6 +94,11 @@ export function BookingDetailsModal({
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Close</Button>
+          {onDelete && (
+            <Button variant="ghost" className="text-red-600 hover:text-red-700" onClick={onDelete}>
+              Delete
+            </Button>
+          )}
           {canEdit && !canCollect && (
             <Button variant="secondary" onClick={onEdit}>Edit</Button>
           )}

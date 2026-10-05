@@ -726,8 +726,27 @@ class APIClient {
     return response.data.data!;
   }
 
+  /**
+   * Admin only. Deletes the Booking in any status, with its Rental and its
+   * add-on and lost-item Sales. The backend reverses their money and stock first.
+   */
   async deleteBooking(id: string): Promise<void> {
     await this.client.delete<DeleteResponse>(`/api/v1/bookings/${id}`);
+  }
+
+  /** Admin only. Deletes a Rental that has no Booking, in any status. */
+  async deleteRental(id: string): Promise<void> {
+    await this.client.delete<DeleteResponse>(`/api/v1/rentals/${id}`);
+  }
+
+  /** Admin only. Cancels the Sale if needed (stock back, money reversed), then deletes it. */
+  async deleteSale(id: string): Promise<void> {
+    await this.client.delete<DeleteResponse>(`/api/v1/sales/${id}`);
+  }
+
+  /** Admin only. Voids the Expense if needed (money reversed), then deletes it. */
+  async deleteExpense(id: string): Promise<void> {
+    await this.client.delete<DeleteResponse>(`/api/v1/expenses/${id}`);
   }
   async generateInvoice(bookingId: string, invoiceType: 'dp' | 'full'): Promise<InvoiceData> {
     const response = await this.client.get<APIResponse<InvoiceData>>(`/api/v1/bookings/${bookingId}/invoice?type=${invoiceType}`);
