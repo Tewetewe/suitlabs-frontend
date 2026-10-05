@@ -81,6 +81,8 @@ import {
   WAReminderRunResult,
   WAMessageLog,
   WAMessageKindFilter,
+  FeeWaiver,
+  LateFeePreview,
   DepositAgreementView,
   PaymentProof,
   PaymentProofKind,
@@ -480,6 +482,28 @@ class APIClient {
       params: { limit },
     });
     return response.data.data?.reminders || [];
+  }
+
+  /** Prices the Late Fee for a return now, or at the given ISO time. */
+  async previewLateFee(rentalId: string, at?: string): Promise<LateFeePreview> {
+    const response = await this.client.get<APIResponse<LateFeePreview>>(`/api/v1/rentals/${rentalId}/late-fee`, {
+      params: at ? { at } : undefined,
+    });
+    return this.handleResponse<LateFeePreview>(response);
+  }
+
+  async getFeeWaivers(rentalId: string): Promise<FeeWaiver[]> {
+    const response = await this.client.get<APIResponse<{ waivers: FeeWaiver[] }>>(`/api/v1/rentals/${rentalId}/fee-waivers`);
+    return response.data.data?.waivers || [];
+  }
+
+  /** Admin only: writes off a missing Item with no Sale. */
+  async waiveReplacementFee(rentalId: string, itemId: string, reason: string): Promise<FeeWaiver> {
+    const response = await this.client.post<APIResponse<{ waiver: FeeWaiver }>>(
+      `/api/v1/rentals/${rentalId}/items/${itemId}/waive-replacement`,
+      { reason },
+    );
+    return this.handleResponse<{ waiver: FeeWaiver }>(response).waiver;
   }
 
   async getWAMessages(
@@ -890,10 +914,15 @@ class APIClient {
     depositRefundProofUrl?: string,
     feeRuleId?: string,
     pot?: string,
+    lateFeeWaiver?: { amount: number; reason: string },
   ): Promise<Rental> {
     const body: Record<string, unknown> = {
       user_id: userId
     };
+    if (lateFeeWaiver && lateFeeWaiver.amount > 0) {
+      body.late_fee_waived = lateFeeWaiver.amount;
+      body.late_fee_waiver_reason = lateFeeWaiver.reason;
+    }
     if (actualReturnDate) body.actual_return_date = actualReturnDate;
     if (typeof damageCharges === 'number') body.damage_charges = damageCharges;
     if (damageNotes) body.damage_notes = damageNotes;

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge, EmptyState } from '@/components/ui/DataDisplay';
 import { CompleteRentalModal } from '@/components/modals/CompleteRentalModal';
+import { WaiveReplacementModal } from '@/components/modals/WaiveReplacementModal';
 import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -100,6 +101,7 @@ export default function ReturnCheckPage() {
   // False while the page follows today. A date picked by hand stays put.
   const [pinned, setPinned] = useState(false);
   const [day, setDay] = useState<ReturnCheckDay | null>(null);
+  const [waiving, setWaiving] = useState<{ rentalId: string; item: ReturnCheckItem } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hideDone, setHideDone] = useState(false);
@@ -372,6 +374,8 @@ export default function ReturnCheckPage() {
                   onSaveItem={saveItem}
                   onSendReminder={() => void sendReminder(check.rental_id, check.customer_name)}
                   onComplete={() => void openComplete(check)}
+                  isAdmin={user?.role === 'admin'}
+                  onWaiveReplacement={(item) => setWaiving({ rentalId: check.rental_id, item })}
                 />
               ))
             )}
@@ -389,6 +393,17 @@ export default function ReturnCheckPage() {
           setCompleting(null);
           setInvoiceRental(latest);
           success('Rental completed', latest.customer ? `${latest.customer.first_name} ${latest.customer.last_name}`.trim() : undefined);
+          void load(date, true);
+        }}
+      />
+
+      <WaiveReplacementModal
+        isOpen={Boolean(waiving)}
+        rentalId={waiving?.rentalId || ''}
+        item={waiving?.item || null}
+        onClose={() => setWaiving(null)}
+        onWaived={() => {
+          setWaiving(null);
           void load(date, true);
         }}
       />
@@ -480,6 +495,8 @@ function ReturnChecklist({
   onSaveItem,
   onSendReminder,
   onComplete,
+  isAdmin,
+  onWaiveReplacement,
 }: {
   check: ReturnCheck;
   showBranch: boolean;
@@ -489,9 +506,12 @@ function ReturnChecklist({
   onSaveItem: (check: ReturnCheck, item: ReturnCheckItem, change: Partial<ReturnCheckItemInput>) => Promise<void>;
   onSendReminder: () => void;
   onComplete: () => void;
+  isAdmin: boolean;
+  onWaiveReplacement: (item: ReturnCheckItem) => void;
 }) {
   const open = check.status !== 'returned';
-  const hasMissing = check.items.some((i) => i.problem === 'missing');
+  // A missing Item with its replacement fee waived needs no lost-item Sale.
+  const hasMissing = check.items.some((i) => i.problem === 'missing' && !i.replacement_waived);
 
   return (
     <Card data-testid="return-check-rental" data-status={check.status}>
@@ -607,6 +627,20 @@ function ReturnChecklist({
                     />
                   </div>
                 )}
+
+                {item.problem === 'missing' && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    {item.replacement_waived ? (
+                      <Badge variant="success">Replacement fee waived · written off</Badge>
+                    ) : isAdmin ? (
+                      <Button size="sm" variant="secondary" onClick={() => onWaiveReplacement(item)}>
+                        Waive replacement fee
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-slate-500">Only Admin can waive the replacement fee.</span>
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}
@@ -622,7 +656,9 @@ function ReturnChecklist({
               </div>
             )}
             {open && hasMissing && (
-              <div className="font-medium text-red-700">Record the missing Item under Lost items before Complete.</div>
+              <div className="font-medium text-red-700">
+                Record the missing Item under Lost items before Complete{isAdmin ? ', or waive its replacement fee' : ''}.
+              </div>
             )}
             {open && check.days_overdue > 0 && (
               <div className="font-medium text-amber-700">

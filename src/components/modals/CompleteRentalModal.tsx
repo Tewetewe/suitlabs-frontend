@@ -14,10 +14,11 @@ import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { apiClient } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api-utils';
 import { formatCurrency } from '@/lib/currency';
 import { feeMethodOf, TRANSACTION_FEE_HINT } from '@/lib/transaction-fee';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
-import { Rental } from '@/types';
+import { FEE_WAIVER_REASON_MIN, LateFeePreview, Rental } from '@/types';
 
 /** Matches usecase.DepositReleaseGraceDays on the backend. */
 export const DEPOSIT_GRACE_DAYS = 7;
@@ -58,8 +59,18 @@ export function CompleteRentalModal({
   const [actualReturnDate, setActualReturnDate] = useState('');
   const [sendToMaintenance, setSendToMaintenance] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [lateFee, setLateFee] = useState<LateFeePreview | null>(null);
+  const [waiveLateFee, setWaiveLateFee] = useState(false);
+  const [waivedAmount, setWaivedAmount] = useState(0);
+  const [waiverReason, setWaiverReason] = useState('');
 
   const someItems = Boolean(maintenanceItemIds && maintenanceItemIds.length > 0);
+  const isAdmin = user?.role === 'admin';
+  const toIso = (local: string) => {
+    if (!local) return undefined;
+    const dt = new Date(local);
+    return isNaN(dt.getTime()) ? undefined : dt.toISOString();
+  };
 
   // Each open starts clean, with the note and the maintenance tick the caller
   // already knows about.
@@ -72,7 +83,35 @@ export function CompleteRentalModal({
     setChargePot('');
     setActualReturnDate('');
     setSendToMaintenance(someItems);
+    setWaiveLateFee(false);
+    setWaivedAmount(0);
+    setWaiverReason('');
   }, [isOpen, rental?.id, initialDamageNotes, someItems]);
+
+  // The backend prices the Late Fee. Ask it again when the return time
+  // changes, so Admin sees what a waiver takes off.
+  useEffect(() => {
+    if (!isOpen || !rental) return;
+    let cancelled = false;
+    apiClient
+      .previewLateFee(rental.id, toIso(actualReturnDate))
+      .then((preview) => {
+        if (cancelled) return;
+        setLateFee(preview);
+        setWaivedAmount((current) => Math.min(current || preview.late_fee, preview.late_fee));
+      })
+      .catch(() => {
+        if (!cancelled) setLateFee(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, rental, actualReturnDate]);
+
+  const fee = lateFee?.late_fee || 0;
+  const waiverActive = isAdmin && waiveLateFee && fee > 0;
+  const waiverInvalid =
+    waiverActive && (waivedAmount <= 0 || waivedAmount > fee || waiverReason.trim().length < FEE_WAIVER_REASON_MIN);
 
   const submit = async () => {
     if (!rental) return;
@@ -84,14 +123,14 @@ export function CompleteRentalModal({
       toastError('Pick the bank', POT_MISSING_MESSAGE);
       return;
     }
+    if (waiverInvalid) {
+      toastError('Check the Late Fee waiver', `Enter an amount up to ${formatCurrency(fee)} and a reason of at least ${FEE_WAIVER_REASON_MIN} characters.`);
+      return;
+    }
     setSubmitting(true);
     try {
       const parsedCharge = damageCharges ? parseFloat(damageCharges) : undefined;
-      let isoActual: string | undefined = undefined;
-      if (actualReturnDate) {
-        const dt = new Date(actualReturnDate);
-        if (!isNaN(dt.getTime())) isoActual = dt.toISOString();
-      }
+      const isoActual = toIso(actualReturnDate);
       // A held deposit settles at the item check, so Complete sends no damage
       // charge and no refund. The backend refuses one anyway.
       const depositHeld = isDepositHeld(rental);
@@ -106,6 +145,7 @@ export function CompleteRentalModal({
         undefined,
         chargeFeeRuleId || undefined,
         potForRequest(chargePaymentMethod, chargePot),
+        waiverActive ? { amount: waivedAmount, reason: waiverReason.trim() } : undefined,
       );
       if (sendToMaintenance && Array.isArray(rental.items)) {
         const only = someItems ? new Set(maintenanceItemIds) : null;
@@ -126,7 +166,7 @@ export function CompleteRentalModal({
       onCompleted(latest);
     } catch (error) {
       console.error('Failed to complete rental:', error);
-      toastError('Could not complete rental', 'Please try again.');
+      toastError('Could not complete rental', apiErrorMessage(error, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -141,7 +181,7 @@ export function CompleteRentalModal({
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={submitting}>Cancel</Button>
-          <Button onClick={submit} loading={submitting} data-testid="confirm-complete">Complete</Button>
+          <Button onClick={submit} loading={submitting} disabled={waiverInvalid} data-testid="confirm-complete">Complete</Button>
         </>
       }
     >
@@ -154,6 +194,43 @@ export function CompleteRentalModal({
         )}
         {/* The time matters: each 20:00 after the Return Date adds a late day. */}
         <Input label="Actual return time" type="datetime-local" value={actualReturnDate} onChange={(e) => setActualReturnDate(e.target.value)} helperText="Leave empty to use now. Each 20:00 after the return date adds a late day." />
+        {fee > 0 && (
+          <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-medium text-amber-900">
+              Late Fee {formatCurrency(fee)}
+              {lateFee?.late_days ? ` · ${lateFee.late_days} late ${lateFee.late_days === 1 ? 'day' : 'days'} × 50% of the booking` : ''}
+              {waiverActive && waivedAmount > 0 && waivedAmount <= fee ? ` · customer pays ${formatCurrency(fee - waivedAmount)}` : ''}
+            </p>
+            {isAdmin ? (
+              <>
+                <label className="flex min-h-9 items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" className="h-4 w-4" checked={waiveLateFee} onChange={(e) => setWaiveLateFee(e.target.checked)} />
+                  Waive the Late Fee, in full or in part
+                </label>
+                {waiveLateFee && (
+                  <>
+                    <CurrencyInput
+                      label="Amount to waive"
+                      value={waivedAmount ? String(waivedAmount) : ''}
+                      onChange={(n) => setWaivedAmount(n || 0)}
+                      helperText={`Up to ${formatCurrency(fee)}.`}
+                    />
+                    <Textarea
+                      label="Reason"
+                      rows={2}
+                      value={waiverReason}
+                      onChange={(e) => setWaiverReason(e.target.value)}
+                      placeholder="For example: the flight was cancelled, ticket seen"
+                      helperText={`At least ${FEE_WAIVER_REASON_MIN} characters. It stays on the Rental.`}
+                    />
+                  </>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-amber-800">Only Admin can waive the Late Fee.</p>
+            )}
+          </div>
+        )}
         <Textarea label="Damage notes" rows={3} value={damageNotes} onChange={(e) => setDamageNotes(e.target.value)} placeholder="Optional" />
         {rental && isDepositHeld(rental) ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">

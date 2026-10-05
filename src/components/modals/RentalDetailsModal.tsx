@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/DataDisplay';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { ProofList } from '@/components/payments/ProofList';
+import { FeeWaiverList } from '@/components/payments/FeeWaiverList';
 import { formatCurrency } from '@/lib/currency';
 import { calculateDuration, formatDateShort, formatDateTime } from '@/lib/date';
 import { customerLanguageLabel } from '@/lib/select-options';
@@ -203,6 +204,8 @@ export function RentalDetailsModal({
             )}
           </div>
         </DetailSection>
+
+        <FeeWaiverList rentalId={rental.id} />
 
         {rental.identity_card_url && (
           <DetailSection label="Guarantee">

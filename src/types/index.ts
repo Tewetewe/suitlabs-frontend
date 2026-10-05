@@ -61,6 +61,32 @@ export interface WAReminder {
   updated_at: string;
 }
 
+/** A Late Fee or replacement fee that Admin waived (backend entity/fee_waiver.go). */
+export interface FeeWaiver {
+  id: string;
+  kind: 'late_fee' | 'replacement';
+  rental_id: string;
+  item_id?: string;
+  branch_id?: string;
+  /** The full fee before the waiver. */
+  fee_amount: number;
+  /** The part the Customer did not pay. */
+  waived_amount: number;
+  reason: string;
+  waived_by: string;
+  created_at: string;
+  item?: { id: string; name: string; code?: string };
+}
+
+/** The Late Fee that Complete would charge at a given time. */
+export interface LateFeePreview {
+  late_fee: number;
+  late_days: number;
+}
+
+/** Matches entity.FeeWaiverReasonMinLength on the backend. */
+export const FEE_WAIVER_REASON_MIN = 10;
+
 /** The feature that sent a WhatsApp message (backend entity/wa_message_log.go). */
 export type WAMessageKind =
   | 'reminder_pickup'
@@ -377,6 +403,8 @@ export interface ReturnCheckItem {
   checked_by?: string;
   checked_at?: string;
   passed: boolean;
+  /** True when Admin waived the replacement fee, so no lost-item Sale is needed. */
+  replacement_waived?: boolean;
 }
 
 export interface ReturnCheck {
