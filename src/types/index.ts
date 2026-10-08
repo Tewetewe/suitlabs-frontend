@@ -142,14 +142,6 @@ export interface LegacyImportRequest {
   choices?: Record<string, string>;
 }
 
-export interface LegacyImportResult {
-  preview: LegacyImportPreview;
-  created: number;
-  failed: number;
-  errors?: string[];
-  run?: GoogleSyncRun;
-}
-
 /** One of today's reminders, ready to copy and send by hand (backend usecase.ReminderDraft). */
 export interface WAReminderDraft {
   rental_id: string;
