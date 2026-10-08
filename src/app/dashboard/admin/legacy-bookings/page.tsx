@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, History, RefreshCcw, Search } from 'lucide-react';
 
@@ -21,7 +21,6 @@ import type {
   GoogleSyncRun,
   Item,
   LegacyImportPreview,
-  LegacyImportResult,
   LegacyImportRow,
   LegacyItemNeed,
 } from '@/types';
@@ -48,6 +47,9 @@ function loadChoices(tab: string): Record<string, string> {
   }
 }
 
+/** Stop following a Sync after this long; the server limit is 10 minutes. */
+const SYNC_FOLLOW_LIMIT_MS = 11 * 60 * 1000;
+
 function thisMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -70,7 +72,9 @@ export default function LegacyBookingsPage() {
   const [tab, setTab] = useState('Legacy Dev');
   const [month, setMonth] = useState(thisMonth());
   const [preview, setPreview] = useState<LegacyImportPreview | null>(null);
-  const [result, setResult] = useState<LegacyImportResult | null>(null);
+  // The Sync runs in the background on the server; the page follows its run.
+  const [syncRun, setSyncRun] = useState<GoogleSyncRun | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [filter, setFilter] = useState<StateFilter>('all');
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -103,7 +107,6 @@ export default function LegacyBookingsPage() {
 
   const onPreview = async (picked: Record<string, string> = choices) => {
     setLoading(true);
-    setResult(null);
     try {
       setPreview(await apiClient.previewLegacyBookings(request(picked)));
     } catch (e) {
@@ -113,19 +116,50 @@ export default function LegacyBookingsPage() {
     }
   };
 
+  const stopPolling = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = null;
+  };
+  useEffect(() => stopPolling, []);
+
+  // Follow the run every 2 s until the server says it is done, then read the
+  // tab again so the rows show as imported.
+  const follow = (runId: string) => {
+    stopPolling();
+    const startedAt = Date.now();
+    pollRef.current = setInterval(async () => {
+      try {
+        const recent = await apiClient.getGoogleSheetsRuns('legacy_booking_import', 10);
+        setRuns(recent);
+        const current = recent.find((r) => r.id === runId);
+        if (current) setSyncRun(current);
+        if (current && current.status !== 'running') {
+          stopPolling();
+          setSyncing(false);
+          if (current.status === 'completed') success('Legacy sync done', `${current.created_count} created`);
+          else toastError('Legacy sync finished with errors', `${current.created_count} created`);
+          void onPreview(choices);
+        } else if (Date.now() - startedAt > SYNC_FOLLOW_LIMIT_MS) {
+          stopPolling();
+          setSyncing(false);
+          toastError('Sync still running', 'Check Recent syncs below later.');
+        }
+      } catch {
+        // A failed check tries again on the next tick.
+      }
+    }, 2000);
+  };
+
   const onSync = async () => {
     setSyncing(true);
     try {
-      const outcome = await apiClient.syncLegacyBookings(request(choices));
-      setResult(outcome);
-      setPreview(outcome.preview);
-      success('Legacy bookings synced', `${outcome.created} created${outcome.failed ? `, ${outcome.failed} failed` : ''}`);
+      const run = await apiClient.syncLegacyBookings(request(choices));
+      setSyncRun(run);
       setConfirming(false);
-      void loadRuns();
+      follow(run.id);
     } catch (e) {
-      toastError('Sync failed', apiErrorMessage(e, 'Please try again.'));
-    } finally {
       setSyncing(false);
+      toastError('Sync did not start', apiErrorMessage(e, 'Please try again.'));
     }
   };
 
@@ -185,12 +219,12 @@ export default function LegacyBookingsPage() {
             </div>
             <p className="text-xs text-slate-500">
               The sheet&apos;s Booking Date is the event day: pickup is the day before and the return the day after. The
-              Appointment Date is the day the customer booked. Add-ons, ties, and shoes go in the booking notes. A row
-              whose suit matches no Item still imports, with no Item: pick the Item below first, or add it later with
-              Edit on the booking. Revenue posts
-              like a normal booking; the amount paid before the system goes to Opening Equity, so bank and cash balances
-              do not change. No WhatsApp goes out and no deposit is taken. When a suit matches no Item, or several, pick the Item
-              below; the choice covers every row with that product and size.
+              Appointment Date is the day the customer booked. Add-ons, ties, and shoes go in the booking notes. A suit
+              that matches no Item, or several, can be picked below; the choice covers every row with that product and
+              size. Without a pick, the booking imports with no Item and Admin adds it later with Edit. Revenue posts
+              like a normal booking; the amount paid before the system goes to Opening Equity, so bank and cash
+              balances do not change. No WhatsApp goes out and no deposit is taken. Sync runs on the server: you can
+              leave this page, and the result shows under Recent syncs.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" loading={loading} disabled={!tab.trim() || !month} onClick={() => void onPreview(choices)}>
@@ -209,15 +243,22 @@ export default function LegacyBookingsPage() {
           </CardContent>
         </Card>
 
-        {result && (
+        {syncRun && (
           <Card>
             <CardContent>
-              <div className="font-semibold text-emerald-900">
-                Sync complete: {result.created} created{result.failed ? `, ${result.failed} failed` : ''}
-              </div>
-              {(result.errors || []).map((line) => (
-                <div key={line} className="text-xs text-red-700">{line}</div>
-              ))}
+              {syncRun.status === 'running' ? (
+                <div className="font-semibold text-slate-700">Sync running on the server…</div>
+              ) : (
+                <div className={syncRun.status === 'completed' ? 'font-semibold text-emerald-900' : 'font-semibold text-red-700'}>
+                  Sync {syncRun.status}: {syncRun.created_count} created, {syncRun.skipped_count} blocked
+                </div>
+              )}
+              {(syncRun.error_summary || '')
+                .split('\n')
+                .filter(Boolean)
+                .map((line) => (
+                  <div key={line} className="text-xs text-red-700">{line}</div>
+                ))}
             </CardContent>
           </Card>
         )}

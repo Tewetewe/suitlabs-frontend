@@ -86,7 +86,6 @@ import {
   LateFeePreview,
   LegacyImportPreview,
   LegacyImportRequest,
-  LegacyImportResult,
   DepositAgreementView,
   PaymentProof,
   PaymentProofKind,
@@ -481,13 +480,13 @@ class APIClient {
     return this.handleResponse<LegacyImportPreview>(response);
   }
 
-  /** Admin only. Writes the ready legacy rows. A row already imported is skipped. */
-  async syncLegacyBookings(body: LegacyImportRequest): Promise<LegacyImportResult> {
-    // A Sync writes every row; the server finishes it even if this wait ends.
-    const response = await this.client.post<APIResponse<LegacyImportResult>>('/api/v1/admin/legacy-bookings/sync', body, {
-      timeout: LEGACY_IMPORT_TIMEOUT_MS,
-    });
-    return this.handleResponse<LegacyImportResult>(response);
+  /**
+   * Admin only. Starts a Sync of the ready legacy rows on the server and
+   * returns its run at once; follow it with getGoogleSheetsRuns.
+   */
+  async syncLegacyBookings(body: LegacyImportRequest): Promise<GoogleSyncRun> {
+    const response = await this.client.post<APIResponse<{ run: GoogleSyncRun }>>('/api/v1/admin/legacy-bookings/sync', body);
+    return this.handleResponse<{ run: GoogleSyncRun }>(response).run;
   }
 
   async syncItemsFromGoogleSheets(branchId?: string): Promise<{ result: ItemSyncResult; run: GoogleSyncRun }> {
