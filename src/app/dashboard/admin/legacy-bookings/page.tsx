@@ -185,8 +185,9 @@ export default function LegacyBookingsPage() {
             </div>
             <p className="text-xs text-slate-500">
               The sheet&apos;s Booking Date is the event day: pickup is the day before and the return the day after. The
-              Appointment Date is the day the customer booked. Add-ons, ties, and shoes go in the booking notes. No money
-              posts, no WhatsApp goes out, and no deposit is taken. When a suit matches no Item, or several, pick the Item
+              Appointment Date is the day the customer booked. Add-ons, ties, and shoes go in the booking notes. Revenue posts
+              like a normal booking; the amount paid before the system goes to Opening Equity, so bank and cash balances
+              do not change. No WhatsApp goes out and no deposit is taken. When a suit matches no Item, or several, pick the Item
               below; the choice covers every row with that product and size.
             </p>
             <div className="flex flex-wrap gap-2">
