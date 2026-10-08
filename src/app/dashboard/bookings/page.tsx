@@ -100,6 +100,9 @@ export default function BookingsPage() {
   const { enabled: depositEnabled } = useDepositSettings();
   const { warning, success, error: toastError } = useToast();
   const isAdmin = user?.role === 'admin';
+  // Edit is for a booking that is not fully paid. Admin may also edit an
+  // imported legacy booking that is, to add or fix its Item after the import.
+  const canEditBooking = (b: Booking) => b.payment_status !== 'completed' || (isAdmin && Boolean(b.legacy_ref));
   const [deletingBooking, setDeletingBooking] = useState<Booking | null>(null);
   const [deletingBookingBusy, setDeletingBookingBusy] = useState(false);
   const [filters, setFilters] = useState<BookingFilters>({});
@@ -898,7 +901,7 @@ export default function BookingsPage() {
                         <OverflowMenuItem icon={<Eye className="h-4 w-4 text-slate-400" />} onClick={() => { setActiveBooking(booking); setIsViewModalOpen(true); }}>
                           View
                         </OverflowMenuItem>
-                        {booking.payment_status !== 'completed' && (
+                        {canEditBooking(booking) && (
                           <OverflowMenuItem icon={<Edit className="h-4 w-4 text-slate-400" />} onClick={() => openEdit(booking)}>
                             Edit
                           </OverflowMenuItem>
@@ -1068,7 +1071,7 @@ export default function BookingsPage() {
           booking={activeBooking}
           onClose={() => { setIsViewModalOpen(false); setActiveBooking(null); }}
           onEdit={
-            activeBooking && activeBooking.payment_status !== 'completed'
+            activeBooking && canEditBooking(activeBooking)
               ? () => {
                   setIsViewModalOpen(false);
                   openEdit(activeBooking);

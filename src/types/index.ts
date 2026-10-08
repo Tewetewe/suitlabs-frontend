@@ -30,7 +30,7 @@ export interface ItemSyncResult {
   errors: ItemSyncRowError[];
 }
 
-export type GoogleSyncJobType = 'item_import' | 'booking_export';
+export type GoogleSyncJobType = 'item_import' | 'booking_export' | 'legacy_booking_import';
 export type GoogleSyncStatus = 'running' | 'completed' | 'failed';
 
 export type WAReminderType = 'pickup' | 'return';
@@ -59,6 +59,87 @@ export interface WAReminder {
   sent_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+/** One booking line the legacy import writes (backend usecase.LegacyImportLine). */
+export interface LegacyImportLine {
+  code: string;
+  name: string;
+  type: string;
+  price: number;
+  /**
+   * codes = from the Item Codes column, choice = picked on the page,
+   * auto = from the names, pair = the Suit's paired Trousers.
+   */
+  from: 'codes' | 'choice' | 'auto' | 'pair';
+}
+
+/** A product that matched no Item, or several. One choice covers every row with this key. */
+export interface LegacyItemNeed {
+  key: string;
+  kind: 'suit' | 'trousers' | 'item';
+  product: string;
+  size: string;
+  candidates?: LegacyImportLine[];
+  rows?: number[];
+}
+
+/** One legacy sheet row and what the import does with it (backend usecase.LegacyImportRow). */
+export interface LegacyImportRow {
+  row: number;
+  state: 'ready' | 'blocked' | 'imported';
+  booking_id?: string;
+  customer_name: string;
+  phone: string;
+  customer_exists: boolean;
+  event_date?: string;
+  pickup_date?: string;
+  return_date?: string;
+  ordered_date?: string;
+  sheet_status: string;
+  booking_status?: string;
+  rental_status?: string;
+  product: string;
+  size: string;
+  suit_detail: string;
+  lines: LegacyImportLine[];
+  total: number;
+  paid: number;
+  remaining: number;
+  payment_method?: string;
+  /** Problems stop the row. */
+  problems?: string[];
+  /** Warnings let the row through, for a check by hand. */
+  warnings?: string[];
+  need?: LegacyItemNeed;
+  /** True when the booking imports with no Item; Admin adds it with Edit. */
+  without_item?: boolean;
+}
+
+export interface LegacyImportPreview {
+  month: string;
+  tab: string;
+  branch_id: string;
+  branch_name: string;
+  spreadsheet_id: string;
+  rows: LegacyImportRow[];
+  ready: number;
+  blocked: number;
+  imported: number;
+  other_months: number;
+  /** Each product with no Item yet, once. A pick is optional. */
+  needs: LegacyItemNeed[];
+  /** Rows that would import with no Item. */
+  without_item: number;
+}
+
+/** What the legacy Preview and Sync read. */
+export interface LegacyImportRequest {
+  branch_id?: string;
+  tab?: string;
+  month: string;
+  /** Picker key → chosen Item code. */
+  choices?: Record<string, string>;
 }
 
 /** One of today's reminders, ready to copy and send by hand (backend usecase.ReminderDraft). */
@@ -918,6 +999,8 @@ export type BookingInstitution =
 // Booking Types
 export interface Booking {
   id: string;
+  /** Set on a booking imported from the legacy sheet. Admin may edit it even when fully paid. */
+  legacy_ref?: string;
   customer_id: string;
   customer?: Customer;
   /** The Pickup date. */

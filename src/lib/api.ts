@@ -84,6 +84,8 @@ import {
   WAReminderDraft,
   FeeWaiver,
   LateFeePreview,
+  LegacyImportPreview,
+  LegacyImportRequest,
   DepositAgreementView,
   PaymentProof,
   PaymentProofKind,
@@ -105,6 +107,9 @@ interface BackendCategory {
   updated_at: string;
   children?: BackendCategory[];
 }
+
+/** Legacy Preview and Sync wait up to 2 minutes, not the 10 s default. */
+const LEGACY_IMPORT_TIMEOUT_MS = 120_000;
 
 class APIClient {
   private client: AxiosInstance;
@@ -464,6 +469,24 @@ class APIClient {
       params: { job_type: jobType, limit },
     });
     return response.data.data?.runs || [];
+  }
+
+  /** Admin only. Reads the legacy tab and shows what a sync writes. Changes nothing. */
+  async previewLegacyBookings(body: LegacyImportRequest): Promise<LegacyImportPreview> {
+    // Reading the tab and the whole catalogue takes longer than the 10 s default.
+    const response = await this.client.post<APIResponse<LegacyImportPreview>>('/api/v1/admin/legacy-bookings/preview', body, {
+      timeout: LEGACY_IMPORT_TIMEOUT_MS,
+    });
+    return this.handleResponse<LegacyImportPreview>(response);
+  }
+
+  /**
+   * Admin only. Starts a Sync of the ready legacy rows on the server and
+   * returns its run at once; follow it with getGoogleSheetsRuns.
+   */
+  async syncLegacyBookings(body: LegacyImportRequest): Promise<GoogleSyncRun> {
+    const response = await this.client.post<APIResponse<{ run: GoogleSyncRun }>>('/api/v1/admin/legacy-bookings/sync', body);
+    return this.handleResponse<{ run: GoogleSyncRun }>(response).run;
   }
 
   async syncItemsFromGoogleSheets(branchId?: string): Promise<{ result: ItemSyncResult; run: GoogleSyncRun }> {
