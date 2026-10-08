@@ -112,6 +112,8 @@ export interface LegacyImportRow {
   /** Warnings let the row through, for a check by hand. */
   warnings?: string[];
   need?: LegacyItemNeed;
+  /** True when the booking imports with no Item; Admin adds it with Edit. */
+  without_item?: boolean;
 }
 
 export interface LegacyImportPreview {
@@ -125,8 +127,10 @@ export interface LegacyImportPreview {
   blocked: number;
   imported: number;
   other_months: number;
-  /** Each product that waits for an Item choice, once. */
+  /** Each product with no Item yet, once. A pick is optional. */
   needs: LegacyItemNeed[];
+  /** Rows that would import with no Item. */
+  without_item: number;
 }
 
 /** What the legacy Preview and Sync read. */
@@ -1003,6 +1007,8 @@ export type BookingInstitution =
 // Booking Types
 export interface Booking {
   id: string;
+  /** Set on a booking imported from the legacy sheet. Admin may edit it even when fully paid. */
+  legacy_ref?: string;
   customer_id: string;
   customer?: Customer;
   /** The Pickup date. */
