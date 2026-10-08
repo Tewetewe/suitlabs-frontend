@@ -22,6 +22,7 @@ import {
   UserCog,
   Shirt,
   FileSpreadsheet,
+  History,
   BarChart3,
   ShoppingBag,
   Wallet,
@@ -90,6 +91,7 @@ const navigationSections: NavigationSection[] = [
     items: [
       { name: 'Daily Close', href: '/dashboard/admin/daily-close', icon: CalendarCheck, roles: ['admin'] },
       { name: 'Bulk Input Sync', href: '/dashboard/admin/bulk-input-sync', icon: FileSpreadsheet, roles: ['admin'] },
+      { name: 'Legacy Bookings', href: '/dashboard/admin/legacy-bookings', icon: History, roles: ['admin'] },
       { name: 'Transaction Fees', href: '/dashboard/admin/transaction-fees', icon: Percent, roles: ['admin'] },
       { name: 'Assets', href: '/dashboard/admin/assets', icon: Landmark, roles: ['admin'] },
       { name: 'Analytics', href: '/dashboard/admin/rental-analytics', icon: TrendingUp, roles: ['admin'] },

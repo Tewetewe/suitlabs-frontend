@@ -84,6 +84,9 @@ import {
   WAReminderDraft,
   FeeWaiver,
   LateFeePreview,
+  LegacyImportPreview,
+  LegacyImportRequest,
+  LegacyImportResult,
   DepositAgreementView,
   PaymentProof,
   PaymentProofKind,
@@ -464,6 +467,18 @@ class APIClient {
       params: { job_type: jobType, limit },
     });
     return response.data.data?.runs || [];
+  }
+
+  /** Admin only. Reads the legacy tab and shows what a sync writes. Changes nothing. */
+  async previewLegacyBookings(body: LegacyImportRequest): Promise<LegacyImportPreview> {
+    const response = await this.client.post<APIResponse<LegacyImportPreview>>('/api/v1/admin/legacy-bookings/preview', body);
+    return this.handleResponse<LegacyImportPreview>(response);
+  }
+
+  /** Admin only. Writes the ready legacy rows. A row already imported is skipped. */
+  async syncLegacyBookings(body: LegacyImportRequest): Promise<LegacyImportResult> {
+    const response = await this.client.post<APIResponse<LegacyImportResult>>('/api/v1/admin/legacy-bookings/sync', body);
+    return this.handleResponse<LegacyImportResult>(response);
   }
 
   async syncItemsFromGoogleSheets(branchId?: string): Promise<{ result: ItemSyncResult; run: GoogleSyncRun }> {
