@@ -185,7 +185,9 @@ export default function LegacyBookingsPage() {
             </div>
             <p className="text-xs text-slate-500">
               The sheet&apos;s Booking Date is the event day: pickup is the day before and the return the day after. The
-              Appointment Date is the day the customer booked. Add-ons, ties, and shoes go in the booking notes. Revenue posts
+              Appointment Date is the day the customer booked. Add-ons, ties, and shoes go in the booking notes. A row
+              whose suit matches no Item still imports, with no Item: pick the Item below first, or add it later with
+              Edit on the booking. Revenue posts
               like a normal booking; the amount paid before the system goes to Opening Equity, so bank and cash balances
               do not change. No WhatsApp goes out and no deposit is taken. When a suit matches no Item, or several, pick the Item
               below; the choice covers every row with that product and size.
@@ -225,7 +227,9 @@ export default function LegacyBookingsPage() {
             <CardHeader>
               <CardTitle size="lg">Pick the Items ({preview.needs.length})</CardTitle>
               <p className="mt-1 text-sm text-slate-600">
-                These products match no Item, or several. Pick one Item for each; the rows that wait for it become ready.
+                These products match no Item, or several. Pick one Item for each before Sync, so the booking gets its
+                Item and blocks it on the calendar. Without a pick, the booking imports with no Item and Admin adds it
+                later with Edit.
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -272,6 +276,12 @@ export default function LegacyBookingsPage() {
                   ))}
                 </div>
               </div>
+              {preview.without_item > 0 && (
+                <p className="mt-2 text-xs text-amber-700">
+                  {preview.without_item} rows import with no Item. Their bookings do not block a suit on the calendar
+                  until Admin adds the Item with Edit.
+                </p>
+              )}
               {preview.other_months > 0 && (
                 <p className="mt-2 text-xs text-slate-500">
                   {preview.other_months} rows have an event day in another month and are not listed.
@@ -347,6 +357,7 @@ function LegacyRowCard({ row }: { row: LegacyImportRow }) {
         <Badge variant={row.customer_exists ? 'default' : 'info'}>
           {row.customer_exists ? 'Existing customer' : 'New customer'}
         </Badge>
+        {row.without_item && row.state !== 'imported' && <Badge variant="warning">No Item</Badge>}
       </div>
       <div className="text-sm text-slate-600">
         Event {row.event_date || '?'} · pickup {row.pickup_date || '?'} · return {row.return_date || '?'}
