@@ -109,6 +109,9 @@ interface BackendCategory {
   children?: BackendCategory[];
 }
 
+/** Legacy Preview and Sync wait up to 2 minutes, not the 10 s default. */
+const LEGACY_IMPORT_TIMEOUT_MS = 120_000;
+
 class APIClient {
   private client: AxiosInstance;
   private token: string | null = null;
@@ -471,13 +474,19 @@ class APIClient {
 
   /** Admin only. Reads the legacy tab and shows what a sync writes. Changes nothing. */
   async previewLegacyBookings(body: LegacyImportRequest): Promise<LegacyImportPreview> {
-    const response = await this.client.post<APIResponse<LegacyImportPreview>>('/api/v1/admin/legacy-bookings/preview', body);
+    // Reading the tab and the whole catalogue takes longer than the 10 s default.
+    const response = await this.client.post<APIResponse<LegacyImportPreview>>('/api/v1/admin/legacy-bookings/preview', body, {
+      timeout: LEGACY_IMPORT_TIMEOUT_MS,
+    });
     return this.handleResponse<LegacyImportPreview>(response);
   }
 
   /** Admin only. Writes the ready legacy rows. A row already imported is skipped. */
   async syncLegacyBookings(body: LegacyImportRequest): Promise<LegacyImportResult> {
-    const response = await this.client.post<APIResponse<LegacyImportResult>>('/api/v1/admin/legacy-bookings/sync', body);
+    // A Sync writes every row; the server finishes it even if this wait ends.
+    const response = await this.client.post<APIResponse<LegacyImportResult>>('/api/v1/admin/legacy-bookings/sync', body, {
+      timeout: LEGACY_IMPORT_TIMEOUT_MS,
+    });
     return this.handleResponse<LegacyImportResult>(response);
   }
 
