@@ -23,6 +23,7 @@ import EditItemModal from '@/components/modals/EditItemModal';
 import { useToast } from '@/contexts/ToastContext';
 import { ArrowRightLeft, ChevronLeft, ChevronRight, Edit, X, ZoomIn } from 'lucide-react';
 import clsx from 'clsx';
+import { customerItemName, itemGenderLabel, itemQualityLabel } from '@/lib/item-name';
 
 function itemStatusVariant(status: string): 'success' | 'primary' | 'warning' | 'danger' | 'default' {
   switch (status) {
@@ -397,6 +398,8 @@ export default function ItemDetailPage() {
 
                   <DetailRows>
                     <DetailRow label="Type" value={typeLabel(item.type)} />
+                    <DetailRow label="Gender" value={itemGenderLabel(item.gender)} />
+                    <DetailRow label="Tier" value={itemQualityLabel(item.quality)} />
                     <DetailRow label="Brand" value={item.brand} />
                     <DetailRow label="Color" value={item.color} />
                     <DetailRow label="Size" value={item.size?.label} />
@@ -470,7 +473,7 @@ export default function ItemDetailPage() {
                     <p className="mb-3 font-mono text-sm text-slate-600">{item.barcode}</p>
                     <BarcodeLabel
                       value={item.barcode}
-                      itemName={item.name}
+                      itemName={customerItemName(item)}
                       itemCode={item.code}
                       sizeLabel={item.size?.label}
                       format="CODE128"
@@ -496,10 +499,12 @@ export default function ItemDetailPage() {
                             await printProductLabel(
                               {
                                 id: item.id,
-                                name: item.name,
+                                name: customerItemName(item),
                                 code: item.code,
                                 barcode: item.barcode || item.code,
-                                brand: item.brand,
+                                type: item.type,
+                                gender: item.gender,
+                                quality: item.quality,
                                 color: item.color,
                                 size: item.size,
                               },

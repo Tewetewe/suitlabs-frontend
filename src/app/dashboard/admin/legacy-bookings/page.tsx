@@ -17,6 +17,7 @@ import { useToast } from '@/contexts/ToastContext';
 import apiClient from '@/lib/api';
 import { apiErrorMessage } from '@/lib/api-utils';
 import { formatCurrency } from '@/lib/currency';
+import { itemTags } from '@/lib/item-name';
 import type {
   GoogleSyncRun,
   Item,
@@ -508,7 +509,7 @@ function ItemNeedPicker({
         <div className="flex flex-wrap gap-2">
           {found.map((item) => (
             <Button key={item.id} size="sm" variant="ghost" disabled={busy} onClick={() => onChoose(need.key, item.code)}>
-              <span className="font-mono">{item.code}</span> {item.name} {item.size?.label ? `· ${item.size.label}` : ''}
+              <span className="font-mono">{item.code}</span> {[item.name, ...itemTags(item), item.size?.label].filter(Boolean).join(' · ')}
             </Button>
           ))}
         </div>

@@ -14,6 +14,7 @@ import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
+import { customerItemName } from '@/lib/item-name';
 
 interface SaleInvoiceModalProps {
   isOpen: boolean;
@@ -129,7 +130,7 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
                 <div className="receipt-label">ITEMS:</div>
                 {(sale.items || []).length > 0 ? (
                   (sale.items || []).map((line) => {
-                    const name = line.item?.name || 'Item';
+                    const name = customerItemName(line.item) || 'Item';
                     const size = line.item?.size?.label ? ` - ${line.item.size.label}` : '';
                     return (
                       <div key={line.id} className="receipt-item">
