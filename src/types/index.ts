@@ -923,6 +923,7 @@ export interface Item {
   detail_size?: string;
   owner?: string;
   type: 'suit' | 'jacket' | 'accessory' | 'shoes' | 'tie' | 'belt' | 'trousers' | 'shirt' | 'shirts' | 'vest' | 'retail';
+  gender?: 'men' | 'women' | 'kids' | 'unisex';
   brand?: string;
   color?: string;
   size: { label: string };
