@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import JsBarcode from 'jsbarcode';
+import { drawBarcodeLabel } from '@/lib/barcode-label';
 
 interface BarcodeLabelProps {
   value: string;
@@ -26,7 +26,6 @@ export function BarcodeLabel({
   width = 3,
   height = 120,
   fontSize = 14,
-  margin = 8,
   className = '',
   onImageGenerated
 }: BarcodeLabelProps) {
@@ -41,94 +40,10 @@ export function BarcodeLabel({
     if (!isClient) return;
     if (canvasRef.current && value) {
       try {
-        // Clean the barcode value
-        let cleanedValue = value.trim();
-        
-        if (cleanedValue.startsWith('\\"') && cleanedValue.endsWith('\\"')) {
-          cleanedValue = cleanedValue.substring(2, cleanedValue.length - 2);
-        } else if (cleanedValue.startsWith('"') && cleanedValue.endsWith('"')) {
-          cleanedValue = cleanedValue.substring(1, cleanedValue.length - 1);
-        }
-
-        // Set canvas size for the label
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d', { alpha: false });
-        if (!ctx) return;
-        ctx.imageSmoothingEnabled = false;
-
-        // Calculate dimensions
-        const labelWidth = 384;
-        const labelHeight = 320;
-        
-        canvas.width = labelWidth;
-        canvas.height = labelHeight;
-
-        // Fill white background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, labelWidth, labelHeight);
-
-        // Add border
-        ctx.strokeStyle = '#e5e7eb';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(0, 0, labelWidth, labelHeight);
-
-        // Draw item name
-        ctx.fillStyle = '#111827';
-        ctx.font = 'bold 20px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(itemName, labelWidth / 2, 28);
-
-        let barcodeY = 48;
-        if (sizeLabel) {
-          ctx.fillStyle = '#000000';
-          ctx.font = 'bold 42px Arial';
-          ctx.fillText(sizeLabel, labelWidth / 2, 78);
-          barcodeY = 96;
-        }
-
-        ctx.fillStyle = '#374151';
-        ctx.font = '14px Arial';
-        ctx.fillText(`#${itemCode}`, labelWidth / 2, barcodeY);
-        barcodeY += 12;
-
-        const barcodeCanvas = document.createElement('canvas');
-        JsBarcode(barcodeCanvas, cleanedValue, {
-          format: format,
-          width: width,
-          height: height,
-          displayValue: false,
-          fontSize: fontSize,
-          margin: 8,
-          background: '#ffffff',
-          lineColor: '#000000',
-        });
-
-        const maxBarcodeW = 360;
-        let drawW = barcodeCanvas.width;
-        if (drawW > maxBarcodeW) {
-          const barWidth = Math.max(1, Math.floor(maxBarcodeW / Math.max(1, cleanedValue.length * 11 + 35)));
-          JsBarcode(barcodeCanvas, cleanedValue, {
-            format: format,
-            width: barWidth,
-            height: height,
-            displayValue: false,
-            fontSize: fontSize,
-            margin: 8,
-            background: '#ffffff',
-            lineColor: '#000000',
-          });
-          drawW = barcodeCanvas.width;
-        }
-        const barcodeX = Math.floor((labelWidth - drawW) / 2);
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(barcodeCanvas, barcodeX, barcodeY);
-
-        // Call callback with image data
+        drawBarcodeLabel(canvasRef.current, { value, itemName, itemCode, sizeLabel, format, width, height, fontSize });
         if (onImageGenerated) {
-          const imageDataUrl = canvas.toDataURL('image/png');
-          onImageGenerated(imageDataUrl);
+          onImageGenerated(canvasRef.current.toDataURL('image/png'));
         }
-
       } catch (error) {
         console.error('Error generating barcode label:', error);
         // Clear canvas and show error
@@ -144,7 +59,7 @@ export function BarcodeLabel({
         }
       }
     }
-  }, [value, itemName, itemCode, sizeLabel, format, width, height, fontSize, margin, onImageGenerated, isClient]);
+  }, [value, itemName, itemCode, sizeLabel, format, width, height, fontSize, onImageGenerated, isClient]);
 
   if (!isClient) {
     return (
