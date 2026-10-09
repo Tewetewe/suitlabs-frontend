@@ -56,6 +56,7 @@ import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from 
 import { Badge } from '@/components/ui/DataDisplay';
 import { itemTags } from '@/lib/item-name';
 import { availabilityCardNote, availabilityNote } from '@/lib/item-availability';
+import { unitPricesForSubtotal } from '@/lib/subtotal-override';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
 import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
 import {
@@ -207,6 +208,9 @@ export function CashierPOS() {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [payCoverage, setPayCoverage] = useState<PayCoverage>('dp');
   const [discount, setDiscount] = useState('');
+  // A typed Subtotal above the catalogue one, for items not in the catalogue
+  // yet. '' is the catalogue subtotal.
+  const [subtotalInput, setSubtotalInput] = useState('');
   const [notes, setNotes] = useState('');
   // Optional: '' is no guarantee left.
   const [guarantee, setGuarantee] = useState('');
@@ -225,7 +229,15 @@ export function CashierPOS() {
   const [todayDepositReleases, setTodayDepositReleases] = useState<number | null>(null);
 
   const selectedPackage = packages.find((pkg) => pkg.id === packageId);
-  const subtotal = cart.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+  const catalogueSubtotal = cart.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+  // A package sets its own price, so only a cart with no package takes a typed Subtotal.
+  const canEditSubtotal = cart.length > 0 && !(mode === 'rental' && packageId);
+  const typedSubtotal = canEditSubtotal ? Number(subtotalInput) || 0 : 0;
+  const subtotalTooLow = typedSubtotal > 0 && typedSubtotal < catalogueSubtotal;
+  const subtotal = typedSubtotal > catalogueSubtotal ? typedSubtotal : catalogueSubtotal;
+  const pricedUnits = unitPricesForSubtotal(cart, subtotal);
+  // The cart as charged: the extra of a typed Subtotal sits on the main line.
+  const pricedCart = cart.map((line, index) => ({ ...line, unit_price: pricedUnits[index] }));
   const packagePrice = selectedPackage?.price || 0;
   const addonTotal = cart
     .filter((line) => line.is_addon)
@@ -480,11 +492,17 @@ export function CashierPOS() {
     setCart((prev) => prev.map((line) => (line.key === key ? { ...line, is_addon: !line.is_addon } : line)));
   };
 
+  // An emptied cart starts the next ticket at the catalogue subtotal.
+  useEffect(() => {
+    if (cart.length === 0) setSubtotalInput('');
+  }, [cart.length]);
+
   const resetTicket = () => {
     setCart([]);
     setCustomer(null);
     setPackageId('');
     setDiscount('');
+    setSubtotalInput('');
     setNotes('');
     setPayCoverage('dp');
     setPayChannel('cash');
@@ -552,6 +570,11 @@ export function CashierPOS() {
 
   const handleCharge = async () => {
     if (cart.length === 0) return;
+    if (subtotalTooLow) {
+      error('Subtotal too low', `It is below the catalogue subtotal of ${formatCurrency(catalogueSubtotal)}. Use Discount to take money off.`);
+      setCartOpen(true);
+      return;
+    }
     if (potMissing(chargeMethod, pot) && (mode !== 'rental' || chargeNow > 0)) {
       error('Pick the bank', POT_MISSING_MESSAGE);
       return;
@@ -583,7 +606,7 @@ export function CashierPOS() {
           fee_rule_id: feeRuleId || undefined,
           pot: potForRequest(chargeMethod, pot),
           notes,
-          items: cart.map((line) => ({
+          items: pricedCart.map((line) => ({
             item_id: line.item.id,
             quantity: line.quantity,
             unit_price: line.unit_price,
@@ -611,7 +634,7 @@ export function CashierPOS() {
           }
         }
         const lineDiscounts = spreadDiscount(
-          cart.map((line) => line.unit_price * line.quantity),
+          pricedCart.map((line) => line.unit_price * line.quantity),
           packageId ? 0 : discountAmount,
         );
         const payload = {
@@ -636,7 +659,7 @@ export function CashierPOS() {
           discount_amount: packageId ? 0 : discountAmount,
           remaining_amount: remaining,
           created_by: user?.id,
-          items: cart.map((line, index) => ({
+          items: pricedCart.map((line, index) => ({
             item_id: line.item.id,
             quantity: line.quantity,
             unit_price: line.unit_price,
@@ -958,6 +981,20 @@ export function CashierPOS() {
           <p className="text-sm text-slate-500">
             The customer pays {formatCurrency(paidAmount)} now and {formatCurrency(remaining)} in full at pickup.
           </p>
+        )}
+
+        {canEditSubtotal && (
+          <CurrencyInput
+            label="Subtotal"
+            value={subtotalInput === '' ? catalogueSubtotal : subtotalInput}
+            onChange={(n) => setSubtotalInput(n && n !== catalogueSubtotal ? String(n) : '')}
+            error={subtotalTooLow ? `Below the catalogue ${formatCurrency(catalogueSubtotal)}. Use Discount to take money off.` : undefined}
+            helperText={
+              subtotal > catalogueSubtotal
+                ? `Catalogue ${formatCurrency(catalogueSubtotal)}. The extra ${formatCurrency(subtotal - catalogueSubtotal)} goes on the price of the main item.`
+                : 'Raise it to charge items that are not in the catalogue yet.'
+            }
+          />
         )}
 
         {!(mode === 'rental' && packageId) && (
