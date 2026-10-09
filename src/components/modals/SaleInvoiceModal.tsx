@@ -153,6 +153,14 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
                   </div>
                 ))}
 
+                {sale.notes?.trim() && (
+                  <>
+                    <div className="receipt-divider"></div>
+                    <div className="receipt-label">NOTE:</div>
+                    <div className="receipt-line">{sale.notes.trim()}</div>
+                  </>
+                )}
+
                 <div className="receipt-divider"></div>
                 <div className="receipt-center">
                   <div className="receipt-line">Thank you for using SuitLabs!</div>

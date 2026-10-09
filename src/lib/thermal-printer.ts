@@ -73,6 +73,14 @@ function printTotals(generator: ESCPOSGenerator, lines: ReceiptTotalLine[]): voi
   }
 }
 
+/** The NOTE block of a receipt, or nothing when the notes are blank. */
+function printNotes(generator: ESCPOSGenerator, notes: string | undefined): void {
+  const text = notes?.trim();
+  if (!text) return;
+  generator.separator();
+  generator.setBold(true).text('NOTE:').lineFeed().setBold(false).text(text).lineFeed();
+}
+
 function appendInvoiceBarcode(generator: ESCPOSGenerator, invoiceNumber: string): void {
   const barcodeData = invoiceBarcodeValue(invoiceNumber);
   if (!barcodeData) {
@@ -497,6 +505,7 @@ export class ThermalPrinterService {
         owed: invoice.final_amount || invoice.total_amount || 0,
       }),
     );
+    printNotes(generator, invoice.notes);
 
     generator.separator();
     generator
@@ -659,10 +668,7 @@ export class ThermalPrinterService {
       }
     }
 
-    if (rental.notes) {
-      generator.separator();
-      generator.setBold(true).text('NOTE:').lineFeed().setBold(false).text(rental.notes).lineFeed();
-    }
+    printNotes(generator, rental.notes);
 
     generator.separator();
     generator
@@ -766,6 +772,7 @@ export class ThermalPrinterService {
         owed: sale.total_amount || 0,
       }),
     );
+    printNotes(generator, sale.notes);
 
     generator.separator();
     generator

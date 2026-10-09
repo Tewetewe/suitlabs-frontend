@@ -1918,6 +1918,8 @@ export interface InvoiceData {
   company: CompanyInfo;
   generated_at: string;
   payment_status: string;
+  /** The Booking's Notes, printed on the receipt. */
+  notes?: string;
 }
 
 export interface DiscountApplication {
