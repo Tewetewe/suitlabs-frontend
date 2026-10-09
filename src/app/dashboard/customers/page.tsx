@@ -17,13 +17,14 @@ import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
+import { useRememberedState } from '@/hooks/useRememberedState';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useBranch } from '@/contexts/BranchContext';
 import { CUSTOMER_LANGUAGE_OPTIONS, customerLanguageLabel } from '@/lib/select-options';
 
 export default function CustomersPage() {
-  const [filters, setFilters] = useState<CustomerFilters>({});
-  const [searchInput, setSearchInput] = useState('');
+  const [filters, setFilters] = useRememberedState<CustomerFilters>('customers.filters', {});
+  const [searchInput, setSearchInput] = useRememberedState('customers.search', '');
   const debouncedSearch = useDebouncedValue(searchInput, 400);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
@@ -93,11 +94,11 @@ export default function CustomersPage() {
     total,
     reload,
     sentinelRef,
-  } = useInfiniteList(loadCustomersPage);
+  } = useInfiniteList(loadCustomersPage, { cacheKey: `customers:${JSON.stringify(filters)}` });
 
   useEffect(() => {
     setFilters(prev => ({ ...prev, search: debouncedSearch || undefined }));
-  }, [debouncedSearch]);
+  }, [debouncedSearch, setFilters]);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();

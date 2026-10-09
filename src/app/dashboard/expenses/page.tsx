@@ -18,6 +18,7 @@ import { BranchBadge } from '@/components/branch/BranchBadge';
 import { useBranch } from '@/contexts/BranchContext';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
+import { useRememberedState } from '@/hooks/useRememberedState';
 import { apiClient } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/api-utils';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
@@ -110,12 +111,12 @@ export default function ExpensesPage() {
   const { currentBranch, viewingAll } = useBranch();
   const { success, error } = useToast();
 
-  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1);
-  const [searchInput, setSearchInput] = useState('');
+  const [selectedYear, setSelectedYear] = useRememberedState('expenses.year', () => today.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useRememberedState('expenses.month', () => today.getMonth() + 1);
+  const [searchInput, setSearchInput] = useRememberedState('expenses.search', '');
   const debouncedSearch = useDebouncedValue(searchInput, 400);
-  const [category, setCategory] = useState<ExpenseCategory | ''>('');
-  const [status, setStatus] = useState<ExpenseStatus | ''>('recorded');
+  const [category, setCategory] = useRememberedState<ExpenseCategory | ''>('expenses.category', '');
+  const [status, setStatus] = useRememberedState<ExpenseStatus | ''>('expenses.status', 'recorded');
 
   const [expensesLoading, setExpensesLoading] = useState(true);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
@@ -187,7 +188,9 @@ export default function ExpensesPage() {
     total,
     reload,
     sentinelRef,
-  } = useInfiniteList(loadExpensesPage);
+  } = useInfiniteList(loadExpensesPage, {
+    cacheKey: `expenses:${range.start}:${range.end}:${debouncedSearch}:${category}:${status}`,
+  });
 
   const refreshAll = useCallback(async () => {
     await Promise.all([reload(), loadMeta()]);

@@ -33,6 +33,7 @@ import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck,
 import { printItemLabel } from '@/lib/print-router';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
+import { useRememberedState } from '@/hooks/useRememberedState';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useBranch } from '@/contexts/BranchContext';
@@ -42,10 +43,10 @@ type ViewMode = 'grid' | 'list';
 
 export default function ItemsPage() {
   const { branches } = useBranch();
-  const [searchInput, setSearchInput] = useState('');
+  const [searchInput, setSearchInput] = useRememberedState('items.search', '');
   const debouncedSearch = useDebouncedValue(searchInput, 400);
-  const [filters, setFilters] = useState<ItemFilters>({});
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [filters, setFilters] = useRememberedState<ItemFilters>('items.filters', {});
+  const [viewMode, setViewMode] = useRememberedState<ViewMode>('items.viewMode', 'grid');
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -70,8 +71,8 @@ export default function ItemsPage() {
   const [availabilityDates, setAvailabilityDates] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [availabilityResult, setAvailabilityResult] = useState<string>('');
   const [checkingAvailability, setCheckingAvailability] = useState(false);
-  const [rentalDate, setRentalDate] = useState('');
-  const [returnDate, setReturnDate] = useState('');
+  const [rentalDate, setRentalDate] = useRememberedState('items.rentalDate', '');
+  const [returnDate, setReturnDate] = useRememberedState('items.returnDate', '');
   const [transferringItem, setTransferringItem] = useState<Item | null>(null);
 
   // Load categories for filter dropdown
@@ -86,7 +87,7 @@ export default function ItemsPage() {
     if (type) {
       setFilters((prev) => (prev.type === type ? prev : { ...prev, type }));
     }
-  }, []);
+  }, [setFilters]);
 
   const loadFacets = async () => {
     try {
@@ -176,11 +177,13 @@ export default function ItemsPage() {
     total,
     reload,
     sentinelRef,
-  } = useInfiniteList(loadItemsPage);
+  } = useInfiniteList(loadItemsPage, {
+    cacheKey: `items:${JSON.stringify({ filters, rentalDate, returnDate })}`,
+  });
 
   useEffect(() => {
     setFilters(prev => ({ ...prev, search: debouncedSearch || undefined }));
-  }, [debouncedSearch]);
+  }, [debouncedSearch, setFilters]);
 
   const handleBarcodeScan = (barcode: string) => {
     const cleanedBarcode = sanitizeBarcode(barcode);

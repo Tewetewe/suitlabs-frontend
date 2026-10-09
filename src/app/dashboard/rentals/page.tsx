@@ -36,6 +36,7 @@ import { waDeliveryLabel } from '@/lib/wa-delivery';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
+import { useRememberedState } from '@/hooks/useRememberedState';
 
 /** Whole days since the suit came back, or null when it has not. */
 function daysSinceReturn(rental: Rental): number | null {
@@ -51,7 +52,7 @@ export default function RentalsPage() {
   const [deletingRental, setDeletingRental] = useState<Rental | null>(null);
   const [deletingRentalBusy, setDeletingRentalBusy] = useState(false);
   const { warning, success, error: toastError } = useToast();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useRememberedState('rentals.search', '');
   const debouncedSearch = useDebouncedValue(searchTerm, 400);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -80,7 +81,7 @@ export default function RentalsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { enabled: depositEnabled } = useDepositSettings();
   const [showReleaseModal, setShowReleaseModal] = useState(false);
-  const [depositState, setDepositState] = useState<'' | 'held' | 'awaiting_check' | 'released' | 'auto_released'>('');
+  const [depositState, setDepositState] = useRememberedState<'' | 'held' | 'awaiting_check' | 'released' | 'auto_released'>('rentals.depositState', '');
   const [sendingAgreementId, setSendingAgreementId] = useState<string | null>(null);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
 
@@ -94,7 +95,7 @@ export default function RentalsPage() {
     if (deposit === 'held' || deposit === 'awaiting_check' || deposit === 'released' || deposit === 'auto_released') {
       setDepositState(deposit);
     }
-  }, []);
+  }, [setDepositState, setSearchTerm]);
 
   const agreementBadge = (rental: Rental): { label: string; variant: 'success' | 'warning' | 'default' | 'danger' } | null => {
     if (!depositEnabled || rental.status !== 'pending') return null;
@@ -195,7 +196,7 @@ export default function RentalsPage() {
     total,
     reload,
     sentinelRef,
-  } = useInfiniteList(loadRentalsPage);
+  } = useInfiniteList(loadRentalsPage, { cacheKey: `rentals:${debouncedSearch}:${depositState}` });
 
   const rentalStatusVariant = (s: string): 'success' | 'warning' | 'default' | 'danger' => {
     switch (s) {
