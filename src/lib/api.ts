@@ -303,6 +303,16 @@ class APIClient {
     return response.data.data || { status: 'available', hits: [] };
   }
 
+  /** Availability of many Items at once, by Item ID. Pickup and return are YYYY-MM-DD shop days. */
+  async getItemsAvailability(itemIds: string[], pickup: string, ret: string): Promise<Record<string, ItemAvailability>> {
+    const response = await this.client.post<APIResponse<Record<string, ItemAvailability>>>('/api/v1/items/availability', {
+      pickup,
+      return: ret,
+      item_ids: itemIds,
+    });
+    return response.data.data || {};
+  }
+
   async getItem(id: string): Promise<Item> {
     const response = await this.client.get<{ data: Item } | { data: { item: Item } }>(`/api/v1/items/${id}`);
     const payload = response.data;

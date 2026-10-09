@@ -1,10 +1,36 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { ItemAvailabilityHit } from '@/types';
-import { availabilityNote } from './item-availability';
+import { availabilityCardNote, availabilityNote } from './item-availability';
 
 const hit = (kind: ItemAvailabilityHit['kind'], pickup: string, ret: string, name = 'Budi', reference = 'INV-1'): ItemAvailabilityHit => ({
   kind, source: 'booking', id: `${kind}-${pickup}`, customer_name: name, reference, pickup_date: pickup, return_date: ret,
+});
+
+describe('availabilityCardNote', () => {
+  it('has no line for a free Item', () => {
+    assert.equal(availabilityCardNote({ status: 'available', hits: [] }), null);
+    assert.equal(availabilityCardNote(undefined), null);
+  });
+
+  it('greys a booked Item with the dates and the first name', () => {
+    const note = availabilityCardNote({ status: 'booked', hits: [hit('booked', '2026-11-05', '2026-11-06', 'Andi Wijaya', 'INV-9')] });
+    assert.equal(note?.tone, 'clash');
+    assert.equal(note?.short, 'Booked 5–6 Nov · Andi');
+    assert.equal(note?.detail, 'Pickup 5 Nov, return 6 Nov: Andi Wijaya (INV-9)');
+  });
+
+  it('writes a range across months in full', () => {
+    const note = availabilityCardNote({ status: 'booked', hits: [hit('booked', '2026-10-30', '2026-11-02')] });
+    assert.equal(note?.short, 'Booked 30 Oct–2 Nov · Budi');
+  });
+
+  it('says when the Item comes back for a same-day handover', () => {
+    const evening = availabilityCardNote({ status: 'handover', hits: [hit('pickup_evening', '2026-11-10', '2026-11-12')] });
+    assert.equal(evening?.short, 'Returns 12 Nov · pick up evening');
+    const morning = availabilityCardNote({ status: 'handover', hits: [hit('return_morning', '2026-11-14', '2026-11-16')] });
+    assert.equal(morning?.short, 'Picked up 14 Nov · return morning');
+  });
 });
 
 describe('availabilityNote', () => {

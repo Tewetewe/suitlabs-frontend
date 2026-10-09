@@ -29,6 +29,7 @@ test.describe('POS variants', () => {
 
   test('E2E-04 package plus add-on hides discount and charges package total', async ({ page }) => {
     await openCashier(page);
+    await page.getByTestId('pos-event-date').fill(localISODate(16));
     await page.getByTestId('pos-rental-date').fill(localISODate(16));
     await page.getByTestId('pos-return-date').fill(localISODate(17));
     await expect(page.getByTestId('pos-item').first()).toBeVisible();
@@ -118,6 +119,7 @@ test.describe('POS variants', () => {
 
   test('E2E-08 switching Rental and Sale clears the ticket', async ({ page }) => {
     await openCashier(page);
+    await page.getByTestId('pos-event-date').fill(localISODate(18));
     await page.getByTestId('pos-rental-date').fill(localISODate(18));
     await page.getByTestId('pos-return-date').fill(localISODate(19));
     await expect(page.getByTestId('pos-item').first()).toBeVisible();
@@ -130,6 +132,7 @@ test.describe('POS variants', () => {
 
   test('E2E-09 charge blocked without customer or phone', async ({ page }) => {
     await openCashier(page);
+    await page.getByTestId('pos-event-date').fill(localISODate(18));
     await page.getByTestId('pos-rental-date').fill(localISODate(18));
     await page.getByTestId('pos-return-date').fill(localISODate(19));
     await expect(page.getByTestId('pos-item').first()).toBeVisible();

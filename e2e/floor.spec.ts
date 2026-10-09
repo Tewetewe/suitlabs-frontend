@@ -63,6 +63,7 @@ test.describe('Floor flows', () => {
 
   test('E2E-06 / E2E-08 / E2E-09 POS sale mode, ticket clear, customer required', async ({ page }) => {
     await openCashier(page);
+    await page.getByTestId('pos-event-date').fill(localISODate(18));
     await page.getByTestId('pos-rental-date').fill(localISODate(18));
     await page.getByTestId('pos-return-date').fill(localISODate(19));
     await expect(page.getByTestId('pos-item').first()).toBeVisible();
@@ -75,6 +76,7 @@ test.describe('Floor flows', () => {
     await expect(page.getByText('Tap a catalogue item to add it')).toBeVisible();
 
     await page.getByTestId('pos-mode-rental').click();
+    await page.getByTestId('pos-event-date').fill(localISODate(18));
     await page.getByTestId('pos-rental-date').fill(localISODate(18));
     await page.getByTestId('pos-return-date').fill(localISODate(19));
     await expect(page.getByTestId('pos-item').first()).toBeVisible();
