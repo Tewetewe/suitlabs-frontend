@@ -182,6 +182,14 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
                     </div>
                   ))}
 
+                  {invoice.notes?.trim() && (
+                    <>
+                      <div className="receipt-divider"></div>
+                      <div className="receipt-label">NOTE:</div>
+                      <div className="receipt-line">{invoice.notes.trim()}</div>
+                    </>
+                  )}
+
                   <div className="receipt-divider"></div>
                   <div className="receipt-center">
                     <div className="receipt-line">Thank you for using SuitLabs!</div>
