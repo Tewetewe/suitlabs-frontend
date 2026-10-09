@@ -165,21 +165,19 @@ export default function AutoCompleteSelect({
   };
 
   const visibleOptions = useMemo(() => {
-    const extras = extraOptions || [];
-    const merged = [
-      ...extras.filter((extra) => !options.some((option) => option.value === extra.value)),
-      ...options,
-    ];
+    const extras = (extraOptions || []).filter((extra) => !options.some((option) => option.value === extra.value));
     const q = query.trim().toLowerCase();
+    const matches = (o: AutoOption) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q);
+    // A paged fetch already searched on the server, which can match fields the label does not show (barcode, phone).
     const filtered = q
-      ? merged.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
-      : merged;
+      ? [...extras.filter(matches), ...(fetchPage ? options : options.filter(matches))]
+      : [...extras, ...options];
     if (!emptyOption) return filtered;
     const matchesEmpty = !q || emptyOption.label.toLowerCase().includes(q);
     if (!matchesEmpty) return filtered;
     if (filtered.some((o) => o.value === emptyOption.value)) return filtered;
     return [emptyOption, ...filtered];
-  }, [options, query, emptyOption, extraOptions]);
+  }, [options, query, emptyOption, extraOptions, fetchPage]);
 
   const loadMore = async () => {
     if (!hasMore || loadingMore || searching) return;
