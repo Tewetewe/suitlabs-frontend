@@ -347,8 +347,7 @@ export default function CustomersPage() {
                 placeholder="John"
               />
               <Input
-                label="Last name"
-                required
+                label="Last name (optional)"
                 value={formData.last_name}
                 onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
                 placeholder="Doe"

@@ -61,7 +61,6 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
     // Basic validation
     const newErrors: Record<string, string> = {};
     if (!formData.first_name.trim()) newErrors.first_name = 'First name is required';
-    if (!formData.last_name.trim()) newErrors.last_name = 'Last name is required';
     if (!formData.phone.trim()) newErrors.phone = 'Phone is required';
 
     if (Object.keys(newErrors).length > 0) {
@@ -157,7 +156,7 @@ export default function EditCustomerModal({ isOpen, onClose, onUpdate, customer 
               error={errors.first_name}
             />
             <Input
-              label="Last Name *"
+              label="Last Name (optional)"
               value={formData.last_name}
               onChange={(e) => handleInputChange('last_name', e.target.value)}
               placeholder="Doe"
