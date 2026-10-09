@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { customerItemName, itemTags } from './item-name';
+import { customerItemName, itemGenderTag, itemTags } from './item-name';
 
 describe('customerItemName', () => {
   // name, brand, type, gender, quality, want
@@ -28,6 +28,16 @@ describe('customerItemName', () => {
       assert.equal(customerItemName({ name, brand, type, gender, quality }), want);
     });
   }
+});
+
+describe('itemGenderTag', () => {
+  it('shows the gender of a Suit tab Item', () => {
+    assert.equal(itemGenderTag({ type: 'trousers', gender: 'kids' }), 'Kids');
+  });
+  it('shows nothing for Unisex or an Acc tab Item', () => {
+    assert.equal(itemGenderTag({ type: 'suit', gender: 'unisex' }), '');
+    assert.equal(itemGenderTag({ type: 'shirt', gender: 'kids' }), '');
+  });
 });
 
 describe('itemTags', () => {

@@ -36,7 +36,7 @@ import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfinit
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useBranch } from '@/contexts/BranchContext';
-import { ITEM_GENDER_LABELS, itemQualityLabel, itemTags } from '@/lib/item-name';
+import { ITEM_GENDER_LABELS, itemGenderTag, itemQualityLabel, itemTags } from '@/lib/item-name';
 
 type ViewMode = 'grid' | 'list';
 
@@ -327,6 +327,11 @@ export default function ItemsPage() {
           {item.size?.label && (
             <span className="rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white">
               {item.size.label}
+            </span>
+          )}
+          {itemGenderTag(item) && (
+            <span className="rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white">
+              {itemGenderTag(item)}
             </span>
           )}
         </div>
