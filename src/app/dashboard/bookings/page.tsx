@@ -68,7 +68,7 @@ async function fetchItemOptionsPage(query: string, page: number, type?: 'trouser
     const items = res?.data?.data?.items || [];
     return {
       options: items.map((it) => ({ value: it.id, label: itemOptionLabel(it) })),
-      hasMore: Boolean(res?.data?.pagination?.has_next),
+      hasMore: hasNextPage(res?.data?.pagination, items.length, ITEM_PICKER_PAGE_SIZE),
     };
   } catch {
     return { options: [], hasMore: false };
@@ -129,6 +129,10 @@ export default function BookingsPage() {
   // Edit is for a booking that is not fully paid. Admin may also edit an
   // imported legacy booking that is, to add or fix its Item after the import.
   const canEditBooking = (b: Booking) => b.payment_status !== 'completed' || (isAdmin && Boolean(b.legacy_ref));
+  // A fully paid legacy booking can import with no Item. Admin adds or swaps it
+  // here; the backend spreads the paid total over the lines, so money stays.
+  const canEditPaidLegacyItems = (b: Booking | null) =>
+    !!b && b.payment_status === 'completed' && isAdmin && Boolean(b.legacy_ref);
   const [deletingBooking, setDeletingBooking] = useState<Booking | null>(null);
   const [deletingBookingBusy, setDeletingBookingBusy] = useState(false);
   const [filters, setFilters] = useState<BookingFilters>({});
@@ -565,6 +569,18 @@ export default function BookingsPage() {
             booking_guarantee: bookingGuarantee,
             security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
             institution: bookingForm.institution || undefined,
+            ...(canEditPaidLegacyItems(activeBooking)
+              ? {
+                  items: validItems.map(it => ({
+                    item_id: it.item_id,
+                    quantity: it.quantity,
+                    unit_price: it.unit_price,
+                    total_price: it.unit_price * it.quantity,
+                    discount_amount: 0,
+                    is_addon: false,
+                  })),
+                }
+              : {}),
           }
         : {
             customer_id: bookingForm.customer_id,
@@ -1049,6 +1065,8 @@ export default function BookingsPage() {
             chargeNow={chargeNow}
             chargeNowFee={chargeNowFee}
             locked={activeBooking?.payment_status === 'completed'}
+            itemsLocked={activeBooking?.payment_status === 'completed' && !canEditPaidLegacyItems(activeBooking)}
+            paidTotal={canEditPaidLegacyItems(activeBooking) ? activeBooking?.paid_amount : undefined}
             fetchCustomerOptions={fetchCustomerOptions}
             itemLabels={itemLabels}
             fetchItemPage={fetchItemPage}
@@ -1234,6 +1252,8 @@ function BookingFormFields({
   chargeNow,
   chargeNowFee,
   locked,
+  itemsLocked = locked,
+  paidTotal,
   fetchCustomerOptions,
   itemLabels,
   fetchItemPage,
@@ -1261,6 +1281,10 @@ function BookingFormFields({
   chargeNow: number;
   chargeNowFee: number;
   locked?: boolean;
+  /** Item lines locked; defaults to locked. A paid legacy booking unlocks them for Admin. */
+  itemsLocked?: boolean;
+  /** The paid total that a paid legacy booking keeps when its Items change. */
+  paidTotal?: number;
   fetchCustomerOptions: (query: string) => Promise<{ value: string; label: string }[]>;
   itemLabels: Record<string, string>;
   fetchItemPage: (query: string, page: number) => Promise<AutoPageResult>;
@@ -1396,16 +1420,21 @@ function BookingFormFields({
 
       <FieldGroup title="Items">
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={locked}>Add trousers</Button>
+          <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={itemsLocked}>Add trousers</Button>
           {selectedPackageId && (
-            <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={locked}>Add add-on</Button>
+            <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={itemsLocked}>Add add-on</Button>
           )}
-          <Button size="sm" onClick={() => addItemLine()} disabled={locked}>Add item</Button>
+          <Button size="sm" onClick={() => addItemLine()} disabled={itemsLocked}>Add item</Button>
         </div>
         <p className="text-xs text-slate-500">
           Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair.
           {selectedPackageId ? ' Mark extras as add-ons to charge them on top of the package.' : ''}
         </p>
+        {paidTotal != null && (
+          <p className="text-xs text-slate-500">
+            This booking is fully paid. The paid total of {formatCurrency(paidTotal)} stays: Save spreads it over the Items, so the prices here do not change the money.
+          </p>
+        )}
         {formErrors.items && <div className="text-sm text-red-600">{formErrors.items}</div>}
         <div className="space-y-3">
           {bookingForm.items.map((it, idx) => {
@@ -1417,13 +1446,13 @@ function BookingFormFields({
                     <AutoCompleteSelect
                       label={it.catalogue === 'trousers' ? 'Trousers' : it.is_addon ? 'Add-on' : 'Item'}
                       value={it.item_id}
-                      onChange={(val) => { if (!locked) updateItemField(idx, 'item_id', val); }}
+                      onChange={(val) => { if (!itemsLocked) updateItemField(idx, 'item_id', val); }}
                       fetchPage={it.catalogue === 'trousers' ? fetchTrousersPage : fetchItemPage}
                       extraOptions={it.item_id && itemLabels[it.item_id] ? [{ value: it.item_id, label: itemLabels[it.item_id] }] : undefined}
                       placeholder={it.catalogue === 'trousers' ? 'Search trousers' : 'Search items'}
                     />
                   </div>
-                  <Button variant="ghost" size="sm" className="mt-7 shrink-0" onClick={() => removeItemLine(idx)} disabled={locked}>
+                  <Button variant="ghost" size="sm" className="mt-7 shrink-0" onClick={() => removeItemLine(idx)} disabled={itemsLocked}>
                     Remove
                   </Button>
                 </div>

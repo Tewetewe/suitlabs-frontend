@@ -26,6 +26,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { hasNextPage } from '@/hooks/useInfiniteList';
 import { formatCurrency } from '@/lib/currency';
 import { TRANSACTION_FEE_LABEL, isQrisMethod, transactionFee } from '@/lib/transaction-fee';
 import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
@@ -351,7 +352,7 @@ export function CashierPOS() {
           value: row.id,
           label: customerOptionLabel(row),
         })),
-        hasMore: Boolean(res?.data?.pagination?.has_next),
+        hasMore: hasNextPage(res?.data?.pagination, rows.length, 20),
       };
     } catch {
       return { options: [], hasMore: false };

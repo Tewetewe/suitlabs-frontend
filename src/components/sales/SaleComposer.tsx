@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api';
+import { hasNextPage } from '@/hooks/useInfiniteList';
 import { formatCurrency } from '@/lib/currency';
 import { Button } from '@/components/ui/Button';
 import { Input, NumberInput } from '@/components/ui/Input';
@@ -138,7 +139,7 @@ export function SaleComposer({
           value: customer.id,
           label: customerOptionLabel(customer),
         })),
-        hasMore: Boolean(response?.data?.pagination?.has_next),
+        hasMore: hasNextPage(response?.data?.pagination, rows.length, 20),
       };
     } catch {
       return { options: [], hasMore: false };
