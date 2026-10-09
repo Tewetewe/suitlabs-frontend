@@ -238,7 +238,9 @@ export type LabelItem = {
   name: string;
   code: string;
   barcode: string;
-  brand?: string;
+  type?: string;
+  gender?: string;
+  quality?: string;
   color?: string;
   size?: { label?: string };
 };

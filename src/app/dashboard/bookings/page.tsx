@@ -30,6 +30,7 @@ import { Booking, BookingFilters, BookingInstitution, Discount, InvoiceData, Cus
 import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
+import { itemTags } from '@/lib/item-name';
 import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -51,18 +52,11 @@ type BookingFormItem = {
 
 const ITEM_PICKER_PAGE_SIZE = 20;
 
-const ITEM_GENDER_LABELS: Record<NonNullable<Item['gender']>, string> = {
-  men: 'Mens',
-  women: 'Womens',
-  kids: 'Kids',
-  unisex: 'Unisex',
-};
-
 function itemOptionLabel(it: Item) {
   const type = it.type ? it.type.charAt(0).toUpperCase() + it.type.slice(1) : 'Item';
-  const gender = it.gender ? ` · ${ITEM_GENDER_LABELS[it.gender] ?? it.gender}` : '';
+  const tags = itemTags(it).map((tag) => ` · ${tag}`).join('');
   const size = it.size?.label ? ` · ${it.size.label}` : '';
-  return `${it.name} · ${type}${gender}${size} (${it.code})`;
+  return `${it.name} · ${type}${tags}${size} (${it.code})`;
 }
 
 async function fetchItemOptionsPage(query: string, page: number, type?: 'trousers'): Promise<AutoPageResult> {

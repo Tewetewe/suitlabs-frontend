@@ -924,6 +924,8 @@ export interface Item {
   owner?: string;
   type: 'suit' | 'jacket' | 'accessory' | 'shoes' | 'tie' | 'belt' | 'trousers' | 'shirt' | 'shirts' | 'vest' | 'retail';
   gender?: 'men' | 'women' | 'kids' | 'unisex';
+  /** The tier: Premium or Standard. */
+  quality?: 'standard' | 'premium';
   brand?: string;
   color?: string;
   size: { label: string };
@@ -1709,11 +1711,15 @@ export interface ItemFacets {
   sizes: string[];
   statuses: string[];
   conditions: string[];
+  genders?: string[];
+  qualities?: string[];
 }
 
 export interface ItemFilters {
   search?: string;
   type?: string;
+  gender?: string;
+  quality?: string;
   brand?: string;
   color?: string;
   /** Size label, matched exactly (backend ?size=). */

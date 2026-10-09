@@ -14,6 +14,7 @@ import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
+import { customerItemName } from '@/lib/item-name';
 
 interface RentalInvoiceModalProps {
   isOpen: boolean;
@@ -151,7 +152,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
               <div className="receipt-label">ITEMS:</div>
               {items.length > 0 ? (
                 items.map((item, idx) => {
-                  const itemName = item.item?.name || 'Item';
+                  const itemName = customerItemName(item.item) || 'Item';
                   const itemSize = item.item?.size?.label || '';
                   const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
                   const quantity = item.quantity || 1;

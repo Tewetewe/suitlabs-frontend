@@ -17,6 +17,7 @@ import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './b
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from './branch-scope';
 import { TRANSACTION_FEE_LABEL } from './transaction-fee';
 import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
+import { itemTags } from './item-name';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -805,7 +806,9 @@ export class ThermalPrinterService {
     name: string;
     code: string;
     barcode: string;
-    brand?: string;
+    type?: string;
+    gender?: string;
+    quality?: string;
     color?: string;
     size?: { label?: string };
   }): Promise<void> {
@@ -835,9 +838,9 @@ export class ThermalPrinterService {
 
     generator.text(`#${item.code}`).lineFeed();
 
-    const extras: string[] = [];
-    if (item.brand) extras.push(item.brand);
-    if (item.color) extras.push(item.color);
+    // The brand is the supplier, for staff only, so the gender and tier take its
+    // place. The name may carry them already; print each only once.
+    const extras = [...itemTags(item).filter((tag) => !item.name.includes(tag)), item.color].filter(Boolean);
     if (extras.length > 0) {
       generator.text(extras.join(' / ')).lineFeed();
     }

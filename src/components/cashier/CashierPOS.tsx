@@ -54,6 +54,7 @@ import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS, customerLanguageLa
 import { issueBookingInvoice } from '@/lib/issue-invoice';
 import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
 import { Badge } from '@/components/ui/DataDisplay';
+import { itemTags } from '@/lib/item-name';
 import {
   BookingInstitution,
   BookingPaymentMethod,
@@ -702,7 +703,7 @@ export function CashierPOS() {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-slate-900">{line.item.name}</div>
                       <div className="text-xs text-slate-500">
-                        {[line.item.code, line.item.size?.label ? `Size ${line.item.size.label}` : null].filter(Boolean).join(' · ') || 'Item'}
+                        {[line.item.code, ...itemTags(line.item), line.item.size?.label ? `Size ${line.item.size.label}` : null].filter(Boolean).join(' · ') || 'Item'}
                       </div>
                       {mode === 'rental' && !packageId && missingFourHourPrice(line.item, rentalLength) && (
                         <div className="text-[11px] font-medium text-amber-700" data-testid="pos-no-4h-price">No 4-hour price: 3-day price used</div>
@@ -1275,7 +1276,7 @@ export function CashierPOS() {
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate text-xs text-slate-500">
-                            {[item.code, item.size?.label].filter(Boolean).join(' · ') || item.color || item.brand}
+                            {[item.code, ...itemTags(item), item.size?.label].filter(Boolean).join(' · ') || item.color || item.brand}
                           </span>
                           <span className="text-sm font-bold tabular-nums text-slate-900">
                             {formatCurrency(catalogPrice(item, mode, rentalLength))}

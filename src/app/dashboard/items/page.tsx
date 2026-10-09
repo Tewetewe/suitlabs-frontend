@@ -35,6 +35,7 @@ import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfinit
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useBranch } from '@/contexts/BranchContext';
+import { ITEM_GENDER_LABELS, itemQualityLabel, itemTags } from '@/lib/item-name';
 
 type ViewMode = 'grid' | 'list';
 
@@ -60,6 +61,8 @@ export default function ItemsPage() {
     sizes: [],
     statuses: [],
     conditions: [],
+    genders: [],
+    qualities: [],
   });
   const { success, error } = useToast();
   const [availabilityForItem, setAvailabilityForItem] = useState<Item | null>(null);
@@ -252,9 +255,18 @@ export default function ItemsPage() {
   const brandOptions = facetOptions(facets.brands, 'All Brands', false);
   const colorOptions = facetOptions(facets.colors, 'All Colors', false);
   const sizeOptions = facetOptions(facets.sizes, 'All Sizes', false);
+  // Kids, Mens, Womens as the sheet writes them. Unisex is the import default, not a gender.
+  const genderOptions = [
+    { value: '', label: 'All Genders' },
+    ...Object.entries(ITEM_GENDER_LABELS).map(([value, label]) => ({ value, label })),
+  ];
+  const tierOptions = [
+    { value: '', label: 'All Tiers' },
+    ...(facets.qualities || []).map((value) => ({ value, label: itemQualityLabel(value) || value })),
+  ];
 
   const itemFacts = (item: Item) =>
-    [item.color, item.size?.label, `Qty ${item.quantity}`].filter(Boolean).join(' · ');
+    [...itemTags(item), item.color, item.size?.label, `Qty ${item.quantity}`].filter(Boolean).join(' · ');
 
   const ItemActions = ({ item, overlay = false }: { item: Item; overlay?: boolean }) => (
     <OverflowMenu label="Item actions" overlay={overlay}>
@@ -497,6 +509,20 @@ export default function ItemsPage() {
                       options={conditionOptions}
                       value={filters.condition || ''}
                       onChange={(e) => setFilters({ ...filters, condition: e.target.value || undefined })}
+                    />
+                    <Select
+                      searchable={false}
+                      label="Gender"
+                      options={genderOptions}
+                      value={filters.gender || ''}
+                      onChange={(e) => setFilters({ ...filters, gender: e.target.value || undefined })}
+                    />
+                    <Select
+                      searchable={false}
+                      label="Tier"
+                      options={tierOptions}
+                      value={filters.quality || ''}
+                      onChange={(e) => setFilters({ ...filters, quality: e.target.value || undefined })}
                     />
                     <Select
                       label="Brand"
