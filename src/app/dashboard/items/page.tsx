@@ -29,7 +29,8 @@ import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 import { facetOptions } from '@/lib/select-options';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, Skeleton, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
-import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck, ArrowRightLeft } from 'lucide-react';
+import { Plus, Edit, Trash2, Package, Filter, Grid, List, QrCode, CalendarCheck, ArrowRightLeft, Printer } from 'lucide-react';
+import { printItemLabel } from '@/lib/print-router';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
@@ -268,6 +269,14 @@ export default function ItemsPage() {
   const itemFacts = (item: Item) =>
     [...itemTags(item), item.color, item.size?.label, `Qty ${item.quantity}`].filter(Boolean).join(' · ');
 
+  const printLabel = async (item: Item) => {
+    try {
+      await printItemLabel(item);
+    } catch (err) {
+      error('Could not print label', err instanceof Error ? err.message : 'Please try again.');
+    }
+  };
+
   const ItemActions = ({ item, overlay = false }: { item: Item; overlay?: boolean }) => (
     <OverflowMenu label="Item actions" overlay={overlay}>
       <OverflowMenuItem
@@ -279,6 +288,9 @@ export default function ItemsPage() {
         }}
       >
         Check dates
+      </OverflowMenuItem>
+      <OverflowMenuItem icon={<Printer className="h-4 w-4 text-slate-400" />} onClick={() => printLabel(item)}>
+        Print label
       </OverflowMenuItem>
       <OverflowMenuItem
         icon={<ArrowRightLeft className="h-4 w-4 text-slate-400" />}

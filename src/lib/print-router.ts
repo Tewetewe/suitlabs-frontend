@@ -16,7 +16,7 @@
  * picked the device. The print dialog is the floor — it needs no setup and no
  * permissions, so the buttons are never a dead end.
  */
-import type { InvoiceData, Rental, Sale } from '@/types';
+import type { InvoiceData, Item, Rental, Sale } from '@/types';
 import {
   getAndroidBluetoothProductLabelUrl,
   getAndroidBridgeBookingInvoiceUrl,
@@ -35,6 +35,8 @@ import {
 import { findOpenReceiptNode, printImageDataUrl, printOpenReceiptBarcode, printReceiptNode } from './print-browser';
 import { rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 import { thermalPrinter } from './thermal-printer';
+import { barcodeLabelDataUrl } from './barcode-label';
+import { customerItemName } from './item-name';
 
 export type PrintRoute = 'bridge' | 'bprint' | 'thermal' | 'browser';
 
@@ -252,6 +254,30 @@ export type LabelItem = {
  * size and bars stay sharp. Laptops without a paired thermal printer still get
  * the on-screen canvas through the print dialog.
  */
+/**
+ * Prints the label of an Item, with the name as the customer sees it. The item
+ * page passes the label image it shows; the Items list has none, so the
+ * browser route draws one here.
+ */
+export async function printItemLabel(item: Item, labelImageDataUrl?: string): Promise<PrintOutcome> {
+  const name = customerItemName(item);
+  const barcode = item.barcode || item.code;
+  return printProductLabel(
+    {
+      id: item.id,
+      name,
+      code: item.code,
+      barcode,
+      type: item.type,
+      gender: item.gender,
+      quality: item.quality,
+      color: item.color,
+      size: item.size,
+    },
+    labelImageDataUrl ?? barcodeLabelDataUrl({ value: barcode, itemName: name, itemCode: item.code, sizeLabel: item.size?.label }),
+  );
+}
+
 export async function printProductLabel(
   item: LabelItem,
   labelImageDataUrl?: string,

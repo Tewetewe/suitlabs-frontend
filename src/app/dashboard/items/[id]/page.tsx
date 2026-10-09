@@ -15,7 +15,7 @@ import { apiClient } from '@/lib/api';
 import { Item, Rental, Booking, CreateItemRequest } from '@/types';
 import { formatCurrency } from '@/lib/currency';
 import { formatDateShort } from '@/lib/date';
-import { printProductLabel } from '@/lib/print-router';
+import { printItemLabel } from '@/lib/print-router';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -496,20 +496,7 @@ export default function ItemDetailPage() {
                         disabled={!labelImageUrl}
                         onClick={async () => {
                           try {
-                            await printProductLabel(
-                              {
-                                id: item.id,
-                                name: customerItemName(item),
-                                code: item.code,
-                                barcode: item.barcode || item.code,
-                                type: item.type,
-                                gender: item.gender,
-                                quality: item.quality,
-                                color: item.color,
-                                size: item.size,
-                              },
-                              labelImageUrl || undefined,
-                            );
+                            await printItemLabel(item, labelImageUrl || undefined);
                           } catch (err) {
                             toastError('Could not print label', err instanceof Error ? err.message : 'Please try again.');
                           }
