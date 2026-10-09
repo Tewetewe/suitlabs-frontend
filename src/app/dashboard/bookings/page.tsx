@@ -44,6 +44,7 @@ import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, Over
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { useRememberedState } from '@/hooks/useRememberedState';
 import { useToast } from '@/contexts/ToastContext';
+import { unitPricesForSubtotal } from '@/lib/subtotal-override';
 
 type BookingFormItem = {
   item_id: string;
@@ -55,6 +56,7 @@ type BookingFormItem = {
 };
 
 const ITEM_PICKER_PAGE_SIZE = 20;
+const SUBTOTAL_TOO_LOW = 'Subtotal is below the Items. Lower an Item price or use a Discount to take money off.';
 
 function itemOptionLabel(it: Item) {
   const type = it.type ? it.type.charAt(0).toUpperCase() + it.type.slice(1) : 'Item';
@@ -155,6 +157,8 @@ export default function BookingsPage() {
   const [discountId, setDiscountId] = useState('');
   /** A code the customer quoted. It unlocks the discount that needs it. */
   const [discountCode, setDiscountCode] = useState('');
+  // A typed Subtotal; '' is the sum of the Items.
+  const [subtotalInput, setSubtotalInput] = useState('');
   const [eligibleDiscounts, setEligibleDiscounts] = useState<Discount[]>([]);
   const [loadingDiscounts, setLoadingDiscounts] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -215,7 +219,32 @@ export default function BookingsPage() {
   const addonDiscount = bookingForm.items
     .filter((it) => it.is_addon)
     .reduce((sum, it) => sum + (it.discount_amount || 0), 0);
-  const bookingTotal = packagePrice > 0 ? packagePrice + addonSubtotal : itemsSubtotal;
+  // A typed Subtotal above the Items charges items not in the catalogue yet.
+  // A package sets its own price, and a paid booking keeps its money.
+  const canEditSubtotal = !selectedPackageId
+    && bookingForm.items.some((it) => it.item_id)
+    && !(isEditModalOpen && activeBooking?.payment_status === 'completed');
+  const typedSubtotal = canEditSubtotal ? Number(subtotalInput) || 0 : 0;
+  const subtotalTooLow = typedSubtotal > 0 && typedSubtotal < itemsSubtotal;
+  const extraCharge = typedSubtotal > itemsSubtotal ? typedSubtotal - itemsSubtotal : 0;
+  const bookingTotal = packagePrice > 0 ? packagePrice + addonSubtotal : itemsSubtotal + extraCharge;
+  // The Items as saved: the extra of a typed Subtotal sits on the main line.
+  const pricedItems = (items: BookingFormState['items']) => {
+    const lines = items.map((it) => ({ quantity: it.quantity, unit_price: it.unit_price }));
+    const base = lines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+    const prices = unitPricesForSubtotal(lines, base + extraCharge);
+    return items.map((it, index) => ({ ...it, unit_price: prices[index] }));
+  };
+  const subtotalField = canEditSubtotal
+    ? {
+        value: subtotalInput === '' ? itemsSubtotal : subtotalInput,
+        onChange: (n: number) => setSubtotalInput(n && n !== itemsSubtotal ? String(n) : ''),
+        error: subtotalTooLow ? SUBTOTAL_TOO_LOW : undefined,
+        helperText: extraCharge > 0
+          ? `Items ${formatCurrency(itemsSubtotal)}. The extra ${formatCurrency(extraCharge)} goes on the price of the main Item when you save.`
+          : 'Raise it to charge items that are not in the catalogue yet.',
+      }
+    : undefined;
   const bookingDiscount = packagePrice > 0 ? addonDiscount : itemsDiscount;
   const itemsFinal = bookingTotal - bookingDiscount;
   // The picked discount is applied on save, before the payment is taken.
@@ -437,6 +466,7 @@ export default function BookingsPage() {
       : bookingForm.booking_guarantee) || '';
     if (!bookingForm.institution) errs.institution = 'Occasion is required';
     if (bookingForm.items.length === 0) errs.items = 'At least one item is required';
+    if (subtotalTooLow) errs.subtotal = SUBTOTAL_TOO_LOW;
     
     // Validate that all items have valid item_id
     const validItems = bookingForm.items.filter(it => it.item_id && it.item_id.trim() !== '');
@@ -479,7 +509,7 @@ export default function BookingsPage() {
         remaining_amount: remainingAmount,
         discount_id: discountId || undefined,
         created_by: user.id, // Add the current user ID
-        items: validItems.map(it => ({
+        items: pricedItems(validItems).map(it => ({
           item_id: it.item_id,
           quantity: it.quantity,
           unit_price: it.unit_price,
@@ -505,6 +535,7 @@ export default function BookingsPage() {
       });
       setDiscountId('');
       setDiscountCode('');
+      setSubtotalInput('');
       await reload();
       if (created?.id && (created.paid_amount || payNow) > 0) {
         await openIssuedInvoice({
@@ -558,6 +589,7 @@ export default function BookingsPage() {
     setSelectedPackageId(booking.package_pricing_id || '');
     setDiscountId('');
     setDiscountCode('');
+    setSubtotalInput('');
     setBookingFeeRuleId(''); setBookingPot('');
     setIsEditModalOpen(true);
   };
@@ -574,6 +606,7 @@ export default function BookingsPage() {
       : bookingForm.booking_guarantee) || '';
     if (!bookingForm.institution) errs.institution = 'Occasion is required';
     if (bookingForm.items.length === 0) errs.items = 'At least one item is required';
+    if (subtotalTooLow) errs.subtotal = SUBTOTAL_TOO_LOW;
     
     // Validate that all items have valid item_id
     const validItems = bookingForm.items.filter(it => it.item_id && it.item_id.trim() !== '');
@@ -628,7 +661,7 @@ export default function BookingsPage() {
             discount_amount: bookingDiscount,
             remaining_amount: remainingAmount,
             discount_id: discountId || undefined,
-            items: validItems.map(it => ({
+            items: pricedItems(validItems).map(it => ({
               item_id: it.item_id,
               quantity: it.quantity,
               unit_price: it.unit_price,
@@ -648,6 +681,7 @@ export default function BookingsPage() {
       setActiveBooking(null);
       setDiscountId('');
       setDiscountCode('');
+      setSubtotalInput('');
       await reload();
       if (paidNow > previousPaid) {
         await openIssuedInvoice({
@@ -883,7 +917,7 @@ export default function BookingsPage() {
             <Link href="/dashboard/cashier">
               <Button size="md" variant="secondary">Cashier POS</Button>
             </Link>
-            <Button size="md" onClick={() => { setDiscountId(''); setDiscountCode(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}>
+            <Button size="md" onClick={() => { setDiscountId(''); setDiscountCode(''); setSubtotalInput(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}>
               <Plus className="h-4 w-4" />
               New Booking
             </Button>
@@ -925,7 +959,7 @@ export default function BookingsPage() {
               icon={<Calendar className="h-10 w-10" />}
               title="No bookings found"
               description={Object.values(filters).some(v => v) ? 'Try adjusting your filters' : 'Get started by creating your first booking'}
-              action={<Button onClick={() => { setDiscountId(''); setDiscountCode(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}><Plus className="h-4 w-4" /> New Booking</Button>}
+              action={<Button onClick={() => { setDiscountId(''); setDiscountCode(''); setSubtotalInput(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}><Plus className="h-4 w-4" /> New Booking</Button>}
             />
           ) : (
             (Array.isArray(bookings) ? bookings : []).map((booking) => {
@@ -1049,6 +1083,7 @@ export default function BookingsPage() {
             handleSelectPackage={handleSelectPackage}
             setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
+            subtotalField={subtotalField}
           />
           <BookingFormTotals
             selectedPackageId={selectedPackageId}
@@ -1110,6 +1145,7 @@ export default function BookingsPage() {
             handleSelectPackage={handleSelectPackage}
             setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
+            subtotalField={subtotalField}
           />
           <BookingFormTotals
             selectedPackageId={selectedPackageId}
@@ -1299,6 +1335,7 @@ function BookingFormFields({
   handleSelectPackage,
   setDiscountId,
   setDiscountCode,
+  subtotalField,
 }: {
   bookingForm: BookingFormState;
   formErrors: Record<string, string>;
@@ -1314,6 +1351,8 @@ function BookingFormFields({
   chargeNow: number;
   chargeNowFee: number;
   locked?: boolean;
+  /** The editable Subtotal, absent when the booking cannot take one. */
+  subtotalField?: { value: number | string; onChange: (value: number) => void; error?: string; helperText: string };
   /** Item lines locked; defaults to locked. A paid legacy booking unlocks them for Admin. */
   itemsLocked?: boolean;
   /** The paid total that a paid legacy booking keeps when its Items change. */
@@ -1570,6 +1609,16 @@ function BookingFormFields({
             disabled={locked}
           />
         </div>
+
+        {subtotalField && (
+          <CurrencyInput
+            label="Subtotal"
+            value={subtotalField.value}
+            onChange={subtotalField.onChange}
+            error={subtotalField.error}
+            helperText={subtotalField.helperText}
+          />
+        )}
 
         {/* Only discounts this customer, this total and these items qualify
             for. The list comes from the backend, so anything offered here is
