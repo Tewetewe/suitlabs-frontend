@@ -16,6 +16,7 @@ import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow } from '@/components/ui/DataDisplay';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
+import { useRememberedState } from '@/hooks/useRememberedState';
 
 export default function UsersPage() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export default function UsersPage() {
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [deactivating, setDeactivating] = useState<User | null>(null);
   const [deactivatingBusy, setDeactivatingBusy] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useRememberedState('users.search', '');
   const debouncedSearch = useDebouncedValue(searchTerm, 400);
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const isAdmin = currentUser?.role === 'admin';
@@ -67,7 +68,7 @@ export default function UsersPage() {
     total,
     reload,
     sentinelRef,
-  } = useInfiniteList(loadUsersPage);
+  } = useInfiniteList(loadUsersPage, { cacheKey: `users:${debouncedSearch}` });
 
   const roleVariant = (role: string): 'danger' | 'primary' | 'success' | 'default' => {
     switch (role) {

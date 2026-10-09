@@ -39,6 +39,7 @@ import { issueBookingInvoice } from '@/lib/issue-invoice';
 import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
+import { useRememberedState } from '@/hooks/useRememberedState';
 import { useToast } from '@/contexts/ToastContext';
 
 type BookingFormItem = {
@@ -137,8 +138,8 @@ export default function BookingsPage() {
     !!b && b.payment_status === 'completed' && isAdmin && Boolean(b.legacy_ref);
   const [deletingBooking, setDeletingBooking] = useState<Booking | null>(null);
   const [deletingBookingBusy, setDeletingBookingBusy] = useState(false);
-  const [filters, setFilters] = useState<BookingFilters>({});
-  const [searchInput, setSearchInput] = useState('');
+  const [filters, setFilters] = useRememberedState<BookingFilters>('bookings.filters', {});
+  const [searchInput, setSearchInput] = useRememberedState('bookings.search', '');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -703,12 +704,12 @@ export default function BookingsPage() {
     total,
     reload,
     sentinelRef,
-  } = useInfiniteList(loadBookingsPage);
+  } = useInfiniteList(loadBookingsPage, { cacheKey: `bookings:${JSON.stringify(filters)}` });
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q');
     if (q) setSearchInput(q);
-  }, []);
+  }, [setSearchInput]);
 
   const handleSearch = (search: string) => {
     setSearchInput(search);
@@ -720,7 +721,7 @@ export default function BookingsPage() {
       setFilters(prev => ({ ...prev, search: searchInput || undefined }));
     }, 400);
     return () => clearTimeout(t);
-  }, [searchInput]);
+  }, [searchInput, setFilters]);
 
   const bookingStatusVariant = (s: string): 'success' | 'warning' | 'primary' | 'default' | 'danger' => {
     switch (s) {

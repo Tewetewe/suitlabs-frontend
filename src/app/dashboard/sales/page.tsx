@@ -24,6 +24,7 @@ import { QrCode, ShoppingBag } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
+import { useRememberedState } from '@/hooks/useRememberedState';
 
 const BarcodeScanner = dynamic(() => import('@/components/ui/BarcodeScanner'), { ssr: false });
 
@@ -77,8 +78,8 @@ function SalesPageInner() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [submitting, setSubmitting] = useState(false);
-  const [search, setSearch] = useState('');
-  const [source, setSource] = useState<SaleSource | ''>('');
+  const [search, setSearch] = useRememberedState('sales.search', '');
+  const [source, setSource] = useRememberedState<SaleSource | ''>('sales.source', '');
   const [linkedRental, setLinkedRental] = useState<Rental | null>(null);
   const [cancellingSale, setCancellingSale] = useState<Sale | null>(null);
   const [deletingSale, setDeletingSale] = useState<Sale | null>(null);
@@ -120,7 +121,7 @@ function SalesPageInner() {
     total,
     reload,
     sentinelRef,
-  } = useInfiniteList(loadSalesPage);
+  } = useInfiniteList(loadSalesPage, { cacheKey: `sales:${search}:${source}` });
 
   useEffect(() => {
     if (!rentalId) {
