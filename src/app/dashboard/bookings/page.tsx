@@ -51,10 +51,18 @@ type BookingFormItem = {
 
 const ITEM_PICKER_PAGE_SIZE = 20;
 
+const ITEM_GENDER_LABELS: Record<NonNullable<Item['gender']>, string> = {
+  men: 'Mens',
+  women: 'Womens',
+  kids: 'Kids',
+  unisex: 'Unisex',
+};
+
 function itemOptionLabel(it: Item) {
   const type = it.type ? it.type.charAt(0).toUpperCase() + it.type.slice(1) : 'Item';
+  const gender = it.gender ? ` · ${ITEM_GENDER_LABELS[it.gender] ?? it.gender}` : '';
   const size = it.size?.label ? ` · ${it.size.label}` : '';
-  return `${it.name} · ${type}${size} (${it.code})`;
+  return `${it.name} · ${type}${gender}${size} (${it.code})`;
 }
 
 async function fetchItemOptionsPage(query: string, page: number, type?: 'trousers'): Promise<AutoPageResult> {
