@@ -954,6 +954,28 @@ export interface Item {
   updated_at: string;
 }
 
+/** How another booking meets the dates asked about. */
+export type ItemAvailabilityKind = 'booked' | 'pickup_evening' | 'return_morning';
+
+export interface ItemAvailabilityHit {
+  kind: ItemAvailabilityKind;
+  source: 'booking' | 'rental';
+  id: string;
+  booking_id?: string;
+  reference?: string;
+  customer_name?: string;
+  /** YYYY-MM-DD */
+  pickup_date: string;
+  /** YYYY-MM-DD */
+  return_date: string;
+}
+
+/** Whether an Item is free from pickup to return: free, free with a same-day handover, or held. */
+export interface ItemAvailability {
+  status: 'available' | 'handover' | 'booked';
+  hits: ItemAvailabilityHit[];
+}
+
 // Customer Types
 export interface Customer {
   id: string;
