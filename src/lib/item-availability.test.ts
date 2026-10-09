@@ -63,3 +63,23 @@ describe('availabilityNote', () => {
     assert.equal(note.text, 'Booked 6 Nov by another customer (INV-1)');
   });
 });
+
+describe('an Item with more than one unit', () => {
+  const oneOfTwo = { status: 'available' as const, stock: 2, free: 1, hits: [hit('booked', '2026-11-05', '2026-11-06', 'Andi Wijaya', 'INV-9')] };
+
+  it('stays available and says how many units are free', () => {
+    assert.deepEqual(availabilityNote(oneOfTwo), { tone: 'ok', text: 'Available on these dates, 1 of 2 free' });
+  });
+
+  it('does not grey the card while a unit is free', () => {
+    const note = availabilityCardNote(oneOfTwo);
+    assert.equal(note?.tone, 'note');
+    assert.equal(note?.short, '1 of 2 free');
+    assert.equal(note?.detail, 'Pickup 5 Nov, return 6 Nov: Andi Wijaya (INV-9)');
+  });
+
+  it('is booked when every unit is held', () => {
+    const note = availabilityNote({ ...oneOfTwo, status: 'booked', free: 0 });
+    assert.equal(note.tone, 'clash');
+  });
+});

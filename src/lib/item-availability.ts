@@ -10,6 +10,13 @@ function shortDay(value: string): string {
   return month && day ? `${day} ${MONTHS[month - 1]}` : value;
 }
 
+/** "1 of 2 free" when the Item has more than one unit and another booking holds some. */
+function unitsFree(availability: ItemAvailability): string | null {
+  const stock = availability.stock ?? 1;
+  if (stock <= 1 || (availability.hits || []).length === 0) return null;
+  return `${availability.free ?? stock} of ${stock} free`;
+}
+
 function who(hit: ItemAvailabilityHit): string {
   const name = hit.customer_name?.trim() || 'another customer';
   return hit.reference ? `${name} (${hit.reference})` : name;
@@ -24,7 +31,7 @@ export function availabilityCardNote(
 ): { tone: AvailabilityTone; short: string; detail: string } | null {
   if (!availability) return null;
   const hits = availability.hits || [];
-  const clash = hits.find((hit) => hit.kind === 'booked');
+  const clash = availability.status === 'booked' ? hits.find((hit) => hit.kind === 'booked') : undefined;
   if (clash) {
     const name = clash.customer_name?.trim().split(/\s+/)[0] || 'booked';
     return {
@@ -32,6 +39,16 @@ export function availabilityCardNote(
       short: `Booked ${dayRange(clash.pickup_date, clash.return_date)} · ${name}`,
       detail: hits
         .filter((hit) => hit.kind === 'booked')
+        .map((hit) => `Pickup ${shortDay(hit.pickup_date)}, return ${shortDay(hit.return_date)}: ${who(hit)}`)
+        .join('\n'),
+    };
+  }
+  const units = unitsFree(availability);
+  if (units && availability.status === 'available') {
+    return {
+      tone: 'note',
+      short: units,
+      detail: hits
         .map((hit) => `Pickup ${shortDay(hit.pickup_date)}, return ${shortDay(hit.return_date)}: ${who(hit)}`)
         .join('\n'),
     };
@@ -70,7 +87,7 @@ function dayRange(pickup: string, ret: string): string {
  */
 export function availabilityNote(availability: ItemAvailability): { tone: AvailabilityTone; text: string } {
   const hits = availability.hits || [];
-  const clash = hits.find((hit) => hit.kind === 'booked');
+  const clash = availability.status === 'booked' ? hits.find((hit) => hit.kind === 'booked') : undefined;
   if (clash) {
     const more = hits.filter((hit) => hit.kind === 'booked').length - 1;
     const range = clash.pickup_date === clash.return_date
@@ -80,6 +97,10 @@ export function availabilityNote(availability: ItemAvailability): { tone: Availa
       tone: 'clash',
       text: `Booked ${range} by ${who(clash)}${more > 0 ? ` and ${more} more` : ''}`,
     };
+  }
+  const units = unitsFree(availability);
+  if (units && availability.status === 'available') {
+    return { tone: 'ok', text: `Available on these dates, ${units}` };
   }
   const evening = hits.find((hit) => hit.kind === 'pickup_evening');
   const morning = hits.find((hit) => hit.kind === 'return_morning');

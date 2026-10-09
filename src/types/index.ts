@@ -980,6 +980,10 @@ export interface ItemAvailabilityHit {
 export interface ItemAvailability {
   status: 'available' | 'handover' | 'booked';
   hits: ItemAvailabilityHit[];
+  /** The Item's quantity. */
+  stock?: number;
+  /** Units left on the busiest day of the dates. */
+  free?: number;
 }
 
 // Customer Types
