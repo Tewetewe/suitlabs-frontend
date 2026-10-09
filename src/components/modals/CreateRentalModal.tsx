@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { apiClient } from '@/lib/api';
+import { hasNextPage } from '@/hooks/useInfiniteList';
 import { Booking, CreateRentalRequest } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { FileText } from 'lucide-react';
@@ -71,7 +72,7 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
       const pagination = res?.data?.pagination;
       return {
         options: list.map((b) => ({ value: b.id, label: bookingLabel(b) })),
-        hasMore: Boolean(pagination?.has_next),
+        hasMore: hasNextPage(pagination, list.length, PAGE_SIZE),
       };
     } catch {
       warning('Unable to load bookings', 'Backend may be offline. Please try again.');

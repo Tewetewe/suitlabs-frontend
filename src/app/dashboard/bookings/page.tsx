@@ -29,7 +29,7 @@ import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS } from '@/lib/selec
 import { Booking, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
-import AutoCompleteSelect from '@/components/ui/AutoCompleteSelect';
+import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
 import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -48,6 +48,40 @@ type BookingFormItem = {
   catalogue?: 'any' | 'trousers';
   is_addon?: boolean;
 };
+
+const ITEM_PICKER_PAGE_SIZE = 20;
+
+const ITEM_GENDER_LABELS: Record<NonNullable<Item['gender']>, string> = {
+  men: 'Mens',
+  women: 'Womens',
+  kids: 'Kids',
+  unisex: 'Unisex',
+};
+
+function itemOptionLabel(it: Item) {
+  const type = it.type ? it.type.charAt(0).toUpperCase() + it.type.slice(1) : 'Item';
+  const gender = it.gender ? ` · ${ITEM_GENDER_LABELS[it.gender] ?? it.gender}` : '';
+  const size = it.size?.label ? ` · ${it.size.label}` : '';
+  return `${it.name} · ${type}${gender}${size} (${it.code})`;
+}
+
+async function fetchItemOptionsPage(query: string, page: number, type?: 'trousers'): Promise<AutoPageResult> {
+  try {
+    const res = await apiClient.getItems({
+      search: query || undefined,
+      type,
+      page,
+      limit: ITEM_PICKER_PAGE_SIZE,
+    });
+    const items = res?.data?.data?.items || [];
+    return {
+      options: items.map((it) => ({ value: it.id, label: itemOptionLabel(it) })),
+      hasMore: hasNextPage(res?.data?.pagination, items.length, ITEM_PICKER_PAGE_SIZE),
+    };
+  } catch {
+    return { options: [], hasMore: false };
+  }
+}
 
 function bookingCustomerName(booking: Booking) {
   if (!booking.customer) return `Booking #${booking.id.slice(-8)}`;
@@ -103,6 +137,10 @@ export default function BookingsPage() {
   // Edit is for a booking that is not fully paid. Admin may also edit an
   // imported legacy booking that is, to add or fix its Item after the import.
   const canEditBooking = (b: Booking) => b.payment_status !== 'completed' || (isAdmin && Boolean(b.legacy_ref));
+  // A fully paid legacy booking can import with no Item. Admin adds or swaps it
+  // here; the backend spreads the paid total over the lines, so money stays.
+  const canEditPaidLegacyItems = (b: Booking | null) =>
+    !!b && b.payment_status === 'completed' && isAdmin && Boolean(b.legacy_ref);
   const [deletingBooking, setDeletingBooking] = useState<Booking | null>(null);
   const [deletingBookingBusy, setDeletingBookingBusy] = useState(false);
   const [filters, setFilters] = useState<BookingFilters>({});
@@ -241,6 +279,8 @@ export default function BookingsPage() {
   };
 
   const itemCacheRef = useRef<Map<string, Item>>(new Map());
+  // Names of the chosen items, so a line shows its item even when the item is not on a loaded picker page.
+  const [itemLabels, setItemLabels] = useState<Record<string, string>>({});
   const itemIdsKey = useMemo(() => Array.from(new Set(bookingForm.items.map(it => it.item_id).filter(Boolean))).sort().join(','), [bookingForm.items]);
   useEffect(() => {
     const fillItemsAndPairTrousers = async () => {
@@ -257,6 +297,11 @@ export default function BookingsPage() {
           }));
         }
         const pairedTrousers: Item[] = [];
+        const labels: Record<string, string> = {};
+        for (const id of uniqueIds) {
+          const cached = itemCacheRef.current.get(id);
+          if (cached) labels[id] = itemOptionLabel(cached);
+        }
         for (const id of uniqueIds) {
           const item = itemCacheRef.current.get(id);
           if (!item?.trousers_code || (item.type !== 'suit' && item.type !== 'jacket')) continue;
@@ -264,10 +309,12 @@ export default function BookingsPage() {
             const trousers = await apiClient.getItemByCode(item.trousers_code);
             if (trousers?.id) {
               itemCacheRef.current.set(trousers.id, trousers);
+              labels[trousers.id] = itemOptionLabel(trousers);
               pairedTrousers.push(trousers);
             }
           } catch {}
         }
+        setItemLabels(prev => ({ ...prev, ...labels }));
         setBookingForm(prev => {
           let items = prev.items.map(it => it.item_id && (!it.unit_price || it.unit_price === 0)
             ? { ...it, unit_price: rentalPrice(itemCacheRef.current.get(it.item_id) ?? {}, prev.rental_length) }
@@ -486,6 +533,13 @@ export default function BookingsPage() {
         is_addon: !!it.is_addon,
       }))
     });
+    setItemLabels(prev => {
+      const next = { ...prev };
+      for (const it of booking.items || []) {
+        if (it.item) next[it.item_id] = itemOptionLabel(it.item);
+      }
+      return next;
+    });
     setSelectedPackageId(booking.package_pricing_id || '');
     setDiscountId('');
     setDiscountCode('');
@@ -523,6 +577,18 @@ export default function BookingsPage() {
             booking_guarantee: bookingGuarantee,
             security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
             institution: bookingForm.institution || undefined,
+            ...(canEditPaidLegacyItems(activeBooking)
+              ? {
+                  items: validItems.map(it => ({
+                    item_id: it.item_id,
+                    quantity: it.quantity,
+                    unit_price: it.unit_price,
+                    total_price: it.unit_price * it.quantity,
+                    discount_amount: 0,
+                    is_addon: false,
+                  })),
+                }
+              : {}),
           }
         : {
             customer_id: bookingForm.customer_id,
@@ -595,33 +661,9 @@ export default function BookingsPage() {
     return customers.map((c) => ({ value: c.id, label: customerOptionLabel(c) }));
   };
 
-  const itemOptionLabel = (it: Item) => {
-    const type = it.type ? it.type.charAt(0).toUpperCase() + it.type.slice(1) : 'Item';
-    const size = it.size?.label ? ` · ${it.size.label}` : '';
-    return `${it.name} · ${type}${size} (${it.code})`;
-  };
-
-  const fetchItemOptions = async (query: string) => {
-    if (query && query.trim().length >= 2) {
-      const results = await apiClient.searchItems(query.trim());
-      return results.map((it) => ({ value: it.id, label: itemOptionLabel(it) }));
-    }
-    const itemsRes = await apiClient.getItems();
-    const items = itemsRes?.data?.data?.items as Item[] || [];
-    return items.map((it) => ({ value: it.id, label: itemOptionLabel(it) }));
-  };
-
-  const fetchTrousersOptions = async (query: string) => {
-    if (query && query.trim().length >= 2) {
-      const results = await apiClient.searchItems(query.trim());
-      return results
-        .filter((it) => it.type === 'trousers')
-        .map((it) => ({ value: it.id, label: itemOptionLabel(it) }));
-    }
-    const itemsRes = await apiClient.getItems({ type: 'trousers', page: 1, limit: 50 });
-    const items = itemsRes?.data?.data?.items as Item[] || [];
-    return items.map((it) => ({ value: it.id, label: itemOptionLabel(it) }));
-  };
+  // Stable references: the picker reloads page 1 when its fetcher changes.
+  const fetchItemPage = useCallback((query: string, page: number) => fetchItemOptionsPage(query, page), []);
+  const fetchTrousersPage = useCallback((query: string, page: number) => fetchItemOptionsPage(query, page, 'trousers'), []);
 
   // Load package pricing when modal opens
   useEffect(() => {
@@ -974,8 +1016,9 @@ export default function BookingsPage() {
             chargeNowFee={chargeNowFee}
             locked={false}
             fetchCustomerOptions={fetchCustomerOptions}
-            fetchItemOptions={fetchItemOptions}
-            fetchTrousersOptions={fetchTrousersOptions}
+            itemLabels={itemLabels}
+            fetchItemPage={fetchItemPage}
+            fetchTrousersPage={fetchTrousersPage}
             updateBookingField={updateBookingField}
             pickRentalDates={pickRentalDates}
             updateItemField={updateItemField}
@@ -1030,9 +1073,12 @@ export default function BookingsPage() {
             chargeNow={chargeNow}
             chargeNowFee={chargeNowFee}
             locked={activeBooking?.payment_status === 'completed'}
+            itemsLocked={activeBooking?.payment_status === 'completed' && !canEditPaidLegacyItems(activeBooking)}
+            paidTotal={canEditPaidLegacyItems(activeBooking) ? activeBooking?.paid_amount : undefined}
             fetchCustomerOptions={fetchCustomerOptions}
-            fetchItemOptions={fetchItemOptions}
-            fetchTrousersOptions={fetchTrousersOptions}
+            itemLabels={itemLabels}
+            fetchItemPage={fetchItemPage}
+            fetchTrousersPage={fetchTrousersPage}
             updateBookingField={updateBookingField}
             pickRentalDates={pickRentalDates}
             updateItemField={updateItemField}
@@ -1214,9 +1260,12 @@ function BookingFormFields({
   chargeNow,
   chargeNowFee,
   locked,
+  itemsLocked = locked,
+  paidTotal,
   fetchCustomerOptions,
-  fetchItemOptions,
-  fetchTrousersOptions,
+  itemLabels,
+  fetchItemPage,
+  fetchTrousersPage,
   updateBookingField,
   pickRentalDates,
   updateItemField,
@@ -1240,9 +1289,14 @@ function BookingFormFields({
   chargeNow: number;
   chargeNowFee: number;
   locked?: boolean;
+  /** Item lines locked; defaults to locked. A paid legacy booking unlocks them for Admin. */
+  itemsLocked?: boolean;
+  /** The paid total that a paid legacy booking keeps when its Items change. */
+  paidTotal?: number;
   fetchCustomerOptions: (query: string) => Promise<{ value: string; label: string }[]>;
-  fetchItemOptions: (query: string) => Promise<{ value: string; label: string }[]>;
-  fetchTrousersOptions: (query: string) => Promise<{ value: string; label: string }[]>;
+  itemLabels: Record<string, string>;
+  fetchItemPage: (query: string, page: number) => Promise<AutoPageResult>;
+  fetchTrousersPage: (query: string, page: number) => Promise<AutoPageResult>;
   updateBookingField: (field: keyof BookingFormState, value: string | boolean) => void;
   pickRentalDates: (eventDate: string, length: RentalLength) => void;
   updateItemField: (index: number, field: keyof BookingFormItem, value: string | number | boolean) => void;
@@ -1374,16 +1428,21 @@ function BookingFormFields({
 
       <FieldGroup title="Items">
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={locked}>Add trousers</Button>
+          <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={itemsLocked}>Add trousers</Button>
           {selectedPackageId && (
-            <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={locked}>Add add-on</Button>
+            <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={itemsLocked}>Add add-on</Button>
           )}
-          <Button size="sm" onClick={() => addItemLine()} disabled={locked}>Add item</Button>
+          <Button size="sm" onClick={() => addItemLine()} disabled={itemsLocked}>Add item</Button>
         </div>
         <p className="text-xs text-slate-500">
           Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair.
           {selectedPackageId ? ' Mark extras as add-ons to charge them on top of the package.' : ''}
         </p>
+        {paidTotal != null && (
+          <p className="text-xs text-slate-500">
+            This booking is fully paid. The paid total of {formatCurrency(paidTotal)} stays: Save spreads it over the Items, so the prices here do not change the money.
+          </p>
+        )}
         {formErrors.items && <div className="text-sm text-red-600">{formErrors.items}</div>}
         <div className="space-y-3">
           {bookingForm.items.map((it, idx) => {
@@ -1395,12 +1454,13 @@ function BookingFormFields({
                     <AutoCompleteSelect
                       label={it.catalogue === 'trousers' ? 'Trousers' : it.is_addon ? 'Add-on' : 'Item'}
                       value={it.item_id}
-                      onChange={(val) => { if (!locked) updateItemField(idx, 'item_id', val); }}
-                      fetchOptions={it.catalogue === 'trousers' ? fetchTrousersOptions : fetchItemOptions}
+                      onChange={(val) => { if (!itemsLocked) updateItemField(idx, 'item_id', val); }}
+                      fetchPage={it.catalogue === 'trousers' ? fetchTrousersPage : fetchItemPage}
+                      extraOptions={it.item_id && itemLabels[it.item_id] ? [{ value: it.item_id, label: itemLabels[it.item_id] }] : undefined}
                       placeholder={it.catalogue === 'trousers' ? 'Search trousers' : 'Search items'}
                     />
                   </div>
-                  <Button variant="ghost" size="sm" className="mt-7 shrink-0" onClick={() => removeItemLine(idx)} disabled={locked}>
+                  <Button variant="ghost" size="sm" className="mt-7 shrink-0" onClick={() => removeItemLine(idx)} disabled={itemsLocked}>
                     Remove
                   </Button>
                 </div>
