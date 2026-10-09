@@ -48,6 +48,11 @@ export function itemQualityLabel(quality?: string | null): string {
   return quality ? ITEM_QUALITY_LABELS[quality] ?? '' : '';
 }
 
+/** The gender of a Suit tab Item, for example "Mens". Other Items have none for now. */
+export function itemGenderTag(item: TaggedItem | null | undefined): string {
+  return isSuitTabItem(item) ? itemGenderLabel(item?.gender) : '';
+}
+
 /** The gender and tier of a Suit tab Item, for example ["Mens", "Premium"]. Other Items have none for now. */
 export function itemTags(item: TaggedItem | null | undefined): string[] {
   if (!isSuitTabItem(item)) return [];
