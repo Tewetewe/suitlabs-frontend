@@ -68,7 +68,7 @@ async function fetchItemOptionsPage(query: string, page: number, type?: 'trouser
     const items = res?.data?.data?.items || [];
     return {
       options: items.map((it) => ({ value: it.id, label: itemOptionLabel(it) })),
-      hasMore: Boolean(res?.data?.pagination?.has_next),
+      hasMore: hasNextPage(res?.data?.pagination, items.length, ITEM_PICKER_PAGE_SIZE),
     };
   } catch {
     return { options: [], hasMore: false };
