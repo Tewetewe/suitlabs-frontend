@@ -61,6 +61,11 @@ export function useInfiniteList<T>(
   const [total, setTotal] = useState(restored?.total ?? 0);
   const [loading, setLoading] = useState(!restored);
   const [loadingMore, setLoadingMore] = useState(false);
+  // A reload while rows show keeps them on screen until the new rows come:
+  // a list that drops to placeholders gets short and moves the scroll.
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const itemCountRef = useRef(restored?.items.length ?? 0);
   const loadingMoreRef = useRef(false);
   const requestRef = useRef(0);
   const pageRef = useRef(restored?.page ?? 1);
@@ -73,12 +78,17 @@ export function useInfiniteList<T>(
 
   const load = useCallback(async (nextPage: number, append: boolean) => {
     if (append) {
-      if (loadingMoreRef.current || !hasMoreRef.current) return;
+      if (loadingMoreRef.current || refreshingRef.current || !hasMoreRef.current) return;
       loadingMoreRef.current = true;
       setLoadingMore(true);
     } else {
       requestRef.current += 1;
-      setLoading(true);
+      if (itemCountRef.current > 0) {
+        refreshingRef.current = true;
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       hasMoreRef.current = true;
     }
     const requestId = requestRef.current;
@@ -102,6 +112,8 @@ export function useInfiniteList<T>(
         setLoading(false);
         setLoadingMore(false);
         loadingMoreRef.current = false;
+        setRefreshing(false);
+        refreshingRef.current = false;
       }
     }
   }, [loadPage]);
@@ -112,13 +124,17 @@ export function useInfiniteList<T>(
     void load(1, false);
   }, [load, snapshotKey]);
 
+  useEffect(() => {
+    itemCountRef.current = items.length;
+  }, [items]);
+
   // Remember the rows, and the scroll position, for the next visit.
   useEffect(() => {
-    if (!snapshotKey || loading) return;
+    if (!snapshotKey || loading || refreshing) return;
     listSnapshots.set(snapshotKey, {
       items, page: pageRef.current, hasMore, total, scrollY: scrollYRef.current,
     });
-  }, [snapshotKey, loading, items, hasMore, total]);
+  }, [snapshotKey, loading, refreshing, items, hasMore, total]);
 
   useEffect(() => {
     if (!snapshotKey) return;
@@ -165,5 +181,5 @@ export function useInfiniteList<T>(
     return () => observer.disconnect();
   }, [loading, hasMore, loadMore, items.length]);
 
-  return { items, setItems, loading, loadingMore, hasMore, total, reload, sentinelRef };
+  return { items, setItems, loading, loadingMore, refreshing, hasMore, total, reload, sentinelRef };
 }
