@@ -55,6 +55,7 @@ import { issueBookingInvoice } from '@/lib/issue-invoice';
 import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
 import { Badge } from '@/components/ui/DataDisplay';
 import { itemTags } from '@/lib/item-name';
+import { availabilityNote } from '@/lib/item-availability';
 import {
   BookingInstitution,
   BookingPaymentMethod,
@@ -63,6 +64,7 @@ import {
   Customer,
   InvoiceData,
   Item,
+  ItemAvailability,
   PackagePricing,
   Sale,
   SaleLineType,
@@ -152,7 +154,7 @@ function spreadDiscount(lineTotals: number[], discount: number): number[] {
 }
 
 export function CashierPOS() {
-  const { success, error } = useToast();
+  const { success, error, warning } = useToast();
   const { user } = useAuth();
   const { chrome } = useCashierChrome();
   const router = useRouter();
@@ -171,6 +173,9 @@ export function CashierPOS() {
   const [rentalLength, setRentalLength] = useState<RentalLength>('3d');
   const [rentalDate, setRentalDate] = useState(todayISO);
   const [returnDate, setReturnDate] = useState('');
+  // Whether each cart Item is free on the chosen dates, by `${itemId}|${pickup}|${return}`.
+  const [availability, setAvailability] = useState<Record<string, ItemAvailability>>({});
+  const availabilityRequests = useRef(new Map<string, Promise<ItemAvailability | null>>());
   const [items, setItems] = useState<Item[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -382,6 +387,37 @@ export function CashierPOS() {
     }
   };
 
+  const availabilityKey = useCallback(
+    (itemId: string) => `${itemId}|${rentalDate}|${returnDate || rentalDate}`,
+    [rentalDate, returnDate],
+  );
+
+  // Asks once per Item and dates; later calls share the answer.
+  const checkAvailability = useCallback((itemId: string): Promise<ItemAvailability | null> => {
+    if (!rentalDate) return Promise.resolve(null);
+    const key = availabilityKey(itemId);
+    const pending = availabilityRequests.current.get(key);
+    if (pending) return pending;
+    const request = apiClient
+      .getItemAvailability(itemId, rentalDate, returnDate || rentalDate)
+      .then((result) => {
+        setAvailability((prev) => ({ ...prev, [key]: result }));
+        return result;
+      })
+      .catch(() => {
+        availabilityRequests.current.delete(key);
+        return null;
+      });
+    availabilityRequests.current.set(key, request);
+    return request;
+  }, [availabilityKey, rentalDate, returnDate]);
+
+  // New dates, or a new Item in the cart: check each rental line.
+  useEffect(() => {
+    if (mode !== 'rental') return;
+    for (const line of cart) void checkAvailability(line.item.id);
+  }, [mode, cart, checkAvailability]);
+
   const addItem = useCallback((item: Item) => {
     if (!canSell(item, mode) && mode === 'sale') {
       error('Not sellable', `${item.name} is not marked as sellable or is out of stock.`);
@@ -407,7 +443,15 @@ export function CashierPOS() {
     });
     setFlashId(item.id);
     window.setTimeout(() => setFlashId(null), 450);
-  }, [mode, rentalLength, error]);
+    if (mode === 'rental') {
+      // A clash warns but does not stop the sale: staff decide.
+      void checkAvailability(item.id).then((result) => {
+        if (result?.status === 'booked') {
+          warning('Booked on these dates', `${item.name}: ${availabilityNote(result).text}`);
+        }
+      });
+    }
+  }, [mode, rentalLength, error, warning, checkAvailability]);
 
   const pickEventDate = (value: string) => {
     setEventDate(value);
@@ -705,6 +749,20 @@ export function CashierPOS() {
                       <div className="text-xs text-slate-500">
                         {[line.item.code, ...itemTags(line.item), line.item.size?.label ? `Size ${line.item.size.label}` : null].filter(Boolean).join(' · ') || 'Item'}
                       </div>
+                      {mode === 'rental' && availability[availabilityKey(line.item.id)] && (() => {
+                        const note = availabilityNote(availability[availabilityKey(line.item.id)]);
+                        return (
+                          <div
+                            data-testid="pos-availability"
+                            className={clsx(
+                              'text-[11px] font-medium',
+                              note.tone === 'clash' ? 'text-red-600' : note.tone === 'note' ? 'text-amber-700' : 'text-emerald-700',
+                            )}
+                          >
+                            {note.text}
+                          </div>
+                        );
+                      })()}
                       {mode === 'rental' && !packageId && missingFourHourPrice(line.item, rentalLength) && (
                         <div className="text-[11px] font-medium text-amber-700" data-testid="pos-no-4h-price">No 4-hour price: 3-day price used</div>
                       )}

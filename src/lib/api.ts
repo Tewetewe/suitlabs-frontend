@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
-import { 
+import {
   APIResponse,
+  ItemAvailability,
   PaginatedResponse,
   CustomerPaginatedResponse,
   ItemPaginatedResponse,
@@ -292,6 +293,14 @@ class APIClient {
     }
     const response = await this.client.get<ItemPaginatedResponse>(`/api/v1/items?${params}`);
     return response.data;
+  }
+
+  /** Pickup and return are YYYY-MM-DD shop days. */
+  async getItemAvailability(itemId: string, pickup: string, ret: string, excludeBookingId?: string): Promise<ItemAvailability> {
+    const response = await this.client.get<APIResponse<ItemAvailability>>(`/api/v1/items/${itemId}/availability`, {
+      params: { pickup, return: ret, ...(excludeBookingId ? { exclude_booking_id: excludeBookingId } : {}) },
+    });
+    return response.data.data || { status: 'available', hits: [] };
   }
 
   async getItem(id: string): Promise<Item> {
