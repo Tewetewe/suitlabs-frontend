@@ -397,7 +397,11 @@ function LegacyRowCard({ row }: { row: LegacyImportRow }) {
         <span className="font-medium text-slate-900">{row.customer_name || '—'}</span>
         <span className="text-xs text-slate-500">{row.phone}</span>
         <Badge variant={row.customer_exists ? 'default' : 'info'}>
-          {row.customer_exists ? 'Existing customer' : 'New customer'}
+          {row.customer_exists
+            ? 'Existing customer'
+            : row.same_customer_row
+              ? `Same customer as row ${row.same_customer_row}`
+              : 'New customer'}
         </Badge>
         {row.without_item && row.state !== 'imported' && <Badge variant="warning">No Item</Badge>}
       </div>
