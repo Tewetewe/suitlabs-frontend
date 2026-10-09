@@ -92,6 +92,8 @@ export interface LegacyImportRow {
   customer_name: string;
   phone: string;
   customer_exists: boolean;
+  /** The earlier row whose new customer this row shares: one phone is one customer. */
+  same_customer_row?: number;
   event_date?: string;
   pickup_date?: string;
   return_date?: string;
