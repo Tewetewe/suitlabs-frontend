@@ -56,6 +56,8 @@ import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from 
 import { Badge } from '@/components/ui/DataDisplay';
 import { itemTags } from '@/lib/item-name';
 import { availabilityNote } from '@/lib/item-availability';
+import { useItemAvailability } from '@/hooks/useItemAvailability';
+import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
 import {
   BookingInstitution,
   BookingPaymentMethod,
@@ -64,7 +66,6 @@ import {
   Customer,
   InvoiceData,
   Item,
-  ItemAvailability,
   PackagePricing,
   Sale,
   SaleLineType,
@@ -173,9 +174,8 @@ export function CashierPOS() {
   const [rentalLength, setRentalLength] = useState<RentalLength>('3d');
   const [rentalDate, setRentalDate] = useState(todayISO);
   const [returnDate, setReturnDate] = useState('');
-  // Whether each cart Item is free on the chosen dates, by `${itemId}|${pickup}|${return}`.
-  const [availability, setAvailability] = useState<Record<string, ItemAvailability>>({});
-  const availabilityRequests = useRef(new Map<string, Promise<ItemAvailability | null>>());
+  // Whether each cart Item is free on the chosen dates.
+  const { check: checkAvailability, noteFor: availabilityNoteFor } = useItemAvailability(rentalDate, returnDate);
   const [items, setItems] = useState<Item[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -200,7 +200,8 @@ export function CashierPOS() {
   const [payCoverage, setPayCoverage] = useState<PayCoverage>('dp');
   const [discount, setDiscount] = useState('');
   const [notes, setNotes] = useState('');
-  const [guarantee, setGuarantee] = useState('KTP');
+  // Optional: '' is no guarantee left.
+  const [guarantee, setGuarantee] = useState('');
   const [takeDeposit, setTakeDeposit] = useState(false);
   const { enabled: depositEnabled } = useDepositSettings();
   const [occasion, setOccasion] = useState<BookingInstitution>('wedding');
@@ -387,31 +388,6 @@ export function CashierPOS() {
     }
   };
 
-  const availabilityKey = useCallback(
-    (itemId: string) => `${itemId}|${rentalDate}|${returnDate || rentalDate}`,
-    [rentalDate, returnDate],
-  );
-
-  // Asks once per Item and dates; later calls share the answer.
-  const checkAvailability = useCallback((itemId: string): Promise<ItemAvailability | null> => {
-    if (!rentalDate) return Promise.resolve(null);
-    const key = availabilityKey(itemId);
-    const pending = availabilityRequests.current.get(key);
-    if (pending) return pending;
-    const request = apiClient
-      .getItemAvailability(itemId, rentalDate, returnDate || rentalDate)
-      .then((result) => {
-        setAvailability((prev) => ({ ...prev, [key]: result }));
-        return result;
-      })
-      .catch(() => {
-        availabilityRequests.current.delete(key);
-        return null;
-      });
-    availabilityRequests.current.set(key, request);
-    return request;
-  }, [availabilityKey, rentalDate, returnDate]);
-
   // New dates, or a new Item in the cart: check each rental line.
   useEffect(() => {
     if (mode !== 'rental') return;
@@ -496,7 +472,7 @@ export function CashierPOS() {
     setPayChannel('cash');
     setFeeRuleId('');
     setPot('');
-    setGuarantee('KTP');
+    setGuarantee('');
     setTakeDeposit(false);
     setCartOpen(false);
     setDone(null);
@@ -749,20 +725,9 @@ export function CashierPOS() {
                       <div className="text-xs text-slate-500">
                         {[line.item.code, ...itemTags(line.item), line.item.size?.label ? `Size ${line.item.size.label}` : null].filter(Boolean).join(' · ') || 'Item'}
                       </div>
-                      {mode === 'rental' && availability[availabilityKey(line.item.id)] && (() => {
-                        const note = availabilityNote(availability[availabilityKey(line.item.id)]);
-                        return (
-                          <div
-                            data-testid="pos-availability"
-                            className={clsx(
-                              'text-[11px] font-medium',
-                              note.tone === 'clash' ? 'text-red-600' : note.tone === 'note' ? 'text-amber-700' : 'text-emerald-700',
-                            )}
-                          >
-                            {note.text}
-                          </div>
-                        );
-                      })()}
+                      {mode === 'rental' && (
+                        <AvailabilityNote note={availabilityNoteFor(line.item.id)} testId="pos-availability" />
+                      )}
                       {mode === 'rental' && !packageId && missingFourHourPrice(line.item, rentalLength) && (
                         <div className="text-[11px] font-medium text-amber-700" data-testid="pos-no-4h-price">No 4-hour price: 3-day price used</div>
                       )}
@@ -885,8 +850,11 @@ export function CashierPOS() {
 
         {mode === 'rental' && (
           <div>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Guarantee</div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Guarantee (optional)</div>
             <div className="flex flex-wrap gap-2">
+              <Chip selected={guarantee === ''} onClick={() => setGuarantee('')}>
+                None
+              </Chip>
               {BOOKING_GUARANTEE_OPTIONS.map((option) => (
                 <Chip key={option.value} selected={guarantee === option.value} onClick={() => setGuarantee(option.value)}>
                   {option.label}

@@ -41,8 +41,8 @@ export default function NewCustomerModal({
   };
 
   const save = async () => {
-    if (!form.first_name.trim() || !form.last_name.trim() || !form.phone.trim()) {
-      error('Customer incomplete', 'First name, last name, and phone are required.');
+    if (!form.first_name.trim() || !form.phone.trim()) {
+      error('Customer incomplete', 'First name and phone are required.');
       return;
     }
     try {
@@ -55,7 +55,7 @@ export default function NewCustomerModal({
         tiktok: form.tiktok?.trim() || undefined,
         language: form.language || 'id',
       });
-      success('Customer ready', `${created.first_name} ${created.last_name}`);
+      success('Customer ready', `${created.first_name} ${created.last_name || ''}`.trim());
       setForm(emptyForm);
       onCreated(created);
       onClose();
@@ -88,8 +88,7 @@ export default function NewCustomerModal({
           onChange={(e) => setForm((prev) => ({ ...prev, first_name: e.target.value }))}
         />
         <Input
-          label="Last name"
-          required
+          label="Last name (optional)"
           value={form.last_name}
           onChange={(e) => setForm((prev) => ({ ...prev, last_name: e.target.value }))}
         />

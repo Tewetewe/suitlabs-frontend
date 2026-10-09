@@ -31,6 +31,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
 import { itemTags } from '@/lib/item-name';
+import type { AvailabilityTone } from '@/lib/item-availability';
+import { useItemAvailability } from '@/hooks/useItemAvailability';
+import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
 import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -191,7 +194,7 @@ export default function BookingsPage() {
     customer_id: '',
     booking_date: new Date().toISOString().slice(0, 10),
     rental_length: '3d',
-    booking_guarantee: 'KTP',
+    booking_guarantee: '',
     take_deposit: false,
     institution: 'wedding',
     status: 'pending',
@@ -260,6 +263,22 @@ export default function BookingsPage() {
     });
     if (formErrors.booking_date) setFormErrors(prev => ({ ...prev, booking_date: '' }));
   };
+
+  // Whether each item line is free from pickup to return. An edit leaves out
+  // its own booking, so it does not clash with itself.
+  const { check: checkAvailability, noteFor: availabilityNoteFor } = useItemAvailability(
+    bookingForm.booking_date,
+    bookingForm.appointment_date,
+    isEditModalOpen ? activeBooking?.id : undefined,
+  );
+  const formItemIds = useMemo(
+    () => Array.from(new Set(bookingForm.items.map((it) => it.item_id).filter(Boolean))).join(','),
+    [bookingForm.items],
+  );
+  useEffect(() => {
+    if (!isCreateModalOpen && !isEditModalOpen) return;
+    for (const itemId of formItemIds.split(',').filter(Boolean)) void checkAvailability(itemId);
+  }, [isCreateModalOpen, isEditModalOpen, formItemIds, checkAvailability]);
 
   const updateItemField = (index: number, field: keyof BookingFormItem, value: string | number | boolean) => {
     setBookingForm(prev => {
@@ -411,10 +430,10 @@ export default function BookingsPage() {
     if (!bookingForm.customer_id) errs.customer_id = 'Customer ID is required';
     if (!bookingForm.booking_date) errs.booking_date = 'Pickup date is required';
     if (chargeNow > 0 && potMissing(bookingForm.payment_method, bookingPot)) errs.submit = POT_MISSING_MESSAGE;
-    const bookingGuarantee = bookingForm.booking_guarantee === 'Other'
+    // Optional: '' is no guarantee left.
+    const bookingGuarantee = (bookingForm.booking_guarantee === 'Other'
       ? bookingForm.booking_guarantee_other?.trim()
-      : bookingForm.booking_guarantee;
-    if (!bookingGuarantee) errs.booking_guarantee = 'Booking guarantee is required';
+      : bookingForm.booking_guarantee) || '';
     if (!bookingForm.institution) errs.institution = 'Occasion is required';
     if (bookingForm.items.length === 0) errs.items = 'At least one item is required';
     
@@ -475,7 +494,7 @@ export default function BookingsPage() {
         customer_id: '',
         booking_date: new Date().toISOString().slice(0, 10),
         rental_length: '3d',
-        booking_guarantee: 'KTP',
+        booking_guarantee: '',
         take_deposit: false,
         institution: 'wedding',
         status: 'pending',
@@ -503,7 +522,7 @@ export default function BookingsPage() {
 
   const openEdit = (booking: Booking) => {
     const standardGuarantees: string[] = BOOKING_GUARANTEE_OPTIONS.map((option) => option.value);
-    const isStandardGuarantee = standardGuarantees.includes(booking.booking_guarantee);
+    const isStandardGuarantee = !booking.booking_guarantee || standardGuarantees.includes(booking.booking_guarantee);
     setActiveBooking(booking);
     setBookingForm({
       customer_id: booking.customer_id,
@@ -511,7 +530,7 @@ export default function BookingsPage() {
       appointment_date: booking.appointment_date?.slice(0, 10),
       event_date: booking.event_date?.slice(0, 10),
       rental_length: booking.rental_length || '3d',
-      booking_guarantee: isStandardGuarantee ? booking.booking_guarantee : 'Other',
+      booking_guarantee: isStandardGuarantee ? booking.booking_guarantee || '' : 'Other',
       booking_guarantee_other: isStandardGuarantee ? '' : booking.booking_guarantee,
       take_deposit: !booking.security_deposit_waived,
       institution: booking.institution || '',
@@ -548,10 +567,10 @@ export default function BookingsPage() {
     if (!bookingForm.customer_id) errs.customer_id = 'Customer ID is required';
     if (!bookingForm.booking_date) errs.booking_date = 'Pickup date is required';
     if (chargeNow > 0 && potMissing(bookingForm.payment_method, bookingPot)) errs.submit = POT_MISSING_MESSAGE;
-    const bookingGuarantee = bookingForm.booking_guarantee === 'Other'
+    // Optional: '' is no guarantee left.
+    const bookingGuarantee = (bookingForm.booking_guarantee === 'Other'
       ? bookingForm.booking_guarantee_other?.trim()
-      : bookingForm.booking_guarantee;
-    if (!bookingGuarantee) errs.booking_guarantee = 'Booking guarantee is required';
+      : bookingForm.booking_guarantee) || '';
     if (!bookingForm.institution) errs.institution = 'Occasion is required';
     if (bookingForm.items.length === 0) errs.items = 'At least one item is required';
     
@@ -997,6 +1016,7 @@ export default function BookingsPage() {
         >
           <BookingFormFields
             bookingForm={bookingForm}
+            availabilityNoteFor={availabilityNoteFor}
             formErrors={formErrors}
             selectedPackageId={selectedPackageId}
             packageOptions={packageOptions}
@@ -1055,6 +1075,7 @@ export default function BookingsPage() {
         >
           <BookingFormFields
             bookingForm={bookingForm}
+            availabilityNoteFor={availabilityNoteFor}
             formErrors={formErrors}
             selectedPackageId={selectedPackageId}
             packageOptions={packageOptions}
@@ -1259,6 +1280,7 @@ function BookingFormFields({
   paidTotal,
   fetchCustomerOptions,
   itemLabels,
+  availabilityNoteFor,
   fetchItemPage,
   fetchTrousersPage,
   updateBookingField,
@@ -1290,6 +1312,8 @@ function BookingFormFields({
   paidTotal?: number;
   fetchCustomerOptions: (query: string) => Promise<{ value: string; label: string }[]>;
   itemLabels: Record<string, string>;
+  /** Free, same-day handover, or booked, for an item on the form's dates. */
+  availabilityNoteFor: (itemId: string) => { tone: AvailabilityTone; text: string } | null;
   fetchItemPage: (query: string, page: number) => Promise<AutoPageResult>;
   fetchTrousersPage: (query: string, page: number) => Promise<AutoPageResult>;
   updateBookingField: (field: keyof BookingFormState, value: string | boolean) => void;
@@ -1454,6 +1478,7 @@ function BookingFormFields({
                       extraOptions={it.item_id && itemLabels[it.item_id] ? [{ value: it.item_id, label: itemLabels[it.item_id] }] : undefined}
                       placeholder={it.catalogue === 'trousers' ? 'Search trousers' : 'Search items'}
                     />
+                    {it.item_id && <AvailabilityNote note={availabilityNoteFor(it.item_id)} testId="booking-item-availability" />}
                   </div>
                   <Button variant="ghost" size="sm" className="mt-7 shrink-0" onClick={() => removeItemLine(idx)} disabled={itemsLocked}>
                     Remove
@@ -1563,10 +1588,11 @@ function BookingFormFields({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Select
             searchable={false}
-            label="Guarantee"
+            label="Guarantee (optional)"
             value={bookingForm.booking_guarantee}
             onChange={(e) => updateBookingField('booking_guarantee', e.target.value)}
             options={[
+              { value: '', label: 'None' },
               ...BOOKING_GUARANTEE_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
               { value: 'Other', label: 'Other' },
             ]}

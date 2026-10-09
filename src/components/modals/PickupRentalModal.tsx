@@ -16,7 +16,6 @@ import { SafeImage } from '@/components/ui/SafeImage';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { DEPOSIT_PAYMENT_METHOD_OPTIONS, SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
-import { isExistingCustomerGuarantee } from '@/lib/select-options';
 import { waDeliveryLabel } from '@/lib/wa-delivery';
 import { PickupPrep, Rental } from '@/types';
 
@@ -88,9 +87,6 @@ export function PickupRentalModal({
   const remainingAmount = rental?.booking?.remaining_amount || 0;
   const needsRemaining = remainingAmount > 0.009;
   const canPickup = (!needsDeposit || agreementAccepted);
-  const idOptional =
-    Boolean(priorIdentityCardUrl) || isExistingCustomerGuarantee(rental?.booking?.booking_guarantee);
-  const canConfirmId = idOptional || Boolean(identityCardFile);
 
   useEffect(() => {
     return () => {
@@ -291,7 +287,7 @@ export function PickupRentalModal({
             <Button variant="ghost" onClick={handleClose} disabled={uploading || sendingAgreement}>Cancel</Button>
             <Button
               onClick={handleSubmit}
-              disabled={uploading || sendingAgreement || loadingPriorId || !canConfirmId || !canPickup}
+              disabled={uploading || sendingAgreement || loadingPriorId || !canPickup}
               loading={uploading}
               data-testid="confirm-pickup"
             >
@@ -433,7 +429,7 @@ export function PickupRentalModal({
 
               <div>
                 <p className="mb-2 text-sm font-medium text-slate-800">
-                  Identity card photo{idOptional ? ' (optional)' : ''}
+                  Identity card photo (optional)
                 </p>
                 {loadingPriorId && (
                   <p className="mb-2 text-xs text-slate-500">Checking for an ID already on file…</p>
@@ -441,7 +437,7 @@ export function PickupRentalModal({
                 {!loadingPriorId && priorIdentityCardUrl && !identityCardFile && (
                   <div className="mb-3 space-y-2">
                     <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                      ID already on file from a previous rental — no new photo required. Attach a new one only if you want to replace it.
+                      ID already on file from a previous rental. Attach a new one only if you want to replace it.
                     </p>
                     <SafeImage
                       src={priorIdentityCardUrl}
@@ -469,8 +465,8 @@ export function PickupRentalModal({
                   <img src={previewUrl} alt="ID preview" className="mt-3 max-h-40 rounded-xl object-cover" />
                 )}
                 {errors.identityCard && <p className="mt-1 text-sm text-rose-600">{errors.identityCard}</p>}
-                {!idOptional && !errors.identityCard && (
-                  <p className="mt-1 text-xs text-slate-500">Clear photo of KTP or passport, under 5MB.</p>
+                {!errors.identityCard && !priorIdentityCardUrl && (
+                  <p className="mt-1 text-xs text-slate-500">If the customer leaves an ID: a clear photo of the KTP or passport, under 5MB.</p>
                 )}
               </div>
 
