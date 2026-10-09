@@ -94,6 +94,8 @@ export interface LegacyImportRow {
   customer_exists: boolean;
   /** The earlier row whose new customer this row shares: one phone is one customer. */
   same_customer_row?: number;
+  /** An imported row whose sheet Status moved forward, as "Booked → Back". Sync writes it. */
+  status_update?: string;
   event_date?: string;
   pickup_date?: string;
   return_date?: string;
@@ -128,6 +130,8 @@ export interface LegacyImportPreview {
   ready: number;
   blocked: number;
   imported: number;
+  /** Imported rows whose status Sync moves forward. */
+  status_updates: number;
   other_months: number;
   /** Each product with no Item yet, once. A pick is optional. */
   needs: LegacyItemNeed[];

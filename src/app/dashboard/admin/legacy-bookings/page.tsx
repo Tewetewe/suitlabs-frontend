@@ -137,8 +137,9 @@ export default function LegacyBookingsPage() {
         if (current && current.status !== 'running') {
           stopPolling();
           setSyncing(false);
-          if (current.status === 'completed') success('Legacy sync done', `${current.created_count} created`);
-          else toastError('Legacy sync finished with errors', `${current.created_count} created`);
+          const counts = `${current.created_count} created, ${current.updated_count || 0} status updated`;
+          if (current.status === 'completed') success('Legacy sync done', counts);
+          else toastError('Legacy sync finished with errors', counts);
           void onPreview(choices);
         } else if (Date.now() - startedAt > SYNC_FOLLOW_LIMIT_MS) {
           stopPolling();
@@ -234,11 +235,12 @@ export default function LegacyBookingsPage() {
               </Button>
               <Button
                 loading={syncing}
-                disabled={!preview || preview.ready === 0 || syncing}
+                disabled={!preview || (preview.ready === 0 && !preview.status_updates) || syncing}
                 onClick={() => setConfirming(true)}
               >
                 <RefreshCcw className="h-4 w-4" />
                 Sync {preview ? `${preview.ready} ready` : ''}
+                {preview?.status_updates ? `, ${preview.status_updates} status updates` : ''}
               </Button>
             </div>
           </CardContent>
@@ -251,7 +253,8 @@ export default function LegacyBookingsPage() {
                 <div className="font-semibold text-slate-700">Sync running on the server…</div>
               ) : (
                 <div className={syncRun.status === 'completed' ? 'font-semibold text-emerald-900' : 'font-semibold text-red-700'}>
-                  Sync {syncRun.status}: {syncRun.created_count} created, {syncRun.skipped_count} blocked
+                  Sync {syncRun.status}: {syncRun.created_count} created, {syncRun.updated_count || 0} status updated,{' '}
+                  {syncRun.skipped_count} blocked
                 </div>
               )}
               {(syncRun.error_summary || '')
@@ -375,7 +378,7 @@ export default function LegacyBookingsPage() {
         title="Sync legacy bookings"
         description={
           preview
-            ? `Write ${preview.ready} ready rows of ${preview.tab} (${preview.month}) as Bookings with their Rentals? Blocked rows are skipped. A second sync skips the rows already imported.`
+            ? `Write ${preview.ready} ready rows of ${preview.tab} (${preview.month}) as Bookings with their Rentals, and move ${preview.status_updates || 0} imported rows forward to the Status on the sheet? Blocked rows are skipped. A status only moves forward (Booked → Rented → Back); a booking already further along, or cancelled, in the app stays as it is.`
             : undefined
         }
         confirmLabel="Sync"
@@ -404,6 +407,7 @@ function LegacyRowCard({ row }: { row: LegacyImportRow }) {
               : 'New customer'}
         </Badge>
         {row.without_item && row.state !== 'imported' && <Badge variant="warning">No Item</Badge>}
+        {row.status_update && <Badge variant="warning">Status update: {row.status_update}</Badge>}
       </div>
       <div className="text-sm text-slate-600">
         Event {row.event_date || '?'} · pickup {row.pickup_date || '?'} · return {row.return_date || '?'}
