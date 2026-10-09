@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { customerItemName, itemGenderTag, itemTags } from './item-name';
+import { customerItemName, itemGenderTag, itemTags, itemTierTag } from './item-name';
 
 describe('customerItemName', () => {
   // name, brand, type, gender, quality, want
@@ -37,6 +37,15 @@ describe('itemGenderTag', () => {
   it('shows nothing for Unisex or an Acc tab Item', () => {
     assert.equal(itemGenderTag({ type: 'suit', gender: 'unisex' }), '');
     assert.equal(itemGenderTag({ type: 'shirt', gender: 'kids' }), '');
+  });
+});
+
+describe('itemTierTag', () => {
+  it('shows the tier of a Suit tab Item', () => {
+    assert.equal(itemTierTag({ type: 'jacket', quality: 'premium' }), 'Premium');
+  });
+  it('shows nothing for an Acc tab Item', () => {
+    assert.equal(itemTierTag({ type: 'vest', quality: 'standard' }), '');
   });
 });
 

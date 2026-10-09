@@ -53,10 +53,14 @@ export function itemGenderTag(item: TaggedItem | null | undefined): string {
   return isSuitTabItem(item) ? itemGenderLabel(item?.gender) : '';
 }
 
+/** The tier of a Suit tab Item, for example "Premium". Other Items have none for now. */
+export function itemTierTag(item: TaggedItem | null | undefined): string {
+  return isSuitTabItem(item) ? itemQualityLabel(item?.quality) : '';
+}
+
 /** The gender and tier of a Suit tab Item, for example ["Mens", "Premium"]. Other Items have none for now. */
 export function itemTags(item: TaggedItem | null | undefined): string[] {
-  if (!isSuitTabItem(item)) return [];
-  return [itemGenderLabel(item?.gender), itemQualityLabel(item?.quality)].filter(Boolean);
+  return [itemGenderTag(item), itemTierTag(item)].filter(Boolean);
 }
 
 function wordPattern(word: string, flags = 'i'): RegExp {
