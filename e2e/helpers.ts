@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { type BrowserContext, expect, type Locator, type Page } from '@playwright/test';
 
 export const ID_CARD = {
   name: 'id-card.png',
@@ -432,7 +432,7 @@ type PrintHooks = {
   title: string;
 };
 
-export async function installPrintHooks(context: { addInitScript: (script: () => void) => Promise<void> }) {
+export async function installPrintHooks(context: Pick<BrowserContext, 'addInitScript'>) {
   await context.addInitScript(() => {
     const topWin = () =>
       window.top as Window & {

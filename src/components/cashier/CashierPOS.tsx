@@ -55,7 +55,7 @@ import { issueBookingInvoice } from '@/lib/issue-invoice';
 import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
 import { Badge } from '@/components/ui/DataDisplay';
 import { itemTags } from '@/lib/item-name';
-import { availabilityNote } from '@/lib/item-availability';
+import { availabilityCardNote, availabilityNote } from '@/lib/item-availability';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
 import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
 import {
@@ -133,6 +133,9 @@ function canSell(item: Item, mode: PosMode) {
   return item.status === 'available' && stockQty(item) > 0;
 }
 
+// Items that cannot go out on a rental, whatever the dates.
+const OUT_OF_USE_STATUSES = new Set<string>(['maintenance', 'damaged', 'retired', 'lost']);
+
 function toBookingPayment(coverage: PayCoverage, channel: PayChannel): BookingPaymentMethod {
   return `${coverage}_${channel}` as BookingPaymentMethod;
 }
@@ -175,7 +178,12 @@ export function CashierPOS() {
   const [rentalDate, setRentalDate] = useState(todayISO);
   const [returnDate, setReturnDate] = useState('');
   // Whether each cart Item is free on the chosen dates.
-  const { check: checkAvailability, noteFor: availabilityNoteFor } = useItemAvailability(rentalDate, returnDate);
+  const {
+    check: checkAvailability,
+    checkMany: checkManyAvailability,
+    resultFor: availabilityFor,
+    noteFor: availabilityNoteFor,
+  } = useItemAvailability(rentalDate, returnDate);
   const [items, setItems] = useState<Item[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -253,14 +261,8 @@ export function CashierPOS() {
         limit: PAGE_SIZE,
         ...(mode === 'sale' ? { is_sellable: true } : {}),
       };
-      const response =
-        mode === 'rental' && rentalDate && returnDate
-          ? await apiClient.getAvailableItemsCombined({
-              ...filters,
-              start_date: rentalDate,
-              end_date: returnDate,
-            })
-          : await apiClient.getItems(filters);
+      // Every Item is listed; the availability check greys out the booked ones.
+      const response = await apiClient.getItems(filters);
       if (requestId !== catalogRequestRef.current) return;
       const next = response.data?.data?.items || [];
       const pagination = response.data?.pagination;
@@ -287,7 +289,7 @@ export function CashierPOS() {
         loadingMoreRef.current = false;
       }
     }
-  }, [debouncedSearch, type, mode, rentalDate, returnDate, error]);
+  }, [debouncedSearch, type, mode, error]);
 
   useEffect(() => {
     void loadItems(1, false);
@@ -388,16 +390,31 @@ export function CashierPOS() {
     }
   };
 
+  // The listed Items too, once the event day sets the dates.
+  useEffect(() => {
+    if (mode !== 'rental' || !eventDate) return;
+    checkManyAvailability(items.map((item) => item.id));
+  }, [mode, eventDate, items, checkManyAvailability]);
+
   // New dates, or a new Item in the cart: check each rental line.
   useEffect(() => {
     if (mode !== 'rental') return;
     for (const line of cart) void checkAvailability(line.item.id);
   }, [mode, cart, checkAvailability]);
 
-  const addItem = useCallback((item: Item) => {
+  // Returns false when the Item did not go into the cart.
+  const addItem = useCallback((item: Item): boolean => {
     if (!canSell(item, mode) && mode === 'sale') {
       error('Not sellable', `${item.name} is not marked as sellable or is out of stock.`);
-      return;
+      return false;
+    }
+    // The event day sets the pickup and return dates that the availability
+    // check and the price need, so a rental starts with it.
+    if (mode === 'rental' && !eventDate) {
+      error('Pick the event day first', 'The event day sets the pickup and return dates for the items.');
+      setDatesOpen(true);
+      window.setTimeout(() => document.querySelector<HTMLInputElement>('[data-testid="pos-event-date"]')?.focus(), 50);
+      return false;
     }
     setCart((prev) => {
       const existing = prev.find((line) => line.item.id === item.id);
@@ -427,7 +444,8 @@ export function CashierPOS() {
         }
       });
     }
-  }, [mode, rentalLength, error, warning, checkAvailability]);
+    return true;
+  }, [mode, eventDate, rentalLength, error, warning, checkAvailability]);
 
   const pickEventDate = (value: string) => {
     setEventDate(value);
@@ -519,8 +537,7 @@ export function CashierPOS() {
     }
     try {
       const item = await apiClient.searchByBarcode(cleaned);
-      addItem(item);
-      success('Scanned', item.name);
+      if (addItem(item)) success('Scanned', item.name);
     } catch {
       setSearch(cleaned);
       error('Not found', `No item for barcode ${cleaned}`);
@@ -1149,7 +1166,7 @@ export function CashierPOS() {
                 <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-2xl glass-control px-3">
                   <Calendar className="h-4 w-4 shrink-0 text-indigo-500" />
                   <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Event day</div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Event day *</div>
                     <input
                       type="date"
                       value={eventDate}
@@ -1252,7 +1269,7 @@ export function CashierPOS() {
             <div className="flex h-64 flex-col items-center justify-center text-center">
               <Package className="mb-2 h-10 w-10 text-slate-300" />
               <p className="text-sm font-medium text-slate-700">No items match</p>
-              <p className="mt-1 text-xs text-slate-500">Try another search, type, or date range.</p>
+              <p className="mt-1 text-xs text-slate-500">Try another search or type.</p>
             </div>
           ) : (
             <>
@@ -1260,6 +1277,10 @@ export function CashierPOS() {
                 {items.map((item) => {
                   const selected = inCartIds.has(item.id);
                   const available = canSell(item, mode) || mode === 'rental';
+                  // Rental: grey out an Item that is booked on the dates or out of use.
+                  // It can still be added; the cart line warns.
+                  const cardNote = mode === 'rental' && eventDate ? availabilityCardNote(availabilityFor(item.id)) : null;
+                  const outOfUse = mode === 'rental' && OUT_OF_USE_STATUSES.has(item.status);
                   return (
                     <button
                       key={item.id}
@@ -1267,11 +1288,13 @@ export function CashierPOS() {
                       data-testid="pos-item"
                       data-item-id={item.id}
                       onClick={() => addItem(item)}
+                      title={cardNote?.detail}
                       className={clsx(
                         'group relative overflow-hidden rounded-2xl glass-panel text-left transition touch-manipulation active:scale-[0.98]',
                         selected && 'ring-2 ring-indigo-500',
                         flashId === item.id && 'ring-2 ring-emerald-500',
-                        !available && mode === 'sale' && 'opacity-50'
+                        !available && mode === 'sale' && 'opacity-50',
+                        (cardNote?.tone === 'clash' || outOfUse) && 'opacity-60 grayscale'
                       )}
                     >
                       <div className="relative flex aspect-square items-center justify-center bg-slate-100">
@@ -1308,6 +1331,19 @@ export function CashierPOS() {
                             {formatCurrency(catalogPrice(item, mode, rentalLength))}
                           </span>
                         </div>
+                        {outOfUse ? (
+                          <div className="truncate text-[11px] font-semibold capitalize text-slate-600">{item.status}</div>
+                        ) : cardNote && (
+                          <div
+                            data-testid="pos-item-availability"
+                            className={clsx(
+                              'truncate text-[11px] font-semibold',
+                              cardNote.tone === 'clash' ? 'text-red-600' : 'text-amber-700',
+                            )}
+                          >
+                            {cardNote.short}
+                          </div>
+                        )}
                       </div>
                     </button>
                   );

@@ -16,6 +16,55 @@ function who(hit: ItemAvailabilityHit): string {
 }
 
 /**
+ * The short line on an Item card in a list, with the full text for a tooltip.
+ * A free Item has no line, so the list stays clean.
+ */
+export function availabilityCardNote(
+  availability: ItemAvailability | undefined,
+): { tone: AvailabilityTone; short: string; detail: string } | null {
+  if (!availability) return null;
+  const hits = availability.hits || [];
+  const clash = hits.find((hit) => hit.kind === 'booked');
+  if (clash) {
+    const name = clash.customer_name?.trim().split(/\s+/)[0] || 'booked';
+    return {
+      tone: 'clash',
+      short: `Booked ${dayRange(clash.pickup_date, clash.return_date)} · ${name}`,
+      detail: hits
+        .filter((hit) => hit.kind === 'booked')
+        .map((hit) => `Pickup ${shortDay(hit.pickup_date)}, return ${shortDay(hit.return_date)}: ${who(hit)}`)
+        .join('\n'),
+    };
+  }
+  const evening = hits.find((hit) => hit.kind === 'pickup_evening');
+  if (evening) {
+    return {
+      tone: 'note',
+      short: `Returns ${shortDay(evening.return_date)} · pick up evening`,
+      detail: `${who(evening)} returns it on ${shortDay(evening.return_date)}. Pick it up in the evening.`,
+    };
+  }
+  const morning = hits.find((hit) => hit.kind === 'return_morning');
+  if (morning) {
+    return {
+      tone: 'note',
+      short: `Picked up ${shortDay(morning.pickup_date)} · return morning`,
+      detail: `${who(morning)} picks it up on ${shortDay(morning.pickup_date)}. Return it in the morning.`,
+    };
+  }
+  return null;
+}
+
+/** "5–6 Nov", or "30 Oct–2 Nov" across months, or "5 Nov" for one day. */
+function dayRange(pickup: string, ret: string): string {
+  if (pickup === ret) return shortDay(pickup);
+  const [, pm] = pickup.split('-');
+  const [, rm] = ret.split('-');
+  if (pm === rm) return `${Number(pickup.split('-')[2])}–${shortDay(ret)}`;
+  return `${shortDay(pickup)}–${shortDay(ret)}`;
+}
+
+/**
  * One line for the cashier about an Item on the chosen dates. A clash names
  * the other booking; a same-day handover says when to pick up or return.
  */

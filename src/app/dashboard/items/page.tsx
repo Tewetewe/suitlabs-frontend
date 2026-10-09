@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 
+import clsx from 'clsx';
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -38,6 +39,8 @@ import { TransferItemModal } from '@/components/modals/TransferItemModal';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useBranch } from '@/contexts/BranchContext';
 import { ITEM_GENDER_LABELS, itemGenderTag, itemQualityLabel, itemTags, itemTierTag } from '@/lib/item-name';
+import { useItemAvailability } from '@/hooks/useItemAvailability';
+import { availabilityCardNote } from '@/lib/item-availability';
 
 type ViewMode = 'grid' | 'list';
 
@@ -141,14 +144,8 @@ export default function ItemsPage() {
         page,
         limit: LIST_PAGE_SIZE,
       };
-      const response =
-        rentalDate && returnDate
-          ? await apiClient.getAvailableItemsCombined({
-              ...paginationFilters,
-              start_date: rentalDate,
-              end_date: returnDate,
-            })
-          : await apiClient.getItems(paginationFilters);
+      // Every Item is listed; with dates set, the booked ones are greyed out.
+      const response = await apiClient.getItems(paginationFilters);
 
       if (!response?.success) {
         throw new Error('API request failed');
@@ -166,7 +163,7 @@ export default function ItemsPage() {
       error('Failed to Load Items', 'Unable to fetch item data. Please try again.');
       return { items: [], hasMore: false, total: 0 };
     }
-  }, [filters, rentalDate, returnDate, error]);
+  }, [filters, error]);
 
   const {
     items,
@@ -178,8 +175,15 @@ export default function ItemsPage() {
     reload,
     sentinelRef,
   } = useInfiniteList(loadItemsPage, {
-    cacheKey: `items:${JSON.stringify({ filters, rentalDate, returnDate })}`,
+    cacheKey: `items:${JSON.stringify(filters)}`,
   });
+
+  // With a pickup date set, ask once for the loaded Items: booked ones grey out.
+  const { checkMany: checkManyAvailability, resultFor: availabilityFor } = useItemAvailability(rentalDate, returnDate);
+  useEffect(() => {
+    if (!rentalDate) return;
+    checkManyAvailability(items.map((item) => item.id));
+  }, [rentalDate, items, checkManyAvailability]);
 
   useEffect(() => {
     setFilters(prev => ({ ...prev, search: debouncedSearch || undefined }));
@@ -310,8 +314,28 @@ export default function ItemsPage() {
     </OverflowMenu>
   );
 
+  // The booking or rental that holds an Item on the chosen dates, if any.
+  const datesNote = (item: Item) => (rentalDate ? availabilityCardNote(availabilityFor(item.id)) : null);
+
+  const DatesNote = ({ item }: { item: Item }) => {
+    const note = datesNote(item);
+    if (!note) return null;
+    return (
+      <p
+        data-testid="item-availability"
+        title={note.detail}
+        className={clsx('truncate text-[11px] font-semibold', note.tone === 'clash' ? 'text-red-600' : 'text-amber-700')}
+      >
+        {note.short}
+      </p>
+    );
+  };
+
   const ItemCard = ({ item }: { item: Item }) => (
-    <Card padding="none" className="relative z-0 h-full overflow-hidden">
+    <Card
+      padding="none"
+      className={clsx('relative z-0 h-full overflow-hidden', datesNote(item)?.tone === 'clash' && 'opacity-60 grayscale')}
+    >
       <div className="relative flex aspect-square items-center justify-center bg-slate-100">
         <SafeImage
           src={item.thumbnail_url}
@@ -366,12 +390,13 @@ export default function ItemsPage() {
         <Badge variant={itemStatusVariant(item.status)} dot className="capitalize">
           {item.status}
         </Badge>
+        <DatesNote item={item} />
       </div>
     </Card>
   );
 
   const ItemListItem = ({ item }: { item: Item }) => (
-    <Card padding="sm">
+    <Card padding="sm" className={clsx(datesNote(item)?.tone === 'clash' && 'opacity-60 grayscale')}>
       <CardContent>
         <div className="flex items-center gap-3 sm:gap-4">
           <Link
@@ -402,6 +427,7 @@ export default function ItemsPage() {
             {item.code && (
               <p className="mt-0.5 truncate font-mono text-[11px] text-slate-400">{item.code}</p>
             )}
+            <DatesNote item={item} />
           </div>
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">

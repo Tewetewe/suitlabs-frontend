@@ -428,6 +428,7 @@ export default function BookingsPage() {
     // basic validation
     const errs: Record<string, string> = {};
     if (!bookingForm.customer_id) errs.customer_id = 'Customer ID is required';
+    if (!bookingForm.event_date) errs.event_date = 'Event day is required';
     if (!bookingForm.booking_date) errs.booking_date = 'Pickup date is required';
     if (chargeNow > 0 && potMissing(bookingForm.payment_method, bookingPot)) errs.submit = POT_MISSING_MESSAGE;
     // Optional: '' is no guarantee left.
@@ -1017,6 +1018,7 @@ export default function BookingsPage() {
           <BookingFormFields
             bookingForm={bookingForm}
             availabilityNoteFor={availabilityNoteFor}
+            requireEventDate
             formErrors={formErrors}
             selectedPackageId={selectedPackageId}
             packageOptions={packageOptions}
@@ -1281,6 +1283,7 @@ function BookingFormFields({
   fetchCustomerOptions,
   itemLabels,
   availabilityNoteFor,
+  requireEventDate = false,
   fetchItemPage,
   fetchTrousersPage,
   updateBookingField,
@@ -1314,6 +1317,8 @@ function BookingFormFields({
   itemLabels: Record<string, string>;
   /** Free, same-day handover, or booked, for an item on the form's dates. */
   availabilityNoteFor: (itemId: string) => { tone: AvailabilityTone; text: string } | null;
+  /** New Booking: the event day comes first, because it sets the dates the items are checked on. */
+  requireEventDate?: boolean;
   fetchItemPage: (query: string, page: number) => Promise<AutoPageResult>;
   fetchTrousersPage: (query: string, page: number) => Promise<AutoPageResult>;
   updateBookingField: (field: keyof BookingFormState, value: string | boolean) => void;
@@ -1326,6 +1331,7 @@ function BookingFormFields({
   setDiscountCode: (code: string) => void;
 }) {
   const { enabled: depositEnabled } = useDepositSettings();
+  const needsEventDate = requireEventDate && !bookingForm.event_date;
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [createdCustomerOption, setCreatedCustomerOption] = useState<{ value: string; label: string } | null>(null);
 
@@ -1400,10 +1406,11 @@ function BookingFormFields({
       <FieldGroup title="Dates">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
-            label="Event day"
+            label={requireEventDate ? 'Event day *' : 'Event day'}
             type="date"
             value={bookingForm.event_date || ''}
             onChange={(e) => pickRentalDates(e.target.value, bookingForm.rental_length)}
+            error={formErrors.event_date}
             data-testid="booking-event-date"
           />
           <div>
@@ -1447,12 +1454,17 @@ function BookingFormFields({
 
       <FieldGroup title="Items">
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={itemsLocked}>Add trousers</Button>
+          <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={itemsLocked || needsEventDate}>Add trousers</Button>
           {selectedPackageId && (
-            <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={itemsLocked}>Add add-on</Button>
+            <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={itemsLocked || needsEventDate}>Add add-on</Button>
           )}
-          <Button size="sm" onClick={() => addItemLine()} disabled={itemsLocked}>Add item</Button>
+          <Button size="sm" onClick={() => addItemLine()} disabled={itemsLocked || needsEventDate}>Add item</Button>
         </div>
+        {needsEventDate && (
+          <p className="text-sm font-medium text-amber-700" data-testid="booking-needs-event-date">
+            Pick the event day first. It sets the pickup and return dates for the items.
+          </p>
+        )}
         <p className="text-xs text-slate-500">
           Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair.
           {selectedPackageId ? ' Mark extras as add-ons to charge them on top of the package.' : ''}
@@ -1463,7 +1475,7 @@ function BookingFormFields({
           </p>
         )}
         {formErrors.items && <div className="text-sm text-red-600">{formErrors.items}</div>}
-        <div className="space-y-3">
+        <div className={needsEventDate ? 'hidden' : 'space-y-3'}>
           {bookingForm.items.map((it, idx) => {
             const packageLocked = !!selectedPackageId && !it.is_addon;
             return (
