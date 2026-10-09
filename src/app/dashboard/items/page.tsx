@@ -170,6 +170,7 @@ export default function ItemsPage() {
     setItems,
     loading,
     loadingMore,
+    refreshing,
     hasMore,
     total,
     reload,
@@ -708,10 +709,13 @@ export default function ItemsPage() {
             action={<Button onClick={() => setShowAddModal(true)}><Plus className="h-4 w-4" /> Add Item</Button>}
           />
         ) : (
-          <div className={viewMode === 'grid' 
-            ? "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" 
-            : "space-y-3"
-          }>
+          <div
+            className={clsx(
+              viewMode === 'grid' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4' : 'space-y-3',
+              // New filter: the rows stay while the new ones load.
+              refreshing && 'opacity-60 transition-opacity',
+            )}
+          >
             {items.map((item) => 
               viewMode === 'grid' ? (
                 <ItemCard key={item.id} item={item} />

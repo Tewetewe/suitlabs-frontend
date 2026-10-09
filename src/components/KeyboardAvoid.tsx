@@ -12,7 +12,7 @@ function isEditable(el: EventTarget | null): el is HTMLElement {
   return true;
 }
 
-function syncInset() {
+function syncInset(): number {
   const vv = window.visualViewport;
   const height = vv?.height ?? window.innerHeight;
   const top = vv?.offsetTop ?? 0;
@@ -22,6 +22,7 @@ function syncInset() {
   root.style.setProperty('--vv-height', `${height}px`);
   root.style.setProperty('--vv-top', `${top}px`);
   root.classList.toggle('keyboard-open', inset > 64);
+  return inset;
 }
 
 function scrollFieldIntoView(el: HTMLElement) {
@@ -60,19 +61,27 @@ function scrollFieldIntoView(el: HTMLElement) {
  */
 export default function KeyboardAvoid() {
   useEffect(() => {
-    syncInset();
+    let lastInset = syncInset();
 
     const vv = window.visualViewport;
+    // Move the field only when the keyboard opens or grows. A scroll, or a
+    // list that reloads and changes height while the user types, must not
+    // pull the page back to the field.
     const onViewport = () => {
-      syncInset();
+      const inset = syncInset();
+      const keyboardGrew = inset > lastInset + 64;
+      lastInset = inset;
       const el = document.activeElement;
-      if (isEditable(el)) {
+      if (keyboardGrew && isEditable(el)) {
         window.requestAnimationFrame(() => scrollFieldIntoView(el));
       }
     };
+    const onViewportScroll = () => {
+      lastInset = syncInset();
+    };
 
     vv?.addEventListener('resize', onViewport);
-    vv?.addEventListener('scroll', onViewport);
+    vv?.addEventListener('scroll', onViewportScroll);
     window.addEventListener('resize', onViewport);
 
     try {
@@ -98,7 +107,7 @@ export default function KeyboardAvoid() {
     return () => {
       window.clearTimeout(timer);
       vv?.removeEventListener('resize', onViewport);
-      vv?.removeEventListener('scroll', onViewport);
+      vv?.removeEventListener('scroll', onViewportScroll);
       window.removeEventListener('resize', onViewport);
       document.removeEventListener('focusin', onFocusIn);
     };
