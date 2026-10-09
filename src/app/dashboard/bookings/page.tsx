@@ -56,6 +56,7 @@ type BookingFormItem = {
 };
 
 const ITEM_PICKER_PAGE_SIZE = 20;
+const DOWN_PAYMENT_TOO_HIGH = 'The DP is above the total. Pick a full payment method to take it all.';
 const SUBTOTAL_TOO_LOW = 'Subtotal is below the Items. Lower an Item price or use a Discount to take money off.';
 
 function itemOptionLabel(it: Item) {
@@ -159,6 +160,8 @@ export default function BookingsPage() {
   const [discountCode, setDiscountCode] = useState('');
   // A typed Subtotal; '' is the sum of the Items.
   const [subtotalInput, setSubtotalInput] = useState('');
+  // A typed down payment; '' is half of the total, or what was already paid.
+  const [dpInput, setDpInput] = useState('');
   const [eligibleDiscounts, setEligibleDiscounts] = useState<Discount[]>([]);
   const [loadingDiscounts, setLoadingDiscounts] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -256,14 +259,34 @@ export default function BookingsPage() {
   // Mirrors Booking.TakeBookingPayment: a down payment takes half of the amount
   // due, a full payment takes all of it, and an edit never lowers money taken.
   const isDownPayment = bookingForm.payment_method.startsWith('dp_');
-  const paymentDue = isDownPayment ? Math.min(Math.ceil(bookingFinal * 0.5), bookingFinal) : bookingFinal;
   const alreadyPaid = isEditModalOpen ? activeBooking?.paid_amount || 0 : 0;
+  // A down payment takes the amount Staff typed. With none typed, a new
+  // booking takes half and an edit keeps what was already paid.
+  const typedDownPayment = isDownPayment ? Number(dpInput) || 0 : 0;
+  const downPaymentTooHigh = typedDownPayment > bookingFinal;
+  const defaultDownPayment = alreadyPaid > 0
+    ? Math.min(alreadyPaid, bookingFinal)
+    : Math.min(Math.ceil(bookingFinal * 0.5), bookingFinal);
+  const paymentDue = isDownPayment
+    ? (typedDownPayment > 0 ? Math.min(typedDownPayment, bookingFinal) : defaultDownPayment)
+    : bookingFinal;
   const payNow = Math.max(0, Math.min(Math.max(paymentDue, alreadyPaid), bookingFinal));
   const remainingAmount = bookingFinal - payNow;
   // Only the money taken on this save is charged now, so an edit counts the
   // Transaction Fee on the top-up alone.
   const chargeNow = Math.max(0, payNow - alreadyPaid);
   const chargeNowFee = transactionFee(chargeNow, bookingForm.payment_method, feeRules, bookingFeeRuleId, bookingPot);
+  const downPaymentField = isDownPayment && !(isEditModalOpen && activeBooking?.payment_status === 'completed')
+    ? {
+        value: dpInput === '' ? payNow : dpInput,
+        onChange: (n: number) => setDpInput(n ? String(n) : ''),
+        error: downPaymentTooHigh
+          ? DOWN_PAYMENT_TOO_HIGH
+          : typedDownPayment > 0 && typedDownPayment < alreadyPaid
+            ? `The customer already paid ${formatCurrency(alreadyPaid)}. A lower DP does not refund it.`
+            : undefined,
+      }
+    : undefined;
 
   const updateBookingField = (field: keyof typeof bookingForm, value: string | boolean) => {
     setBookingForm(prev => ({ ...prev, [field]: value }));
@@ -467,6 +490,7 @@ export default function BookingsPage() {
     if (!bookingForm.institution) errs.institution = 'Occasion is required';
     if (bookingForm.items.length === 0) errs.items = 'At least one item is required';
     if (subtotalTooLow) errs.subtotal = SUBTOTAL_TOO_LOW;
+    if (downPaymentTooHigh) errs.down_payment = DOWN_PAYMENT_TOO_HIGH;
     
     // Validate that all items have valid item_id
     const validItems = bookingForm.items.filter(it => it.item_id && it.item_id.trim() !== '');
@@ -535,7 +559,7 @@ export default function BookingsPage() {
       });
       setDiscountId('');
       setDiscountCode('');
-      setSubtotalInput('');
+      setSubtotalInput(''); setDpInput('');
       await reload();
       if (created?.id && (created.paid_amount || payNow) > 0) {
         await openIssuedInvoice({
@@ -589,7 +613,7 @@ export default function BookingsPage() {
     setSelectedPackageId(booking.package_pricing_id || '');
     setDiscountId('');
     setDiscountCode('');
-    setSubtotalInput('');
+    setSubtotalInput(''); setDpInput('');
     setBookingFeeRuleId(''); setBookingPot('');
     setIsEditModalOpen(true);
   };
@@ -607,6 +631,7 @@ export default function BookingsPage() {
     if (!bookingForm.institution) errs.institution = 'Occasion is required';
     if (bookingForm.items.length === 0) errs.items = 'At least one item is required';
     if (subtotalTooLow) errs.subtotal = SUBTOTAL_TOO_LOW;
+    if (downPaymentTooHigh) errs.down_payment = DOWN_PAYMENT_TOO_HIGH;
     
     // Validate that all items have valid item_id
     const validItems = bookingForm.items.filter(it => it.item_id && it.item_id.trim() !== '');
@@ -681,7 +706,7 @@ export default function BookingsPage() {
       setActiveBooking(null);
       setDiscountId('');
       setDiscountCode('');
-      setSubtotalInput('');
+      setSubtotalInput(''); setDpInput('');
       await reload();
       if (paidNow > previousPaid) {
         await openIssuedInvoice({
@@ -917,7 +942,7 @@ export default function BookingsPage() {
             <Link href="/dashboard/cashier">
               <Button size="md" variant="secondary">Cashier POS</Button>
             </Link>
-            <Button size="md" onClick={() => { setDiscountId(''); setDiscountCode(''); setSubtotalInput(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}>
+            <Button size="md" onClick={() => { setDiscountId(''); setDiscountCode(''); setSubtotalInput(''); setDpInput(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}>
               <Plus className="h-4 w-4" />
               New Booking
             </Button>
@@ -959,7 +984,7 @@ export default function BookingsPage() {
               icon={<Calendar className="h-10 w-10" />}
               title="No bookings found"
               description={Object.values(filters).some(v => v) ? 'Try adjusting your filters' : 'Get started by creating your first booking'}
-              action={<Button onClick={() => { setDiscountId(''); setDiscountCode(''); setSubtotalInput(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}><Plus className="h-4 w-4" /> New Booking</Button>}
+              action={<Button onClick={() => { setDiscountId(''); setDiscountCode(''); setSubtotalInput(''); setDpInput(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}><Plus className="h-4 w-4" /> New Booking</Button>}
             />
           ) : (
             (Array.isArray(bookings) ? bookings : []).map((booking) => {
@@ -1084,6 +1109,7 @@ export default function BookingsPage() {
             setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
             subtotalField={subtotalField}
+            downPaymentField={downPaymentField}
           />
           <BookingFormTotals
             selectedPackageId={selectedPackageId}
@@ -1146,6 +1172,7 @@ export default function BookingsPage() {
             setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
             subtotalField={subtotalField}
+            downPaymentField={downPaymentField}
           />
           <BookingFormTotals
             selectedPackageId={selectedPackageId}
@@ -1336,6 +1363,7 @@ function BookingFormFields({
   setDiscountId,
   setDiscountCode,
   subtotalField,
+  downPaymentField,
 }: {
   bookingForm: BookingFormState;
   formErrors: Record<string, string>;
@@ -1353,6 +1381,8 @@ function BookingFormFields({
   locked?: boolean;
   /** The editable Subtotal, absent when the booking cannot take one. */
   subtotalField?: { value: number | string; onChange: (value: number) => void; error?: string; helperText: string };
+  /** The editable down payment, absent for a full payment or a paid booking. */
+  downPaymentField?: { value: number | string; onChange: (value: number) => void; error?: string };
   /** Item lines locked; defaults to locked. A paid legacy booking unlocks them for Admin. */
   itemsLocked?: boolean;
   /** The paid total that a paid legacy booking keeps when its Items change. */
@@ -1590,12 +1620,13 @@ function BookingFormFields({
             disabled={locked}
           />
           <CurrencyInput
-            label={isDownPayment ? 'Pay now (50%)' : 'Pay now (full)'}
-            value={payNow}
-            onChange={() => {}}
-            disabled
+            label={isDownPayment ? 'Pay now (DP)' : 'Pay now (full)'}
+            value={downPaymentField ? downPaymentField.value : payNow}
+            onChange={downPaymentField ? downPaymentField.onChange : () => {}}
+            disabled={!downPaymentField}
+            error={downPaymentField?.error}
             helperText={[
-              isDownPayment ? 'The remaining amount is paid in full at pickup.' : '',
+              isDownPayment ? 'Type the DP the customer pays now. The rest is paid in full at pickup.' : '',
               chargeNowFee > 0
                 ? `${TRANSACTION_FEE_LABEL}: ${formatCurrency(chargeNowFee)}. Charge: ${formatCurrency(chargeNow + chargeNowFee)}.`
                 : '',
@@ -1801,7 +1832,7 @@ function BookingFormTotals({
           <span className="tabular-nums">{formatCurrency(bookingFinal)}</span>
         </div>
         <div className="flex justify-between">
-          <span>{isDownPayment ? 'Pay now (50%)' : 'Pay now (full)'}</span>
+          <span>{isDownPayment ? 'Pay now (DP)' : 'Pay now (full)'}</span>
           <span className="tabular-nums">{formatCurrency(payNow)}</span>
         </div>
         <TransactionFeeLines amount={chargeNow} method={paymentMethod} pot={pot} onPotChange={onPotChange} ruleId={feeRuleId} onRuleIdChange={onFeeRuleIdChange} />

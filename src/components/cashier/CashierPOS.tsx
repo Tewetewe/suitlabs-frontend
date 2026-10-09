@@ -211,6 +211,8 @@ export function CashierPOS() {
   // A typed Subtotal above the catalogue one, for items not in the catalogue
   // yet. '' is the catalogue subtotal.
   const [subtotalInput, setSubtotalInput] = useState('');
+  // A typed down payment; '' is half of the total.
+  const [dpInput, setDpInput] = useState('');
   const [notes, setNotes] = useState('');
   // Optional: '' is no guarantee left.
   const [guarantee, setGuarantee] = useState('');
@@ -247,7 +249,11 @@ export function CashierPOS() {
   const total = Math.max(0, gross - (mode === 'rental' && packagePrice > 0 ? 0 : discountAmount));
   // A down payment takes half of the total and a full payment takes all of it.
   // The remaining amount is paid in full at pickup.
-  const paidAmount = payCoverage === 'full' ? total : Math.min(Math.ceil(total * 0.5), total);
+  const typedDownPayment = payCoverage === 'dp' ? Number(dpInput) || 0 : 0;
+  const downPaymentTooHigh = mode === 'rental' && typedDownPayment > total;
+  const paidAmount = payCoverage === 'full'
+    ? total
+    : typedDownPayment > 0 ? Math.min(typedDownPayment, total) : Math.min(Math.ceil(total * 0.5), total);
   const remaining = Math.max(0, total - paidAmount);
   // What is charged now and with which method. A large QRIS payment adds a
   // fee the customer pays on top; the backend works it out on its own.
@@ -494,7 +500,10 @@ export function CashierPOS() {
 
   // An emptied cart starts the next ticket at the catalogue subtotal.
   useEffect(() => {
-    if (cart.length === 0) setSubtotalInput('');
+    if (cart.length === 0) {
+      setSubtotalInput('');
+      setDpInput('');
+    }
   }, [cart.length]);
 
   const resetTicket = () => {
@@ -503,6 +512,7 @@ export function CashierPOS() {
     setPackageId('');
     setDiscount('');
     setSubtotalInput('');
+    setDpInput('');
     setNotes('');
     setPayCoverage('dp');
     setPayChannel('cash');
@@ -570,6 +580,11 @@ export function CashierPOS() {
 
   const handleCharge = async () => {
     if (cart.length === 0) return;
+    if (downPaymentTooHigh) {
+      error('DP too high', 'The DP is above the total. Pick Full to take it all.');
+      setCartOpen(true);
+      return;
+    }
     if (subtotalTooLow) {
       error('Subtotal too low', `It is below the catalogue subtotal of ${formatCurrency(catalogueSubtotal)}. Use Discount to take money off.`);
       setCartOpen(true);
@@ -931,7 +946,7 @@ export function CashierPOS() {
           <div>
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Pay</div>
             <div className="mb-2 grid grid-cols-2 gap-2">
-              <Chip selected={payCoverage === 'dp'} onClick={() => setPayCoverage('dp')} block testId="pos-pay-dp">DP 50%</Chip>
+              <Chip selected={payCoverage === 'dp'} onClick={() => setPayCoverage('dp')} block testId="pos-pay-dp">DP</Chip>
               <Chip
                 selected={payCoverage === 'full'}
                 testId="pos-pay-full"
@@ -978,9 +993,13 @@ export function CashierPOS() {
         )}
 
         {mode === 'rental' && payCoverage === 'dp' && (
-          <p className="text-sm text-slate-500">
-            The customer pays {formatCurrency(paidAmount)} now and {formatCurrency(remaining)} in full at pickup.
-          </p>
+          <CurrencyInput
+            label="DP now"
+            value={dpInput === '' ? paidAmount : dpInput}
+            onChange={(n) => setDpInput(n ? String(n) : '')}
+            error={downPaymentTooHigh ? 'The DP is above the total. Pick Full to take it all.' : undefined}
+            helperText={`The customer pays ${formatCurrency(paidAmount)} now and ${formatCurrency(remaining)} in full at pickup. Empty takes half.`}
+          />
         )}
 
         {canEditSubtotal && (
