@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff } from 'lucide-react';
+import { Camera, CameraOff, SwitchCamera } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { cleanScannedCode, confirmedScan } from '@/lib/barcode';
@@ -38,6 +38,16 @@ interface BarcodeScannerProps {
 
 type DetectedBarcode = { rawValue: string };
 
+type Facing = 'environment' | 'user';
+
+// Staff on a tablet stand scan with the front camera, so keep their last choice.
+const FACING_KEY = 'barcodeScannerFacing';
+
+function storedFacing(): Facing {
+  if (typeof window === 'undefined') return 'environment';
+  return window.localStorage.getItem(FACING_KEY) === 'user' ? 'user' : 'environment';
+}
+
 type BarcodeDetectorHandle = {
   detect: (source: ImageBitmapSource) => Promise<DetectedBarcode[]>;
 };
@@ -70,6 +80,8 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState('Hold steady — waiting for a lock…');
   const [retryNonce, setRetryNonce] = useState(0);
+  const [facing, setFacing] = useState<Facing>(storedFacing);
+  const [hasManyCameras, setHasManyCameras] = useState(false);
   const quaggaLoadedRef = useRef(false);
 
   const scannerRef = useRef<HTMLDivElement>(null);
@@ -138,7 +150,7 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
-        facingMode: { ideal: 'environment' },
+        facingMode: { ideal: facing },
         width: { ideal: 1280 },
         height: { ideal: 720 },
       },
@@ -169,7 +181,7 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
       void tick();
     });
     return true;
-  }, [acceptCode]);
+  }, [acceptCode, facing]);
 
   const startQuagga = useCallback(() => {
     const quagga = window.Quagga;
@@ -186,7 +198,7 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
         constraints: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          facingMode: { ideal: 'environment' },
+          facingMode: { ideal: facing },
         },
       },
       locator: {
@@ -216,7 +228,13 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
       quagga.onDetected(handler);
       quagga.start();
     });
-  }, [acceptCode]);
+  }, [acceptCode, facing]);
+
+  const switchCamera = () => {
+    const next: Facing = facing === 'environment' ? 'user' : 'environment';
+    window.localStorage.setItem(FACING_KEY, next);
+    setFacing(next);
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -233,9 +251,20 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
     let cancelled = false;
     const start = async () => {
       try {
+        // Device labels and counts are reliable only after the permission
+        // prompt, so check after the stream starts.
+        const countCameras = async () => {
+          const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+          if (!cancelled) {
+            setHasManyCameras(devices.filter((d) => d.kind === 'videoinput').length > 1);
+          }
+        };
         const native = await startNative();
         if (cancelled || acceptedRef.current) return;
-        if (native) return;
+        if (native) {
+          void countCameras();
+          return;
+        }
 
         if (!quaggaLoadedRef.current) {
           setIsLoading(true);
@@ -265,6 +294,7 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
         }
         if (cancelled || acceptedRef.current) return;
         startQuagga();
+        void countCameras();
       } catch (err) {
         if (cancelled) return;
         setIsLoading(false);
@@ -317,16 +347,17 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
       }
     >
       <div className="relative">
+        {/* The mirror is CSS only, so the decoders still read the raw frames. */}
         <video
           ref={videoRef}
-          className="h-80 w-full rounded-xl bg-slate-900 object-cover"
+          className={`h-80 w-full rounded-xl bg-slate-900 object-cover ${facing === 'user' ? '-scale-x-100' : ''}`}
           muted
           playsInline
           autoPlay
         />
         <div
           ref={scannerRef}
-          className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl [&_canvas]:hidden [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+          className={`pointer-events-none absolute inset-0 overflow-hidden rounded-xl [&_canvas]:hidden [&_video]:h-full [&_video]:w-full [&_video]:object-cover ${facing === 'user' ? '[&_video]:-scale-x-100' : ''}`}
         />
 
         {isLoading && (
@@ -352,6 +383,18 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
               {hint}
             </div>
           </div>
+        )}
+
+        {hasManyCameras && !isLoading && (
+          <button
+            type="button"
+            onClick={switchCamera}
+            aria-label={facing === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+            className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-slate-900/70 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-900/85"
+          >
+            <SwitchCamera className="h-4 w-4" />
+            {facing === 'user' ? 'Back' : 'Front'}
+          </button>
         )}
       </div>
 
