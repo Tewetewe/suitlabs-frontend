@@ -843,7 +843,8 @@ export function CashierPOS() {
         {mode === 'rental' && packages.length > 0 && (
           <div>
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Package</div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            {/* Wrap, not a sideways scroll: a mouse wheel scrolls only up and down. */}
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Package">
               <Chip selected={!packageId} onClick={() => setPackageId('')}>Item total</Chip>
               {packages.map((pkg) => (
                 <Chip key={pkg.id} selected={packageId === pkg.id} onClick={() => setPackageId(pkg.id)}>
@@ -852,7 +853,7 @@ export function CashierPOS() {
               ))}
             </div>
             {packageId && (
-              <p className="mt-1 text-xs text-slate-500">Items are included in the package by default. Tap the badge to charge one as an add-on.</p>
+              <p className="mt-1 text-xs text-slate-500">Items are included in the package by default. Click or tap the badge to charge one as an add-on.</p>
             )}
           </div>
         )}
@@ -1557,6 +1558,7 @@ function Chip({
       type="button"
       onClick={onClick}
       data-testid={testId}
+      aria-pressed={selected}
       className={clsx(
         'min-h-11 shrink-0 rounded-full px-3.5 text-sm font-semibold touch-manipulation',
         block && 'w-full',
