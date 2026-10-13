@@ -347,11 +347,17 @@ export default function BookingsPage() {
   const itemCacheRef = useRef<Map<string, Item>>(new Map());
   // Names of the chosen items, so a line shows its item even when the item is not on a loaded picker page.
   const [itemLabels, setItemLabels] = useState<Record<string, string>>({});
+  // Suits that already got their default trousers once. The operator can remove those trousers to book the Suit only.
+  const pairedSuitIdsRef = useRef<Set<string>>(new Set());
   const itemIdsKey = useMemo(() => Array.from(new Set(bookingForm.items.map(it => it.item_id).filter(Boolean))).sort().join(','), [bookingForm.items]);
   useEffect(() => {
     const fillItemsAndPairTrousers = async () => {
       try {
         const uniqueIds = itemIdsKey ? itemIdsKey.split(',').filter(Boolean) : [];
+        // A Suit that leaves the form pairs again when the operator picks it again.
+        for (const id of Array.from(pairedSuitIdsRef.current)) {
+          if (!uniqueIds.includes(id)) pairedSuitIdsRef.current.delete(id);
+        }
         if (uniqueIds.length === 0) return;
         const idsToFetch = uniqueIds.filter(id => !itemCacheRef.current.has(id));
         if (idsToFetch.length > 0) {
@@ -371,6 +377,8 @@ export default function BookingsPage() {
         for (const id of uniqueIds) {
           const item = itemCacheRef.current.get(id);
           if (!item?.trousers_code || (item.type !== 'suit' && item.type !== 'jacket')) continue;
+          if (pairedSuitIdsRef.current.has(id)) continue;
+          pairedSuitIdsRef.current.add(id);
           try {
             const trousers = await apiClient.getItemByCode(item.trousers_code);
             if (trousers?.id) {
@@ -580,6 +588,8 @@ export default function BookingsPage() {
     const standardGuarantees: string[] = BOOKING_GUARANTEE_OPTIONS.map((option) => option.value);
     const isStandardGuarantee = !booking.booking_guarantee || standardGuarantees.includes(booking.booking_guarantee);
     setActiveBooking(booking);
+    // A saved booking keeps its lines as they are: a Suit-only line gets no trousers on edit.
+    pairedSuitIdsRef.current = new Set((booking.items || []).map(it => it.item_id));
     setBookingForm({
       customer_id: booking.customer_id,
       booking_date: booking.booking_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
@@ -1540,7 +1550,7 @@ function BookingFormFields({
           </p>
         )}
         <p className="text-xs text-slate-500">
-          Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair.
+          Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair. Remove the trousers line to book the Suit only.
           {selectedPackageId ? ' Mark extras as add-ons to charge them on top of the package.' : ''}
         </p>
         {paidTotal != null && (
