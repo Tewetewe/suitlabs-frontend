@@ -40,7 +40,7 @@ import SimpleModal from '@/components/modals/SimpleModal';
 import { useBranch } from '@/contexts/BranchContext';
 import { ITEM_GENDER_LABELS, itemGenderTag, itemQualityLabel, itemTags, itemTierTag } from '@/lib/item-name';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
-import { availabilityCardNote } from '@/lib/item-availability';
+import { availabilityCardNote, availabilityNote, type AvailabilityTone } from '@/lib/item-availability';
 
 type ViewMode = 'grid' | 'list';
 
@@ -72,7 +72,7 @@ export default function ItemsPage() {
   const { success, error } = useToast();
   const [availabilityForItem, setAvailabilityForItem] = useState<Item | null>(null);
   const [availabilityDates, setAvailabilityDates] = useState<{ start: string; end: string }>({ start: '', end: '' });
-  const [availabilityResult, setAvailabilityResult] = useState<string>('');
+  const [availabilityResult, setAvailabilityResult] = useState<{ tone: AvailabilityTone; text: string } | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [rentalDate, setRentalDate] = useRememberedState('items.rentalDate', '');
   const [returnDate, setReturnDate] = useRememberedState('items.returnDate', '');
@@ -292,7 +292,7 @@ export default function ItemsPage() {
         onClick={() => {
           setAvailabilityForItem(item);
           setAvailabilityDates({ start: '', end: '' });
-          setAvailabilityResult('');
+          setAvailabilityResult(null);
         }}
       >
         Check dates
@@ -788,24 +788,42 @@ export default function ItemsPage() {
       <SimpleModal
         isOpen={Boolean(availabilityForItem)}
         title="Check availability"
-        onClose={() => { setAvailabilityForItem(null); setAvailabilityResult(''); }}
+        onClose={() => { setAvailabilityForItem(null); setAvailabilityResult(null); }}
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => { setAvailabilityForItem(null); setAvailabilityResult(''); }}>Close</Button>
+            <Button variant="ghost" onClick={() => { setAvailabilityForItem(null); setAvailabilityResult(null); }}>Close</Button>
             <Button
               onClick={async () => {
-                if (!availabilityDates.start || !availabilityDates.end) {
-                  setAvailabilityResult('Please select both dates');
+                if (!availabilityForItem) return;
+                const { start, end } = availabilityDates;
+                if (!start || !end) {
+                  setAvailabilityResult({ tone: 'clash', text: 'Please select both dates' });
+                  return;
+                }
+                if (end < start) {
+                  setAvailabilityResult({ tone: 'clash', text: 'The return date is before the rental date' });
+                  return;
+                }
+                // A retired or lost item never goes out again.
+                if (availabilityForItem.status === 'retired' || availabilityForItem.status === 'lost') {
+                  setAvailabilityResult({ tone: 'clash', text: `Not for rent: the item is ${availabilityForItem.status}` });
                   return;
                 }
                 setCheckingAvailability(true);
                 try {
-                  if (availabilityForItem && availabilityForItem.status !== 'available') {
-                    setAvailabilityResult('Unavailable: item is not currently available');
+                  // The same check as the POS: other bookings and rentals on these dates.
+                  const note = availabilityNote(await apiClient.getItemAvailability(availabilityForItem.id, start, end));
+                  // A rented item comes back on its return date, so the dates decide.
+                  // Maintenance or damage has no end date, so staff must check it.
+                  const status = availabilityForItem.status;
+                  if (note.tone !== 'clash' && (status === 'maintenance' || status === 'damaged')) {
+                    setAvailabilityResult({ tone: 'note', text: `${note.text}. The item is ${status} now: make sure it is ready by pickup.` });
                   } else {
-                    setAvailabilityResult('Available for the selected dates');
+                    setAvailabilityResult(note);
                   }
+                } catch (err) {
+                  setAvailabilityResult({ tone: 'clash', text: err instanceof Error ? `Could not check: ${err.message}` : 'Could not check. Please try again.' });
                 } finally {
                   setCheckingAvailability(false);
                 }
@@ -821,11 +839,19 @@ export default function ItemsPage() {
           <div className="space-y-4">
             <p className="text-sm text-slate-600 truncate">{availabilityForItem.name} · {availabilityForItem.code}</p>
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Rental date" type="date" value={availabilityDates.start} onChange={(e) => setAvailabilityDates((prev) => ({ ...prev, start: e.target.value }))} />
-              <Input label="Return date" type="date" value={availabilityDates.end} onChange={(e) => setAvailabilityDates((prev) => ({ ...prev, end: e.target.value }))} />
+              <Input label="Rental date" type="date" value={availabilityDates.start} onChange={(e) => { setAvailabilityDates((prev) => ({ ...prev, start: e.target.value })); setAvailabilityResult(null); }} />
+              <Input label="Return date" type="date" value={availabilityDates.end} onChange={(e) => { setAvailabilityDates((prev) => ({ ...prev, end: e.target.value })); setAvailabilityResult(null); }} />
             </div>
             {availabilityResult && (
-              <p className={`text-sm ${availabilityResult.startsWith('Available') ? 'text-emerald-700' : 'text-red-600'}`}>{availabilityResult}</p>
+              <p
+                data-testid="check-dates-result"
+                className={clsx(
+                  'text-sm',
+                  availabilityResult.tone === 'clash' ? 'text-red-600' : availabilityResult.tone === 'note' ? 'text-amber-700' : 'text-emerald-700',
+                )}
+              >
+                {availabilityResult.text}
+              </p>
             )}
           </div>
         )}
