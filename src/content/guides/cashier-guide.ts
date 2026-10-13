@@ -602,7 +602,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     </div>
     <div class="card">
       <h3 style="margin-top:0">"Is this suit free next Saturday?"</h3>
-      <p><b>Items</b>, find the suit, tap the availability button, put in the two dates. Or, faster: open the POS in Rental mode, set the dates, and see what the grid shows you.</p>
+      <p>Set the pickup and return dates on <b>Items</b> or in the POS, then read the line on the suit. See <b>Is this item free on these dates?</b> below.</p>
     </div>
     <div class="card">
       <h3 style="margin-top:0">Moving a suit to the other shop</h3>
@@ -620,6 +620,27 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <p style="margin-bottom:0">You never have to choose: the button looks at the device and picks the best route it can.</p>
     </div>
   </div>
+
+  <h3>Is this item free on these dates?</h3>
+  <p class="measure">The system compares your pickup and return dates with every other booking and rental of the item. A rental that is overdue holds the item until it comes back. There are two places to check.</p>
+  <ol class="steps">
+    <li><b>Many items at once: the Items page.</b><span>Open <b>Items</b>. In the filters, set <b>Rental Date</b> (the pickup day) and the return date. Each item card then shows a line for those dates.</span></li>
+    <li><b>While you sell: the POS or Add Booking.</b><span>Set the event day and the rental length, or set both dates by hand. Add the item. A line under the item in the ticket shows the answer. The POS grid also hides booked items, but only when both dates are set.</span></li>
+  </ol>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:34%">You see</th><th style="width:36%">Means</th><th>You do</th></tr></thead>
+      <tbody>
+        <tr><td>No line on the item card, or green <b>Available on these dates</b></td><td>The item is free on every day.</td><td>Book it.</td></tr>
+        <tr><td>Red <b>Booked 5–6 Nov · Budi</b>, and the card is grey</td><td>Another booking holds the item on one of your days. Point at the line to see the booking.</td><td>Pick another item, or other dates.</td></tr>
+        <tr><td>Amber <b>Returns 5 Nov · pick up evening</b></td><td>The last customer returns the item on your pickup day.</td><td>Book it. Tell the customer to pick up in the evening.</td></tr>
+        <tr><td>Amber <b>Picked up 7 Nov · return morning</b></td><td>The next customer picks the item up on your return day.</td><td>Book it. Tell the customer to return it in the morning.</td></tr>
+        <tr><td><b>1 of 2 free</b></td><td>The item has 2 or more units. Other bookings hold some of them.</td><td>Book it while a unit is free.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="measure">To check one item, open the item menu on the Items page and tap <b>Check dates</b>. Put in the rental date and the return date, then tap <b>Check</b>. You get the same lines as in the POS. A retired or lost item reads <b>Not for rent</b>. An item in maintenance or damaged reads amber: make sure it is ready by pickup.</p>
 
   <h3>When nothing comes out of the printer</h3>
   <p class="measure">Work down this list in order. Nine times out of ten it stops at step 2 or 3.</p>
