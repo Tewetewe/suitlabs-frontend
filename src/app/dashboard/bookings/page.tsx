@@ -43,6 +43,7 @@ import { PageShell } from '@/components/ui/PageShell';
 import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { useRememberedState } from '@/hooks/useRememberedState';
+import { currentMonthRange } from '@/lib/date';
 import { useToast } from '@/contexts/ToastContext';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
 
@@ -82,6 +83,12 @@ async function fetchItemOptionsPage(query: string, page: number, type?: 'trouser
   } catch {
     return { options: [], hasMore: false };
   }
+}
+
+// This month, as the event day range.
+function currentMonthEventRange(): BookingFilters {
+  const { from, to } = currentMonthRange();
+  return { event_from: from, event_to: to };
 }
 
 function bookingCustomerName(booking: Booking) {
@@ -144,7 +151,8 @@ export default function BookingsPage() {
     !!b && b.payment_status === 'completed' && isAdmin && Boolean(b.legacy_ref);
   const [deletingBooking, setDeletingBooking] = useState<Booking | null>(null);
   const [deletingBookingBusy, setDeletingBookingBusy] = useState(false);
-  const [filters, setFilters] = useRememberedState<BookingFilters>('bookings.filters', {});
+  // The list opens on the bookings with their event day in this month.
+  const [filters, setFilters] = useRememberedState<BookingFilters>('bookings.filters', currentMonthEventRange);
   const [searchInput, setSearchInput] = useRememberedState('bookings.search', '');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -982,6 +990,30 @@ export default function BookingsPage() {
               value={filters.payment_status || ''}
               onChange={(e) => { setFilters(prev => ({ ...prev, payment_status: e.target.value || undefined })); }}
             />
+            <Input
+              label="Event from"
+              type="date"
+              value={filters.event_from || ''}
+              max={filters.event_to || undefined}
+              onChange={(e) => { setFilters(prev => ({ ...prev, event_from: e.target.value || undefined })); }}
+              data-testid="bookings-event-from"
+            />
+            <Input
+              label="Event to"
+              type="date"
+              value={filters.event_to || ''}
+              min={filters.event_from || undefined}
+              onChange={(e) => { setFilters(prev => ({ ...prev, event_to: e.target.value || undefined })); }}
+              data-testid="bookings-event-to"
+            />
+            <Button
+              variant="secondary"
+              onClick={() => { setFilters(prev => ({ ...prev, event_from: undefined, event_to: undefined })); }}
+              disabled={!filters.event_from && !filters.event_to}
+              data-testid="bookings-all-dates"
+            >
+              All dates
+            </Button>
           </FilterBar>
         </ClientOnly>
 

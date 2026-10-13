@@ -1774,6 +1774,9 @@ export interface BookingFilters {
   payment_status?: string;
   start_date?: string;
   end_date?: string;
+  // Event day range, YYYY-MM-DD, both days included.
+  event_from?: string;
+  event_to?: string;
   for_rental?: boolean;
 }
 
