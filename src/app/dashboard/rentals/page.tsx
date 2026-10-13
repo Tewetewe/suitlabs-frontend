@@ -98,8 +98,8 @@ export default function RentalsPage() {
   }, [setDepositState, setSearchTerm]);
 
   const agreementBadge = (rental: Rental): { label: string; variant: 'success' | 'warning' | 'default' | 'danger' } | null => {
-    if (!depositEnabled || rental.status !== 'pending') return null;
-    if (rental.booking?.security_deposit_waived) return { label: 'No deposit', variant: 'default' };
+    // Only a Booking that ticked the deposit gets a deposit flag.
+    if (!depositEnabled || rental.status !== 'pending' || rental.booking?.security_deposit_waived) return null;
     if (rental.agreement_accepted_at) return { label: 'Agreement accepted', variant: 'success' };
     if (rental.agreement_sent_at) {
       const delivery = waDeliveryLabel(rental.agreement_delivery_status);

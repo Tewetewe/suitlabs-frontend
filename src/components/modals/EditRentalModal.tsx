@@ -130,9 +130,7 @@ export function EditRentalModal({ isOpen, onClose, onSuccess, rental }: EditRent
           />
         </div>
 
-        {!depositEnabled && !(rental.security_deposit || 0) ? null : rental.booking?.security_deposit_waived ? (
-          <p className="text-sm text-slate-500">No security deposit. It was waived on the booking.</p>
-        ) : (
+        {(!depositEnabled && !(rental.security_deposit || 0)) || rental.booking?.security_deposit_waived ? null : (
           <CurrencyInput
             label="Security deposit"
             value={form.security_deposit}

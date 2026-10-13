@@ -517,11 +517,9 @@ function RentalChecklist({
             <div className="text-slate-500">No add-ons</div>
           )}
 
-          {depositEnabled && (
+          {depositEnabled && rental.deposit_required && (
             <div>
-              {!rental.deposit_required ? (
-                <span className="text-slate-500">Deposit not required</span>
-              ) : agreementAccepted ? (
+              {agreementAccepted ? (
                 <span className="text-emerald-700">Deposit Agreement accepted</span>
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
