@@ -103,3 +103,12 @@ export const calculateDuration = (startDate: string | Date, endDate: string | Da
     }
   }
 };
+
+const localISODay = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** The first and the last day of the month of `now`, local time, as YYYY-MM-DD. */
+export const currentMonthRange = (now: Date = new Date()): { from: string; to: string } => ({
+  from: localISODay(new Date(now.getFullYear(), now.getMonth(), 1)),
+  to: localISODay(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+});

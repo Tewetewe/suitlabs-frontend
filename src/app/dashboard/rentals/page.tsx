@@ -11,7 +11,7 @@ import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/api-utils';
 import { formatCurrency } from '@/lib/currency';
-import { formatDateShort } from '@/lib/date';
+import { currentMonthRange, formatDateShort } from '@/lib/date';
 import { InvoiceData, Rental } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Edit, FileText, Eye, Printer, ShoppingBag, Calendar, MessageCircle } from 'lucide-react';
@@ -82,6 +82,8 @@ export default function RentalsPage() {
   const { enabled: depositEnabled } = useDepositSettings();
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [depositState, setDepositState] = useRememberedState<'' | 'held' | 'awaiting_check' | 'released' | 'auto_released'>('rentals.depositState', '');
+  // The list opens on the rentals picked up this month. Empty dates show all rentals.
+  const [pickupRange, setPickupRange] = useRememberedState<{ from: string; to: string }>('rentals.pickupRange', () => currentMonthRange());
   const [sendingAgreementId, setSendingAgreementId] = useState<string | null>(null);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
 
@@ -177,6 +179,8 @@ export default function RentalsPage() {
         limit: LIST_PAGE_SIZE,
         search: debouncedSearch || undefined,
         deposit_state: depositState || undefined,
+        rental_from: pickupRange.from || undefined,
+        rental_to: pickupRange.to || undefined,
       });
       const data = response?.data?.data?.rentals || [];
       const pagination = response?.data?.pagination;
@@ -186,7 +190,7 @@ export default function RentalsPage() {
       warning('Unable to load rentals', 'Backend may be offline. Please try again.');
       return { items: [], hasMore: false, total: 0 };
     }
-  }, [debouncedSearch, depositState, warning]);
+  }, [debouncedSearch, depositState, pickupRange, warning]);
 
   const {
     items: rentals,
@@ -196,7 +200,7 @@ export default function RentalsPage() {
     total,
     reload,
     sentinelRef,
-  } = useInfiniteList(loadRentalsPage, { cacheKey: `rentals:${debouncedSearch}:${depositState}` });
+  } = useInfiniteList(loadRentalsPage, { cacheKey: `rentals:${debouncedSearch}:${depositState}:${pickupRange.from}:${pickupRange.to}` });
 
   const rentalStatusVariant = (s: string): 'success' | 'warning' | 'default' | 'danger' => {
     switch (s) {
@@ -459,6 +463,30 @@ export default function RentalsPage() {
                 ]}
               />
             )}
+            <Input
+              label="Pickup from"
+              type="date"
+              value={pickupRange.from}
+              max={pickupRange.to || undefined}
+              onChange={(e) => setPickupRange((prev) => ({ ...prev, from: e.target.value }))}
+              data-testid="rentals-pickup-from"
+            />
+            <Input
+              label="Pickup to"
+              type="date"
+              value={pickupRange.to}
+              min={pickupRange.from || undefined}
+              onChange={(e) => setPickupRange((prev) => ({ ...prev, to: e.target.value }))}
+              data-testid="rentals-pickup-to"
+            />
+            <Button
+              variant="secondary"
+              onClick={() => setPickupRange({ from: '', to: '' })}
+              disabled={!pickupRange.from && !pickupRange.to}
+              data-testid="rentals-all-dates"
+            >
+              All dates
+            </Button>
           </FilterBar>
         </ClientOnly>
 
