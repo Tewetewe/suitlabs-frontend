@@ -142,9 +142,17 @@ export default function BookingsPage() {
   const { enabled: depositEnabled } = useDepositSettings();
   const { warning, success, error: toastError } = useToast();
   const isAdmin = user?.role === 'admin';
-  // Edit is for a booking that is not fully paid. Admin may also edit an
-  // imported legacy booking that is, to add or fix its Item after the import.
-  const canEditBooking = (b: Booking) => b.payment_status !== 'completed' || (isAdmin && Boolean(b.legacy_ref));
+  // A fully paid booking can still upgrade or downgrade its Items before
+  // Pickup. An upgrade opens the difference again; a downgrade stops at the
+  // money already paid.
+  const canChangePaidItems = (b: Booking | null) =>
+    !!b && b.payment_status === 'completed' && !b.legacy_ref
+    && (b.status === 'pending' || b.status === 'confirmed' || b.status === 'pending_approval');
+  // Edit is for a booking that is not fully paid, or a paid one above. Admin may
+  // also edit an imported legacy booking that is, to add or fix its Item after
+  // the import.
+  const canEditBooking = (b: Booking) =>
+    b.payment_status !== 'completed' || canChangePaidItems(b) || (isAdmin && Boolean(b.legacy_ref));
   // A fully paid legacy booking can import with no Item. Admin adds or swaps it
   // here; the backend spreads the paid total over the lines, so money stays.
   const canEditPaidLegacyItems = (b: Booking | null) =>
@@ -230,11 +238,13 @@ export default function BookingsPage() {
   const addonDiscount = bookingForm.items
     .filter((it) => it.is_addon)
     .reduce((sum, it) => sum + (it.discount_amount || 0), 0);
+  // A fully paid booking that cannot change its Items keeps its money as it is.
+  const paidLocked = activeBooking?.payment_status === 'completed' && !canChangePaidItems(activeBooking);
   // A typed Subtotal above the Items charges items not in the catalogue yet.
   // A package sets its own price, and a paid booking keeps its money.
   const canEditSubtotal = !selectedPackageId
     && bookingForm.items.some((it) => it.item_id)
-    && !(isEditModalOpen && activeBooking?.payment_status === 'completed');
+    && !(isEditModalOpen && paidLocked);
   const typedSubtotal = canEditSubtotal ? Number(subtotalInput) || 0 : 0;
   const subtotalTooLow = typedSubtotal > 0 && typedSubtotal < itemsSubtotal;
   const extraCharge = typedSubtotal > itemsSubtotal ? typedSubtotal - itemsSubtotal : 0;
@@ -268,6 +278,10 @@ export default function BookingsPage() {
   // due, a full payment takes all of it, and an edit never lowers money taken.
   const isDownPayment = bookingForm.payment_method.startsWith('dp_');
   const alreadyPaid = isEditModalOpen ? activeBooking?.paid_amount || 0 : 0;
+  // An edit may upgrade or downgrade the Items, but the total stays at or
+  // above the money already paid: the shop does not refund the DP.
+  const belowPaid = alreadyPaid > 0 && !paidLocked && alreadyPaid - bookingFinal > 0.009;
+  const belowPaidMessage = `The customer already paid ${formatCurrency(alreadyPaid)}. A downgrade cannot go below it.`;
   // A down payment takes the amount Staff typed. With none typed, a new
   // booking takes half and an edit keeps what was already paid.
   const typedDownPayment = isDownPayment ? Number(dpInput) || 0 : 0;
@@ -284,7 +298,7 @@ export default function BookingsPage() {
   // Transaction Fee on the top-up alone.
   const chargeNow = Math.max(0, payNow - alreadyPaid);
   const chargeNowFee = transactionFee(chargeNow, bookingForm.payment_method, feeRules, bookingFeeRuleId, bookingPot);
-  const downPaymentField = isDownPayment && !(isEditModalOpen && activeBooking?.payment_status === 'completed')
+  const downPaymentField = isDownPayment && !(isEditModalOpen && paidLocked)
     ? {
         value: dpInput === '' ? payNow : dpInput,
         onChange: (n: number) => setDpInput(n ? String(n) : ''),
@@ -655,12 +669,12 @@ export default function BookingsPage() {
     const validItems = bookingForm.items.filter(it => it.item_id && it.item_id.trim() !== '');
     if (validItems.length === 0) errs.items = 'At least one valid item is required';
     
+    if (belowPaid) errs.items = belowPaidMessage;
     setFormErrors(errs);
     if (Object.keys(errs).length > 0) return;
     try {
       setCreating(true);
-      const isLocked = activeBooking.payment_status === 'completed';
-      const payload = (isLocked
+      const payload = (paidLocked
         ? {
             // Lock financial edits after payment completed; allow only non-financial fields
             notes: bookingForm.notes,
@@ -1198,9 +1212,10 @@ export default function BookingsPage() {
             isDownPayment={isDownPayment}
             chargeNow={chargeNow}
             chargeNowFee={chargeNowFee}
-            locked={activeBooking?.payment_status === 'completed'}
-            itemsLocked={activeBooking?.payment_status === 'completed' && !canEditPaidLegacyItems(activeBooking)}
+            locked={paidLocked}
+            itemsLocked={paidLocked && !canEditPaidLegacyItems(activeBooking)}
             paidTotal={canEditPaidLegacyItems(activeBooking) ? activeBooking?.paid_amount : undefined}
+            paidFloor={!paidLocked && alreadyPaid > 0 ? { amount: alreadyPaid, below: belowPaid } : undefined}
             fetchCustomerOptions={fetchCustomerOptions}
             itemLabels={itemLabels}
             fetchItemPage={fetchItemPage}
@@ -1390,6 +1405,7 @@ function BookingFormFields({
   locked,
   itemsLocked = locked,
   paidTotal,
+  paidFloor,
   fetchCustomerOptions,
   itemLabels,
   availabilityNoteFor,
@@ -1429,6 +1445,8 @@ function BookingFormFields({
   itemsLocked?: boolean;
   /** The paid total that a paid legacy booking keeps when its Items change. */
   paidTotal?: number;
+  /** The money a booking already took. An upgrade or a downgrade keeps the total at or above it. */
+  paidFloor?: { amount: number; below: boolean };
   fetchCustomerOptions: (query: string) => Promise<{ value: string; label: string }[]>;
   itemLabels: Record<string, string>;
   /** Free, same-day handover, or booked, for an item on the form's dates. */
@@ -1588,6 +1606,11 @@ function BookingFormFields({
         {paidTotal != null && (
           <p className="text-xs text-slate-500">
             This booking is fully paid. The paid total of {formatCurrency(paidTotal)} stays: Save spreads it over the Items, so the prices here do not change the money.
+          </p>
+        )}
+        {paidFloor != null && (
+          <p className={`text-xs ${paidFloor.below ? 'text-red-600' : 'text-slate-500'}`} data-testid="booking-paid-floor">
+            Paid {formatCurrency(paidFloor.amount)}. An upgrade adds to the remaining amount. A downgrade cannot go below {formatCurrency(paidFloor.amount)}.
           </p>
         )}
         {formErrors.items && <div className="text-sm text-red-600">{formErrors.items}</div>}

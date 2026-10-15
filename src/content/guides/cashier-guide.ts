@@ -372,8 +372,8 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <p>Open <b>Bookings</b>, find them by name, or scan the invoice barcode at the POS — that jumps you to the booking. Use <b>Collect balance</b> in the row menu. The full invoice opens as soon as the payment is recorded. Do not create a second booking.</p>
     </div>
     <div class="card">
-      <h4 style="margin-top:0">A booking that is fully paid is locked</h4>
-      <p>Once payment status reads <code>completed</code>, edit is disabled — on purpose. If something is genuinely wrong, get an admin. Do not cancel and re-book to work around it.</p>
+      <h4 style="margin-top:0">Upgrade or downgrade a booking</h4>
+      <p>Use <b>Edit</b> to swap an Item for a dearer or a cheaper one before Pickup. This works on a fully paid booking too. An upgrade adds the difference to the remaining amount. A downgrade cannot go below the money the customer already paid: the shop does not refund the DP. After Pickup, edit is closed. Do not cancel and re-book to work around it.</p>
     </div>
   </div>
 
