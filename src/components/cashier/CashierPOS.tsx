@@ -57,6 +57,17 @@ import { Badge } from '@/components/ui/DataDisplay';
 import { itemTags } from '@/lib/item-name';
 import { availabilityCardNote, availabilityNote } from '@/lib/item-availability';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
+import {
+  bookingGross,
+  bookingPayNow,
+  defaultTrousersCode,
+  newBookingStatuses,
+  repriceForLength,
+  spreadDiscount,
+  typedSubtotal as readTypedSubtotal,
+} from '@/lib/booking-draft';
+import { discountCodeHelp, discountOptionLabel, discountPickerHelp, offeredDiscounts } from '@/lib/discount';
+import { useBookingDiscountPick } from '@/hooks/useBookingDiscountPick';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
 import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
 import {
@@ -141,23 +152,6 @@ function toBookingPayment(coverage: PayCoverage, channel: PayChannel): BookingPa
   return `${coverage}_${channel}` as BookingPaymentMethod;
 }
 
-/**
- * Spreads a booking discount across the lines in proportion to their totals,
- * as the backend does. The backend reads the discount only from the lines.
- */
-function spreadDiscount(lineTotals: number[], discount: number): number[] {
-  const sum = lineTotals.reduce((acc, line) => acc + line, 0);
-  let left = Math.min(Math.max(discount, 0), sum);
-  return lineTotals.map((line, index) => {
-    const share = index === lineTotals.length - 1 || sum <= 0
-      ? left
-      : Math.round(discount * (line / sum));
-    const taken = Math.min(share, line, left);
-    left -= taken;
-    return taken;
-  });
-}
-
 export function CashierPOS() {
   const { success, error, warning } = useToast();
   const { user } = useAuth();
@@ -234,9 +228,11 @@ export function CashierPOS() {
   const catalogueSubtotal = cart.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
   // A package sets its own price, so only a cart with no package takes a typed Subtotal.
   const canEditSubtotal = cart.length > 0 && !(mode === 'rental' && packageId);
-  const typedSubtotal = canEditSubtotal ? Number(subtotalInput) || 0 : 0;
-  const subtotalTooLow = typedSubtotal > 0 && typedSubtotal < catalogueSubtotal;
-  const subtotal = typedSubtotal > catalogueSubtotal ? typedSubtotal : catalogueSubtotal;
+  const { tooLow: subtotalTooLow, extra: subtotalExtra } = readTypedSubtotal(
+    canEditSubtotal ? Number(subtotalInput) || 0 : 0,
+    catalogueSubtotal,
+  );
+  const subtotal = catalogueSubtotal + subtotalExtra;
   const pricedUnits = unitPricesForSubtotal(cart, subtotal);
   // The cart as charged: the extra of a typed Subtotal sits on the main line.
   const pricedCart = cart.map((line, index) => ({ ...line, unit_price: pricedUnits[index] }));
@@ -245,15 +241,29 @@ export function CashierPOS() {
     .filter((line) => line.is_addon)
     .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
   const discountAmount = Number(discount) || 0;
-  const gross = mode === 'rental' && packagePrice > 0 ? packagePrice + addonTotal : subtotal;
-  const total = Math.max(0, gross - (mode === 'rental' && packagePrice > 0 ? 0 : discountAmount));
+  const gross = mode === 'rental'
+    ? bookingGross({ packagePrice, addonSubtotal: addonTotal, itemsSubtotal: subtotal })
+    : subtotal;
+  const typedOff = Math.max(0, gross - (mode === 'rental' && packagePrice > 0 ? 0 : discountAmount));
+  // The Discount picked for a rental, as on the New Booking form. The backend
+  // applies it on save, before it takes the payment.
+  const cartItemIds = useMemo(
+    () => Array.from(new Set(cart.map((line) => line.item.id))).sort().join(','),
+    [cart],
+  );
+  const discountPick = useBookingDiscountPick({
+    open: mode === 'rental',
+    customerId: customer?.id || '',
+    total: gross,
+    itemIds: cartItemIds,
+  });
+  const pickedDiscountAmount = mode === 'rental' ? discountPick.amountOff(gross, typedOff) : 0;
+  const total = typedOff - pickedDiscountAmount;
   // A down payment takes half of the total and a full payment takes all of it.
   // The remaining amount is paid in full at pickup.
   const typedDownPayment = payCoverage === 'dp' ? Number(dpInput) || 0 : 0;
   const downPaymentTooHigh = mode === 'rental' && typedDownPayment > total;
-  const paidAmount = payCoverage === 'full'
-    ? total
-    : typedDownPayment > 0 ? Math.min(typedDownPayment, total) : Math.min(Math.ceil(total * 0.5), total);
+  const paidAmount = bookingPayNow({ total, downPayment: payCoverage === 'dp', typedDownPayment });
   const remaining = Math.max(0, total - paidAmount);
   // What is charged now and with which method. A large QRIS payment adds a
   // fee the customer pays on top; the backend works it out on its own.
@@ -420,6 +430,32 @@ export function CashierPOS() {
     for (const line of cart) void checkAvailability(line.item.id);
   }, [mode, cart, checkAvailability]);
 
+  // A Suit or a Jacket brings its default Trousers on a rental, as on the New
+  // Booking form. Staff can remove them to rent the Suit only.
+  const pairTrousers = useCallback(async (suit: Item, length: RentalLength) => {
+    const code = defaultTrousersCode(suit);
+    if (!code) return;
+    try {
+      const trousers = await apiClient.getItemByCode(code);
+      if (!trousers?.id) return;
+      setCart((prev) => {
+        if (prev.some((line) => line.item.id === trousers.id)) return prev;
+        const suitIndex = prev.findIndex((line) => line.item.id === suit.id);
+        if (suitIndex < 0) return prev;
+        const line: CartLine = {
+          key: `${trousers.id}-${Date.now()}`,
+          item: trousers,
+          quantity: 1,
+          unit_price: catalogPrice(trousers, 'rental', length),
+          is_addon: false,
+        };
+        return [...prev.slice(0, suitIndex + 1), line, ...prev.slice(suitIndex + 1)];
+      });
+    } catch {
+      warning('Trousers not added', `Add the trousers for ${suit.name} by hand.`);
+    }
+  }, [warning]);
+
   // Returns false when the Item did not go into the cart.
   const addItem = useCallback((item: Item): boolean => {
     if (!canSell(item, mode) && mode === 'sale') {
@@ -434,6 +470,7 @@ export function CashierPOS() {
       window.setTimeout(() => document.querySelector<HTMLInputElement>('[data-testid="pos-event-date"]')?.focus(), 50);
       return false;
     }
+    const isNewLine = !cart.some((line) => line.item.id === item.id);
     setCart((prev) => {
       const existing = prev.find((line) => line.item.id === item.id);
       if (existing) {
@@ -454,6 +491,7 @@ export function CashierPOS() {
     });
     setFlashId(item.id);
     window.setTimeout(() => setFlashId(null), 450);
+    if (mode === 'rental' && isNewLine) void pairTrousers(item, rentalLength);
     if (mode === 'rental') {
       // A clash warns but does not stop the sale: staff decide.
       void checkAvailability(item.id).then((result) => {
@@ -463,7 +501,7 @@ export function CashierPOS() {
       });
     }
     return true;
-  }, [mode, eventDate, rentalLength, error, warning, checkAvailability]);
+  }, [mode, eventDate, rentalLength, cart, error, warning, checkAvailability, pairTrousers]);
 
   const pickEventDate = (value: string) => {
     setEventDate(value);
@@ -473,7 +511,7 @@ export function CashierPOS() {
     setReturnDate(ret);
   };
 
-  // A new length moves the dates and prices every rental line again.
+  // A new length moves the dates, and each line still at the old length's price.
   const pickRentalLength = (length: RentalLength) => {
     setRentalLength(length);
     if (eventDate) {
@@ -482,7 +520,7 @@ export function CashierPOS() {
       setReturnDate(ret);
     }
     if (mode === 'rental') {
-      setCart((prev) => prev.map((line) => ({ ...line, unit_price: catalogPrice(line.item, 'rental', length) })));
+      setCart((prev) => repriceForLength(prev, (line) => line.item, rentalLength, length));
     }
   };
 
@@ -511,6 +549,7 @@ export function CashierPOS() {
     setCustomer(null);
     setPackageId('');
     setDiscount('');
+    discountPick.reset();
     setSubtotalInput('');
     setDpInput('');
     setNotes('');
@@ -599,6 +638,11 @@ export function CashierPOS() {
       setCartOpen(true);
       return;
     }
+    if (mode === 'rental' && !eventDate) {
+      error('Event day required', 'Pick the event day. It sets the pickup and return dates.');
+      setDatesOpen(true);
+      return;
+    }
     if (mode === 'rental' && !rentalDate) {
       error('Date required', 'Set the rental date.');
       return;
@@ -639,7 +683,8 @@ export function CashierPOS() {
         setSaleInvoice(sale);
         success('Sale recorded', sale.sale_number);
       } else {
-        const paymentStatus = paidAmount <= 0 ? 'pending' : paidAmount >= total ? 'completed' : 'partial';
+        const statuses = newBookingStatuses(paidAmount, total);
+        const paymentStatus = statuses.payment_status;
         let proofUrl: string | undefined;
         if (proofFile && paidAmount > 0) {
           try {
@@ -662,8 +707,7 @@ export function CashierPOS() {
           security_deposit_waived: depositEnabled ? !takeDeposit : undefined,
           institution: occasion,
           notes,
-          status: paidAmount > 0 ? 'confirmed' : 'pending',
-          payment_status: paymentStatus,
+          ...statuses,
           payment_method: toBookingPayment(payCoverage, payChannel),
           fee_rule_id: feeRuleId || undefined,
           pot: potForRequest(chargeMethod, pot),
@@ -672,6 +716,7 @@ export function CashierPOS() {
           paid_amount: paidAmount,
           payment_proof_url: proofUrl,
           discount_amount: packageId ? 0 : discountAmount,
+          discount_id: discountPick.discountId || undefined,
           remaining_amount: remaining,
           created_by: user?.id,
           items: pricedCart.map((line, index) => ({
@@ -690,10 +735,11 @@ export function CashierPOS() {
           title: 'Booking charged',
           subtitle: `Pickup is on Rentals · #${bookingId.slice(-8)}`,
           amount: paidAmount || total,
-          fee: booking.transaction_fee ?? transactionFee(paidAmount, toBookingPayment(payCoverage, payChannel), feeRules, feeRuleId),
+          fee: booking.transaction_fee ?? transactionFee(paidAmount, toBookingPayment(payCoverage, payChannel), feeRules, feeRuleId, pot),
           via: isQrisMethod(payChannel) ? 'QRIS' : 'EDC',
         });
         success('Booking created', 'Rental is waiting for pickup');
+        discountPick.reset();
         if (paidAmount > 0) {
           try {
             const invoice = await issueBookingInvoice({
@@ -721,6 +767,40 @@ export function CashierPOS() {
   };
 
   const inCartIds = useMemo(() => new Set(cart.map((line) => line.item.id)), [cart]);
+
+  // Only discounts this customer, this total and these items qualify for. The
+  // list comes from the backend, so anything offered here is accepted on save.
+  const offered = offeredDiscounts(discountPick.eligible, discountPick.code);
+  const discountPicker = (
+    <div className="grid grid-cols-1 gap-3">
+      <Select
+        searchable={false}
+        label="Promo discount"
+        value={discountPick.discountId}
+        onChange={(e) => discountPick.setDiscountId(e.target.value)}
+        disabled={offered.offered.length === 0}
+        options={[
+          { value: '', label: 'No discount' },
+          ...offered.offered.map((d) => ({ value: d.id, label: discountOptionLabel(d, gross) })),
+        ]}
+        helperText={discountPickerHelp({
+          loading: discountPick.loading,
+          picked: offered.offered.find((d) => d.id === discountPick.discountId),
+          offeredCount: offered.offered.length,
+          total: gross,
+          hasCustomer: !!customer,
+        })}
+        data-testid="pos-discount-pick"
+      />
+      <Input
+        label="Discount code"
+        value={discountPick.code}
+        onChange={(e) => discountPick.setCode(e.target.value.toUpperCase())}
+        placeholder="Only if the customer has one"
+        helperText={discountCodeHelp(discountPick.code, offered.codeMatch, offered.codeOnlyCount)}
+      />
+    </div>
+  );
 
   const checkoutPanel = (
     <div className="flex h-full min-h-0 flex-col">
@@ -1025,6 +1105,8 @@ export function CashierPOS() {
           />
         )}
 
+        {mode === 'rental' && discountPicker}
+
         <Input
           label="Notes"
           value={notes}
@@ -1052,6 +1134,12 @@ export function CashierPOS() {
             <div className="flex justify-between text-slate-500">
               <span>Subtotal</span>
               <span className="tabular-nums">{formatCurrency(gross)}</span>
+            </div>
+          )}
+          {pickedDiscountAmount > 0 && (
+            <div className="flex justify-between text-slate-500" data-testid="pos-promo-discount">
+              <span>Promo discount</span>
+              <span className="tabular-nums">−{formatCurrency(pickedDiscountAmount)}</span>
             </div>
           )}
           {mode === 'rental' && (

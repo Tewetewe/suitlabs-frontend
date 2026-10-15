@@ -17,7 +17,7 @@ import NewCustomerModal from '@/components/modals/NewCustomerModal';
 import { ProofPick } from '@/components/payments/ProofPick';
 import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
 import { formatCurrency } from '@/lib/currency';
-import { discountAmountFor, discountOptionLabel } from '@/lib/discount';
+import { discountCodeHelp, discountOptionLabel, discountPickerHelp, offeredDiscounts as offeredDiscountsFor } from '@/lib/discount';
 import { TRANSACTION_FEE_LABEL, transactionFee } from '@/lib/transaction-fee';
 import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
@@ -46,6 +46,8 @@ import { useRememberedState } from '@/hooks/useRememberedState';
 import { currentMonthRange } from '@/lib/date';
 import { useToast } from '@/contexts/ToastContext';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
+import { bookingGross, bookingPayNow, defaultTrousersCode, newBookingStatuses, repriceForLength, typedSubtotal as readTypedSubtotal } from '@/lib/booking-draft';
+import { useBookingDiscountPick } from '@/hooks/useBookingDiscountPick';
 
 type BookingFormItem = {
   item_id: string;
@@ -83,6 +85,22 @@ async function fetchItemOptionsPage(query: string, page: number, type?: 'trouser
   } catch {
     return { options: [], hasMore: false };
   }
+}
+
+/** A blank New Booking form. Each open starts from it, so nothing carries over from an Edit. */
+function emptyBookingForm(): BookingFormState {
+  return {
+    customer_id: '',
+    booking_date: new Date().toISOString().slice(0, 10),
+    rental_length: '3d',
+    booking_guarantee: '',
+    take_deposit: false,
+    institution: 'wedding',
+    status: 'pending',
+    payment_status: 'pending',
+    payment_method: 'dp_transfer',
+    items: [{ item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue: 'any', is_addon: false }],
+  };
 }
 
 // This month, as the event day range.
@@ -170,16 +188,10 @@ export default function BookingsPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [packageOptions, setPackageOptions] = useState<Array<{ value: string; label: string; price: number }>>([]);
   const [selectedPackageId, setSelectedPackageId] = useState('');
-  /** The discount the operator picked, applied to the booking on save. */
-  const [discountId, setDiscountId] = useState('');
-  /** A code the customer quoted. It unlocks the discount that needs it. */
-  const [discountCode, setDiscountCode] = useState('');
   // A typed Subtotal; '' is the sum of the Items.
   const [subtotalInput, setSubtotalInput] = useState('');
   // A typed down payment; '' is half of the total, or what was already paid.
   const [dpInput, setDpInput] = useState('');
-  const [eligibleDiscounts, setEligibleDiscounts] = useState<Discount[]>([]);
-  const [loadingDiscounts, setLoadingDiscounts] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   /** True when the open invoice is for a payment just taken, so it goes to WhatsApp. */
@@ -213,20 +225,8 @@ export default function BookingsPage() {
     payment_status: Booking['payment_status'];
     payment_method: NonNullable<Booking['payment_method']>;
     items: Array<BookingFormItem>;
-  }>({
-    customer_id: '',
-    booking_date: new Date().toISOString().slice(0, 10),
-    rental_length: '3d',
-    booking_guarantee: '',
-    take_deposit: false,
-    institution: 'wedding',
-    status: 'pending',
-    payment_status: 'pending',
-    payment_method: 'dp_transfer',
-    items: [
-      { item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue: 'any', is_addon: false }
-    ],
-  });
+  }>(emptyBookingForm);
+  const itemIdsKey = useMemo(() => Array.from(new Set(bookingForm.items.map(it => it.item_id).filter(Boolean))).sort().join(','), [bookingForm.items]);
 
   const selectedPackage = packageOptions.find(p => p.value === selectedPackageId);
   const packagePrice = selectedPackage?.price || 0;
@@ -245,10 +245,11 @@ export default function BookingsPage() {
   const canEditSubtotal = !selectedPackageId
     && bookingForm.items.some((it) => it.item_id)
     && !(isEditModalOpen && paidLocked);
-  const typedSubtotal = canEditSubtotal ? Number(subtotalInput) || 0 : 0;
-  const subtotalTooLow = typedSubtotal > 0 && typedSubtotal < itemsSubtotal;
-  const extraCharge = typedSubtotal > itemsSubtotal ? typedSubtotal - itemsSubtotal : 0;
-  const bookingTotal = packagePrice > 0 ? packagePrice + addonSubtotal : itemsSubtotal + extraCharge;
+  const { tooLow: subtotalTooLow, extra: extraCharge } = readTypedSubtotal(
+    canEditSubtotal ? Number(subtotalInput) || 0 : 0,
+    itemsSubtotal,
+  );
+  const bookingTotal = bookingGross({ packagePrice, addonSubtotal, itemsSubtotal, extra: extraCharge });
   // The Items as saved: the extra of a typed Subtotal sits on the main line.
   const pricedItems = (items: BookingFormState['items']) => {
     const lines = items.map((it) => ({ quantity: it.quantity, unit_price: it.unit_price }));
@@ -269,10 +270,22 @@ export default function BookingsPage() {
   const bookingDiscount = packagePrice > 0 ? addonDiscount : itemsDiscount;
   const itemsFinal = bookingTotal - bookingDiscount;
   // The picked discount is applied on save, before the payment is taken.
-  const pickedDiscount = eligibleDiscounts.find((discount) => discount.id === discountId);
-  const pickedDiscountAmount = pickedDiscount
-    ? Math.min(discountAmountFor(pickedDiscount, bookingTotal), itemsFinal)
-    : 0;
+  const {
+    eligible: eligibleDiscounts,
+    loading: loadingDiscounts,
+    discountId,
+    setDiscountId,
+    code: discountCode,
+    setCode: setDiscountCode,
+    reset: resetDiscountPick,
+    amountOff: discountOff,
+  } = useBookingDiscountPick({
+    open: isCreateModalOpen || isEditModalOpen,
+    customerId: bookingForm.customer_id,
+    total: bookingTotal,
+    itemIds: itemIdsKey,
+  });
+  const pickedDiscountAmount = discountOff(bookingTotal, itemsFinal);
   const bookingFinal = itemsFinal - pickedDiscountAmount;
   // Mirrors Booking.TakeBookingPayment: a down payment takes half of the amount
   // due, a full payment takes all of it, and an edit never lowers money taken.
@@ -286,13 +299,7 @@ export default function BookingsPage() {
   // booking takes half and an edit keeps what was already paid.
   const typedDownPayment = isDownPayment ? Number(dpInput) || 0 : 0;
   const downPaymentTooHigh = typedDownPayment > bookingFinal;
-  const defaultDownPayment = alreadyPaid > 0
-    ? Math.min(alreadyPaid, bookingFinal)
-    : Math.min(Math.ceil(bookingFinal * 0.5), bookingFinal);
-  const paymentDue = isDownPayment
-    ? (typedDownPayment > 0 ? Math.min(typedDownPayment, bookingFinal) : defaultDownPayment)
-    : bookingFinal;
-  const payNow = Math.max(0, Math.min(Math.max(paymentDue, alreadyPaid), bookingFinal));
+  const payNow = bookingPayNow({ total: bookingFinal, downPayment: isDownPayment, typedDownPayment, alreadyPaid });
   const remainingAmount = bookingFinal - payNow;
   // Only the money taken on this save is charged now, so an edit counts the
   // Transaction Fee on the top-up alone.
@@ -325,14 +332,7 @@ export default function BookingsPage() {
         next.booking_date = pickup;
         next.appointment_date = ret;
       }
-      if (length !== prev.rental_length) {
-        next.items = prev.items.map(it => {
-          const item = itemCacheRef.current.get(it.item_id);
-          return item && it.unit_price === rentalPrice(item, prev.rental_length)
-            ? { ...it, unit_price: rentalPrice(item, length) }
-            : it;
-        });
-      }
+      next.items = repriceForLength(prev.items, (it) => itemCacheRef.current.get(it.item_id), prev.rental_length, length);
       return next;
     });
     if (formErrors.booking_date) setFormErrors(prev => ({ ...prev, booking_date: '' }));
@@ -371,7 +371,6 @@ export default function BookingsPage() {
   const [itemLabels, setItemLabels] = useState<Record<string, string>>({});
   // Suits that already got their default trousers once. The operator can remove those trousers to book the Suit only.
   const pairedSuitIdsRef = useRef<Set<string>>(new Set());
-  const itemIdsKey = useMemo(() => Array.from(new Set(bookingForm.items.map(it => it.item_id).filter(Boolean))).sort().join(','), [bookingForm.items]);
   useEffect(() => {
     const fillItemsAndPairTrousers = async () => {
       try {
@@ -397,12 +396,12 @@ export default function BookingsPage() {
           if (cached) labels[id] = itemOptionLabel(cached);
         }
         for (const id of uniqueIds) {
-          const item = itemCacheRef.current.get(id);
-          if (!item?.trousers_code || (item.type !== 'suit' && item.type !== 'jacket')) continue;
+          const trousersCode = defaultTrousersCode(itemCacheRef.current.get(id));
+          if (!trousersCode) continue;
           if (pairedSuitIdsRef.current.has(id)) continue;
           pairedSuitIdsRef.current.add(id);
           try {
-            const trousers = await apiClient.getItemByCode(item.trousers_code);
+            const trousers = await apiClient.getItemByCode(trousersCode);
             if (trousers?.id) {
               itemCacheRef.current.set(trousers.id, trousers);
               labels[trousers.id] = itemOptionLabel(trousers);
@@ -438,65 +437,6 @@ export default function BookingsPage() {
     };
     fillItemsAndPairTrousers();
   }, [itemIdsKey]);
-
-  /**
-   * Keep the discount picker in step with the form.
-   *
-   * Eligibility depends on the Customer, the total and the Items, and all three
-   * change while the operator works. The backend decides — the form never guesses — so this
-   * re-asks on every change, 400 ms after the typing stops. A stale reply is
-   * dropped so a slow request cannot overwrite a newer list.
-   */
-  const discountPickerOpen = isCreateModalOpen || isEditModalOpen;
-  useEffect(() => {
-    if (!discountPickerOpen) return;
-    let live = true;
-    setLoadingDiscounts(true);
-    const timer = setTimeout(async () => {
-      try {
-        const list = await apiClient.getEligibleBookingDiscounts(
-          bookingForm.customer_id,
-          bookingTotal,
-          itemIdsKey ? itemIdsKey.split(',') : [],
-        );
-        if (!live) return;
-        setEligibleDiscounts(list);
-        // A discount that no longer fits must not stay picked, or the save
-        // silently drops it after the booking is already written.
-        setDiscountId((current) => (current && !list.some((d) => d.id === current) ? '' : current));
-      } catch (err) {
-        if (!live) return;
-        console.error('Failed to load eligible discounts', err);
-        setEligibleDiscounts([]);
-      } finally {
-        if (live) setLoadingDiscounts(false);
-      }
-    }, 400);
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [discountPickerOpen, bookingForm.customer_id, bookingTotal, itemIdsKey]);
-
-  /**
-   * A quoted code picks its own discount, and clearing the code drops it again.
-   *
-   * The operator types what the customer shows and the discount lands in the
-   * picker already selected. Nothing else is touched, so a code cannot override
-   * a discount the operator chose by hand.
-   */
-  useEffect(() => {
-    const typed = discountCode.trim().toUpperCase();
-    if (!typed) {
-      setDiscountId((current) => {
-        const held = eligibleDiscounts.find((discount) => discount.id === current);
-        return held?.requires_code ? '' : current;
-      });
-      return;
-    }
-    const match = eligibleDiscounts.find((discount) => (discount.code || '').toUpperCase() === typed);
-    if (match) setDiscountId(match.id);
-  }, [discountCode, eligibleDiscounts]);
 
   const addItemLine = (catalogue: 'any' | 'trousers' = 'any', isAddon = false) => {
     setBookingForm(prev => ({ ...prev, items: [...prev.items, { item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue, is_addon: isAddon }] }));
@@ -550,8 +490,8 @@ export default function BookingsPage() {
         security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
         institution: bookingForm.institution,
         notes: bookingForm.notes,
-        status: bookingForm.status,
-        payment_status: bookingForm.payment_status,
+        // Money taken confirms the booking, as in the cashier POS.
+        ...newBookingStatuses(payNow, bookingFinal),
         payment_method: bookingForm.payment_method,
         fee_rule_id: bookingFeeRuleId || undefined,
         pot: potForRequest(bookingForm.payment_method, bookingPot),
@@ -575,21 +515,7 @@ export default function BookingsPage() {
 
       const created = await apiClient.createBooking(payload as unknown as import('@/types').CreateBookingRequest);
       setIsCreateModalOpen(false);
-      setBookingForm({
-        customer_id: '',
-        booking_date: new Date().toISOString().slice(0, 10),
-        rental_length: '3d',
-        booking_guarantee: '',
-        take_deposit: false,
-        institution: 'wedding',
-        status: 'pending',
-        payment_status: 'pending',
-        payment_method: 'dp_transfer',
-        items: [{ item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue: 'any', is_addon: false }],
-      });
-      setDiscountId('');
-      setDiscountCode('');
-      setSubtotalInput(''); setDpInput('');
+      clearBookingDraft();
       await reload();
       if (created?.id && (created.paid_amount || payNow) > 0) {
         await openIssuedInvoice({
@@ -604,6 +530,24 @@ export default function BookingsPage() {
     } finally {
       setCreating(false);
     }
+  };
+
+  // Every booking the form holds starts clean: the form, the package, the
+  // trousers already paired, the discount, and the money fields.
+  const clearBookingDraft = () => {
+    setBookingForm(emptyBookingForm());
+    setSelectedPackageId('');
+    pairedSuitIdsRef.current = new Set();
+    resetDiscountPick();
+    setSubtotalInput(''); setDpInput('');
+    setBookingFeeRuleId(''); setBookingPot('');
+    setFormErrors({});
+  };
+
+  const openCreate = () => {
+    setActiveBooking(null);
+    clearBookingDraft();
+    setIsCreateModalOpen(true);
   };
 
   const openEdit = (booking: Booking) => {
@@ -643,8 +587,8 @@ export default function BookingsPage() {
       return next;
     });
     setSelectedPackageId(booking.package_pricing_id || '');
-    setDiscountId('');
-    setDiscountCode('');
+    resetDiscountPick();
+    setFormErrors({});
     setSubtotalInput(''); setDpInput('');
     setBookingFeeRuleId(''); setBookingPot('');
     setIsEditModalOpen(true);
@@ -736,8 +680,7 @@ export default function BookingsPage() {
       const issuedStatus = remainingAmount <= 0 ? 'completed' : paidNow > 0 ? 'partial' : 'pending';
       setIsEditModalOpen(false);
       setActiveBooking(null);
-      setDiscountId('');
-      setDiscountCode('');
+      resetDiscountPick();
       setSubtotalInput(''); setDpInput('');
       await reload();
       if (paidNow > previousPaid) {
@@ -772,20 +715,23 @@ export default function BookingsPage() {
   const fetchTrousersPage = useCallback((query: string, page: number) => fetchItemOptionsPage(query, page, 'trousers'), []);
 
   // Load package pricing when modal opens
+  const editedPackageId = isEditModalOpen ? activeBooking?.package_pricing_id : undefined;
   useEffect(() => {
     const loadPackages = async () => {
       try {
         const pkgs = await apiClient.getPackagePricing();
         setPackageOptions([
           { value: '', label: 'No Package', price: 0 },
-          ...pkgs.map((p: PackagePricing) => ({ value: p.id, label: `${p.package_name} • ${formatCurrency(p.price)}` as string, price: p.price }))
+          // Only live packages are offered, as in the cashier POS. An edited
+          // booking still shows the package it has.
+          ...pkgs.filter((p: PackagePricing) => p.is_active || p.id === editedPackageId).map((p: PackagePricing) => ({ value: p.id, label: `${p.package_name} • ${formatCurrency(p.price)}` as string, price: p.price }))
         ]);
       } catch (e) {
         console.error('Failed to load packages', e);
       }
     };
     if (isCreateModalOpen || isEditModalOpen) loadPackages();
-  }, [isCreateModalOpen, isEditModalOpen]);
+  }, [isCreateModalOpen, isEditModalOpen, editedPackageId]);
 
   const handleSelectPackage = (pkgId: string) => {
     setSelectedPackageId(pkgId);
@@ -974,7 +920,7 @@ export default function BookingsPage() {
             <Link href="/dashboard/cashier">
               <Button size="md" variant="secondary">Cashier POS</Button>
             </Link>
-            <Button size="md" onClick={() => { setDiscountId(''); setDiscountCode(''); setSubtotalInput(''); setDpInput(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}>
+            <Button size="md" onClick={openCreate}>
               <Plus className="h-4 w-4" />
               New Booking
             </Button>
@@ -1040,7 +986,7 @@ export default function BookingsPage() {
               icon={<Calendar className="h-10 w-10" />}
               title="No bookings found"
               description={Object.values(filters).some(v => v) ? 'Try adjusting your filters' : 'Get started by creating your first booking'}
-              action={<Button onClick={() => { setDiscountId(''); setDiscountCode(''); setSubtotalInput(''); setDpInput(''); setBookingFeeRuleId(''); setBookingPot(''); setIsCreateModalOpen(true); }}><Plus className="h-4 w-4" /> New Booking</Button>}
+              action={<Button onClick={openCreate}><Plus className="h-4 w-4" /> New Booking</Button>}
             />
           ) : (
             (Array.isArray(bookings) ? bookings : []).map((booking) => {
@@ -1139,6 +1085,7 @@ export default function BookingsPage() {
             bookingForm={bookingForm}
             availabilityNoteFor={availabilityNoteFor}
             requireEventDate
+            showStatus={false}
             formErrors={formErrors}
             selectedPackageId={selectedPackageId}
             packageOptions={packageOptions}
@@ -1406,6 +1353,7 @@ function BookingFormFields({
   itemsLocked = locked,
   paidTotal,
   paidFloor,
+  showStatus = true,
   fetchCustomerOptions,
   itemLabels,
   availabilityNoteFor,
@@ -1447,6 +1395,8 @@ function BookingFormFields({
   paidTotal?: number;
   /** The money a booking already took. An upgrade or a downgrade keeps the total at or above it. */
   paidFloor?: { amount: number; below: boolean };
+  /** The Status pickers. A new booking takes its statuses from the money, so it hides them. */
+  showStatus?: boolean;
   fetchCustomerOptions: (query: string) => Promise<{ value: string; label: string }[]>;
   itemLabels: Record<string, string>;
   /** Free, same-day handover, or booked, for an item on the form's dates. */
@@ -1472,33 +1422,16 @@ function BookingFormFields({
   // A discount that needs a code belongs to the customer who quotes it, so the
   // picker only offers the ones that apply on their own. Typing the code adds
   // that one discount to the list.
-  const typedCode = discountCode.trim().toUpperCase();
-  const codeMatch = typedCode
-    ? eligibleDiscounts.find((discount) => (discount.code || '').toUpperCase() === typedCode)
-    : undefined;
-  const offeredDiscounts = eligibleDiscounts.filter(
-    (discount) => !discount.requires_code || discount.id === codeMatch?.id,
-  );
+  const { offered: offeredDiscounts, codeMatch, codeOnlyCount } = offeredDiscountsFor(eligibleDiscounts, discountCode);
   const picked = offeredDiscounts.find((discount) => discount.id === discountId);
-  const codeOnlyCount = eligibleDiscounts.length - offeredDiscounts.length;
-
-  const discountHelperText = loadingDiscounts
-    ? 'Checking which discounts fit…'
-    : picked
-      ? `Takes ${formatCurrency(discountAmountFor(picked, bookingTotal))} off when you save.`
-      : offeredDiscounts.length > 0
-        ? `${offeredDiscounts.length} discount${offeredDiscounts.length === 1 ? '' : 's'} fit this booking.`
-        : bookingForm.customer_id
-          ? 'No discount fits this customer and total yet.'
-          : 'Pick the customer first to see their discounts.';
-
-  const codeHelperText = !typedCode
-    ? codeOnlyCount > 0
-      ? `${codeOnlyCount} more discount${codeOnlyCount === 1 ? '' : 's'} unlock${codeOnlyCount === 1 ? 's' : ''} with a code.`
-      : 'Type a code the customer quotes.'
-    : codeMatch
-      ? `${codeMatch.name} is now in the Discount list.`
-      : 'No discount here matches that code.';
+  const discountHelperText = discountPickerHelp({
+    loading: loadingDiscounts,
+    picked,
+    offeredCount: offeredDiscounts.length,
+    total: bookingTotal,
+    hasCustomer: !!bookingForm.customer_id,
+  });
+  const codeHelperText = discountCodeHelp(discountCode, codeMatch, codeOnlyCount);
 
   return (
     <div className="space-y-6">
@@ -1790,6 +1723,7 @@ function BookingFormFields({
             ]}
             error={formErrors.institution}
           />
+          {showStatus && (<>
           <Select
             searchable={false}
             label="Status"
@@ -1816,6 +1750,7 @@ function BookingFormFields({
             ]}
             disabled={locked}
           />
+          </>)}
         </div>
         <Textarea
           label="Notes"
