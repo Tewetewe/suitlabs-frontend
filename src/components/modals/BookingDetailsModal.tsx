@@ -80,9 +80,10 @@ export function BookingDetailsModal({
   const total = Math.max(0, (booking.total_amount || 0) - (booking.discount_amount || 0));
   const paid = booking.paid_amount || 0;
   const remaining = booking.remaining_amount ?? Math.max(0, total - paid);
-  // The page passes onEdit only when the booking may be edited: not fully
-  // paid, or a legacy booking for Admin.
-  const canEdit = Boolean(onEdit) && (booking.payment_status !== 'completed' || Boolean(booking.legacy_ref));
+  // The page passes onEdit only when the booking may be edited, so the rule
+  // lives in one place: not fully paid, a paid one before Pickup for an
+  // upgrade or a downgrade, or a legacy booking for Admin.
+  const canEdit = Boolean(onEdit);
   const canCollect = Boolean(onCollectBalance) && booking.payment_status === 'partial' && remaining > 0;
 
   return (
@@ -99,7 +100,7 @@ export function BookingDetailsModal({
               Delete
             </Button>
           )}
-          {canEdit && !canCollect && (
+          {canEdit && (
             <Button variant="secondary" onClick={onEdit}>Edit</Button>
           )}
           {onInvoice && booking.status !== 'cancelled' && (
