@@ -73,10 +73,13 @@ test.describe('Booking and rental lifecycle', () => {
     await expect(rental.getByText('cancelled')).toBeVisible();
   });
 
-  test('E2E-15 fully paid booking hides Edit and Collect balance', async ({ page }) => {
+  test('E2E-15 fully paid booking hides Collect balance but can still upgrade before pickup', async ({ page }) => {
     const customer = await createPosBooking(page, 'full');
     const booking = await searchBooking(page, customer.fullName);
-    await expectHiddenRowActions(booking, ['Edit', 'Collect balance']);
+    await expectHiddenRowActions(booking, ['Collect balance']);
+    await clickRowAction(booking, 'Edit');
+    await expect(page.getByRole('heading', { name: 'Edit Booking' })).toBeVisible();
+    await expect(page.getByTestId('booking-paid-floor')).toContainText('A downgrade cannot go below');
   });
 
   test('E2E-21 never collected: cancel pending rental with a reason', async ({ page }) => {

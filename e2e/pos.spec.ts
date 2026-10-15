@@ -39,7 +39,7 @@ test.describe('POS variants', () => {
     }
 
     await page.getByRole('button', { name: 'Wedding Package (24h)' }).click();
-    await expect(page.getByLabel('Discount')).toHaveCount(0);
+    await expect(page.getByLabel('Discount', { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Items are included in the package/)).toBeVisible();
     await page.getByRole('button', { name: 'Included' }).first().click();
     await expect(page.getByRole('button', { name: 'Add-on' })).toBeVisible();

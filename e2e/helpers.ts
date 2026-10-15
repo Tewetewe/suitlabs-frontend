@@ -229,7 +229,7 @@ export async function expectHiddenRowActions(row: Locator, names: string[]) {
   await expect(menu).toHaveCount(0);
 }
 
-export async function setPosDate(page: Page, testId: 'pos-rental-date' | 'pos-return-date', value: string) {
+export async function setPosDate(page: Page, testId: 'pos-event-date' | 'pos-rental-date' | 'pos-return-date', value: string) {
   await expect(async () => {
     await page.getByTestId(testId).evaluate((el, v) => {
       const input = el as HTMLInputElement & { _valueTracker?: { setValue: (next: string) => void } };
@@ -245,6 +245,8 @@ export async function setPosDate(page: Page, testId: 'pos-rental-date' | 'pos-re
 }
 
 export async function fillPosDates(page: Page, start: string, end: string) {
+  // The event day comes first: the POS takes no Item and no charge without it.
+  await setPosDate(page, 'pos-event-date', start);
   await setPosDate(page, 'pos-rental-date', start);
   await setPosDate(page, 'pos-return-date', end);
   await expect(page.locator('.animate-skeleton')).toHaveCount(0, { timeout: 20_000 });
@@ -359,7 +361,7 @@ export async function createPosBooking(
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByTestId('pos-customer')).toContainText(customer.fullName);
   if (opts.discount) {
-    await page.getByLabel('Discount').fill(opts.discount);
+    await page.getByLabel('Discount', { exact: true }).fill(opts.discount);
   }
   if (coverage === 'full') {
     await page.getByTestId('pos-pay-full').click();

@@ -56,3 +56,49 @@ export function discountOptionLabel(discount: DiscountLike, total: number): stri
   }
   return parts.join(' · ');
 }
+
+/**
+ * The discounts a picker offers. A discount that needs a code belongs to the
+ * customer who quotes it, so it shows only when the typed code matches.
+ */
+export function offeredDiscounts<D extends DiscountLike & { id: string }>(
+  eligible: D[],
+  code: string,
+): { offered: D[]; codeMatch?: D; codeOnlyCount: number } {
+  const typed = code.trim().toUpperCase();
+  const codeMatch = typed
+    ? eligible.find((discount) => (discount.code || '').toUpperCase() === typed)
+    : undefined;
+  const offered = eligible.filter((discount) => !discount.requires_code || discount.id === codeMatch?.id);
+  return { offered, codeMatch, codeOnlyCount: eligible.length - offered.length };
+}
+
+/** The helper line under the Discount picker. */
+export function discountPickerHelp({
+  loading,
+  picked,
+  offeredCount,
+  total,
+  hasCustomer,
+}: {
+  loading: boolean;
+  picked?: DiscountLike;
+  offeredCount: number;
+  total: number;
+  hasCustomer: boolean;
+}): string {
+  if (loading) return 'Checking which discounts fit…';
+  if (picked) return `Takes ${formatCurrency(discountAmountFor(picked, total))} off when you save.`;
+  if (offeredCount > 0) return `${offeredCount} discount${offeredCount === 1 ? '' : 's'} fit this booking.`;
+  return hasCustomer ? 'No discount fits this customer and total yet.' : 'Pick the customer first to see their discounts.';
+}
+
+/** The helper line under the discount code field. */
+export function discountCodeHelp(code: string, codeMatch: DiscountLike | undefined, codeOnlyCount: number): string {
+  if (!code.trim()) {
+    return codeOnlyCount > 0
+      ? `${codeOnlyCount} more discount${codeOnlyCount === 1 ? '' : 's'} unlock${codeOnlyCount === 1 ? 's' : ''} with a code.`
+      : 'Type a code the customer quotes.';
+  }
+  return codeMatch ? `${codeMatch.name} is now in the Discount list.` : 'No discount here matches that code.';
+}
