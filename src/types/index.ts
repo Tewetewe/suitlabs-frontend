@@ -1036,6 +1036,8 @@ export interface Booking {
   id: string;
   /** Set on a booking imported from the legacy sheet. Admin may edit it even when fully paid. */
   legacy_ref?: string;
+  /** The bank of the last non-cash payment: bca or bni. Empty for cash or none named. */
+  payment_pot?: string;
   customer_id: string;
   customer?: Customer;
   /** The Pickup date. */

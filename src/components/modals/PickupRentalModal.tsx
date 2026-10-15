@@ -11,7 +11,7 @@ import { RackPullList } from '@/components/items/RackPullList';
 import { ProofPick } from '@/components/payments/ProofPick';
 import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
 import { PotPicker } from '@/components/payments/PotPicker';
-import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing, savedBankPot } from '@/lib/pots';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
@@ -99,7 +99,8 @@ export function PickupRentalModal({
     setDepositMethod('cash');
     setRemainingMethod('cash');
     setRemainingFeeRuleId('');
-    setRemainingPot('');
+    // The balance most likely goes to the bank the booking was paid into.
+    setRemainingPot(savedBankPot(rental.booking?.payment_pot));
     setDepositPot('');
     setBankName(rental.deposit_bank_name || '');
     setAccountName(rental.deposit_account_name || '');

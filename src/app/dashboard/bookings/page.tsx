@@ -21,7 +21,7 @@ import { discountCodeHelp, discountOptionLabel, discountPickerHelp, offeredDisco
 import { TRANSACTION_FEE_LABEL, transactionFee } from '@/lib/transaction-fee';
 import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
-import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing, savedBankPot } from '@/lib/pots';
 import { formatDateShort } from '@/lib/date';
 import { RENTAL_LENGTHS, type RentalLength, rentalPrice, rentalWindow } from '@/lib/rental-window';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
@@ -590,7 +590,8 @@ export default function BookingsPage() {
     resetDiscountPick();
     setFormErrors({});
     setSubtotalInput(''); setDpInput('');
-    setBookingFeeRuleId(''); setBookingPot('');
+    // The bank the customer paid into before, as picked at the cashier.
+    setBookingFeeRuleId(''); setBookingPot(savedBankPot(booking.payment_pot));
     setIsEditModalOpen(true);
   };
 
@@ -1045,7 +1046,7 @@ export default function BookingsPage() {
                           </OverflowMenuItem>
                         )}
                         {booking.payment_status === 'partial' && booking.remaining_amount > 0 && (
-                          <OverflowMenuItem icon={<CreditCard className="h-4 w-4 text-slate-400" />} onClick={() => { setPayFeeRuleId(''); setPayPot(''); setPayingBooking(booking); }}>
+                          <OverflowMenuItem icon={<CreditCard className="h-4 w-4 text-slate-400" />} onClick={() => { setPayFeeRuleId(''); setPayPot(savedBankPot(booking.payment_pot)); setPayingBooking(booking); }}>
                             Collect balance
                           </OverflowMenuItem>
                         )}
@@ -1221,7 +1222,7 @@ export default function BookingsPage() {
           }}
           onCollectBalance={
             activeBooking && activeBooking.payment_status === 'partial' && (activeBooking.remaining_amount || 0) > 0
-              ? () => { setPayFeeRuleId(''); setPayPot(''); setPayingBooking(activeBooking); }
+              ? () => { setPayFeeRuleId(''); setPayPot(savedBankPot(activeBooking.payment_pot)); setPayingBooking(activeBooking); }
               : undefined
           }
           onDelete={isAdmin && activeBooking ? () => setDeletingBooking(activeBooking) : undefined}
