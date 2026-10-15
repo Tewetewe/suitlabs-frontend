@@ -15,6 +15,7 @@ import {
   Item, 
   Customer, 
   Booking, 
+  BookingPayment,
   Rental, 
   PickupPrep,
   PickupPrepDay,
@@ -729,6 +730,14 @@ class APIClient {
   async getBooking(id: string): Promise<Booking> {
     const response = await this.client.get<APIResponse<Booking>>(`/api/v1/bookings/${id}`);
     return response.data.data!;
+  }
+
+  /** Each payment and refund of a Booking, with the Pot it moved, from the books. */
+  async getBookingPayments(bookingId: string): Promise<BookingPayment[]> {
+    const response = await this.client.get<APIResponse<{ payments: BookingPayment[] }>>(
+      `/api/v1/bookings/${encodeURIComponent(bookingId)}/payments`,
+    );
+    return response.data.data?.payments || [];
   }
 
   async getBookingByInvoice(barcode: string): Promise<Booking> {

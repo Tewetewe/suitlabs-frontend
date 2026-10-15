@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   bookingGross,
+  bookingItemsChanged,
   bookingPayNow,
   defaultTrousersCode,
   halfDownPayment,
@@ -75,5 +76,14 @@ describe('defaultTrousersCode', () => {
     assert.equal(defaultTrousersCode({ type: 'jacket', trousers_code: 'TR-2' }), 'TR-2');
     assert.equal(defaultTrousersCode({ type: 'shirt', trousers_code: 'TR-3' }), '');
     assert.equal(defaultTrousersCode(undefined), '');
+  });
+});
+
+describe('bookingItemsChanged', () => {
+  it('sees a swap or a new quantity, not a new order', () => {
+    const before = [{ item_id: 'suit', quantity: 1 }, { item_id: 'tie', quantity: 1 }];
+    assert.equal(bookingItemsChanged(before, [{ item_id: 'tie', quantity: 1 }, { item_id: 'suit', quantity: 1 }]), false);
+    assert.equal(bookingItemsChanged(before, [{ item_id: 'suit-2', quantity: 1 }, { item_id: 'tie', quantity: 1 }]), true);
+    assert.equal(bookingItemsChanged(before, [{ item_id: 'suit', quantity: 2 }, { item_id: 'tie', quantity: 1 }]), true);
   });
 });

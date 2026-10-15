@@ -1032,10 +1032,26 @@ export type BookingInstitution =
   | 'tk';
 
 // Booking Types
+
+/** One payment or refund of a Booking, read from the books. */
+export interface BookingPayment {
+  /** The shop day the money moved (YYYY-MM-DD). */
+  paid_on: string;
+  kind: 'payment' | 'refund';
+  amount: number;
+  /** cash, transfer, qris, debit, or cc. */
+  method?: string;
+  /** cash, bca, bni, or bank (unassigned). */
+  pot: string;
+  memo?: string;
+}
+
 export interface Booking {
   id: string;
   /** Set on a booking imported from the legacy sheet. Admin may edit it even when fully paid. */
   legacy_ref?: string;
+  /** The bank of the last non-cash payment: bca or bni. Empty for cash or none named. */
+  payment_pot?: string;
   customer_id: string;
   customer?: Customer;
   /** The Pickup date. */
@@ -1052,6 +1068,8 @@ export interface Booking {
   institution?: BookingInstitution | '';
   total_amount: number;
   discount_amount: number;
+  /** The amount after Discount: what the customer owes in all. */
+  final_amount?: number;
   paid_amount: number;
   remaining_amount: number;
   /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */

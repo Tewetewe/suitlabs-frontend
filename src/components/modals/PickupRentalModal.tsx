@@ -10,14 +10,15 @@ import CameraModal from './CameraModal';
 import { RackPullList } from '@/components/items/RackPullList';
 import { ProofPick } from '@/components/payments/ProofPick';
 import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
+import { PaymentMethodPicker, payChannelOf } from '@/components/payments/PaymentMethodPicker';
 import { PotPicker } from '@/components/payments/PotPicker';
-import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing, savedBankPot } from '@/lib/pots';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
-import { DEPOSIT_PAYMENT_METHOD_OPTIONS, SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
+import { DEPOSIT_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { waDeliveryLabel } from '@/lib/wa-delivery';
-import { PickupPrep, Rental } from '@/types';
+import { PickupPrep, Rental, SalePaymentMethod } from '@/types';
 
 function rentalsFromUserResponse(payload: unknown): Rental[] {
   if (!payload || typeof payload !== 'object') return [];
@@ -64,7 +65,7 @@ export function PickupRentalModal({
   const [uploading, setUploading] = useState(false);
   const [sendingAgreement, setSendingAgreement] = useState(false);
   const [depositMethod, setDepositMethod] = useState('cash');
-  const [remainingMethod, setRemainingMethod] = useState('cash');
+  const [remainingMethod, setRemainingMethod] = useState<SalePaymentMethod>('cash');
   const [remainingFeeRuleId, setRemainingFeeRuleId] = useState('');
   const [remainingPot, setRemainingPot] = useState('');
   const [depositPot, setDepositPot] = useState('');
@@ -97,9 +98,11 @@ export function PickupRentalModal({
   useEffect(() => {
     if (!isOpen || !rental) return;
     setDepositMethod('cash');
-    setRemainingMethod('cash');
+    // The balance starts at the booking's own method, as on Collect balance.
+    setRemainingMethod(payChannelOf(rental.booking?.payment_method));
     setRemainingFeeRuleId('');
-    setRemainingPot('');
+    // The balance most likely goes to the bank the booking was paid into.
+    setRemainingPot(savedBankPot(rental.booking?.payment_pot));
     setDepositPot('');
     setBankName(rental.deposit_bank_name || '');
     setAccountName(rental.deposit_account_name || '');
@@ -185,6 +188,11 @@ export function PickupRentalModal({
   const handleSubmit = async () => {
     if (!rental) return;
     setErrors({});
+    // The Items go out only against an ID photo: a new one, or one on file.
+    if (!identityCardFile && !priorIdentityCardUrl) {
+      setErrors({ identityCard: 'Take a photo of the customer\'s KTP or passport before Pickup.' });
+      return;
+    }
     if (needsDeposit && !agreementAccepted) {
       setErrors({ submit: 'Customer must accept the deposit agreement before pickup.' });
       return;
@@ -337,13 +345,7 @@ export function PickupRentalModal({
                   <p className="text-xs text-slate-600">
                     Booking was paid as DP. Remaining balance must be settled before pickup.
                   </p>
-                  <Select
-                    searchable={false}
-                    label="Remaining paid with"
-                    options={[...SALE_PAYMENT_METHOD_OPTIONS]}
-                    value={remainingMethod}
-                    onChange={(e) => setRemainingMethod(e.target.value)}
-                  />
+                  <PaymentMethodPicker value={remainingMethod} onChange={setRemainingMethod} testIdPrefix="pickup-remaining" />
                   <TransactionFeeLines
                     amount={remainingAmount}
                     method={remainingMethod}
@@ -429,7 +431,7 @@ export function PickupRentalModal({
 
               <div>
                 <p className="mb-2 text-sm font-medium text-slate-800">
-                  Identity card photo (optional)
+                  Identity card photo <span className="text-rose-600">*</span>
                 </p>
                 {loadingPriorId && (
                   <p className="mb-2 text-xs text-slate-500">Checking for an ID already on file…</p>
@@ -437,7 +439,7 @@ export function PickupRentalModal({
                 {!loadingPriorId && priorIdentityCardUrl && !identityCardFile && (
                   <div className="mb-3 space-y-2">
                     <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                      ID already on file from a previous rental. Attach a new one only if you want to replace it.
+                      ID already on file from a previous rental. It counts for this Pickup; attach a new one only to replace it.
                     </p>
                     <SafeImage
                       src={priorIdentityCardUrl}
@@ -466,7 +468,7 @@ export function PickupRentalModal({
                 )}
                 {errors.identityCard && <p className="mt-1 text-sm text-rose-600">{errors.identityCard}</p>}
                 {!errors.identityCard && !priorIdentityCardUrl && (
-                  <p className="mt-1 text-xs text-slate-500">If the customer leaves an ID: a clear photo of the KTP or passport, under 5MB.</p>
+                  <p className="mt-1 text-xs text-slate-500">Required for Pickup: a clear photo of the KTP or passport, under 5MB.</p>
                 )}
               </div>
 

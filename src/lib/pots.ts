@@ -43,4 +43,9 @@ export function potForRequest(method?: string | null, pot?: string | null): stri
   return isNonCashMethod(method) && (pot === 'bca' || pot === 'bni') ? pot : undefined;
 }
 
+/** A saved bank Pot (bca or bni) to show again in a picker; anything else is no pick. */
+export function savedBankPot(pot?: string | null): '' | 'bca' | 'bni' {
+  return pot === 'bca' || pot === 'bni' ? pot : '';
+}
+
 export const POT_MISSING_MESSAGE = 'Pick the bank the money went to: BCA or BNI.';

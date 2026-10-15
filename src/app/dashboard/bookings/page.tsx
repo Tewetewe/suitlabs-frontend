@@ -16,17 +16,18 @@ import SimpleModal from '@/components/modals/SimpleModal';
 import NewCustomerModal from '@/components/modals/NewCustomerModal';
 import { ProofPick } from '@/components/payments/ProofPick';
 import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
+import { PaymentMethodPicker, payChannelOf } from '@/components/payments/PaymentMethodPicker';
 import { formatCurrency } from '@/lib/currency';
 import { discountCodeHelp, discountOptionLabel, discountPickerHelp, offeredDiscounts as offeredDiscountsFor } from '@/lib/discount';
 import { TRANSACTION_FEE_LABEL, transactionFee } from '@/lib/transaction-fee';
 import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
-import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
+import { POT_MISSING_MESSAGE, potForRequest, potMissing, savedBankPot } from '@/lib/pots';
 import { formatDateShort } from '@/lib/date';
 import { RENTAL_LENGTHS, type RentalLength, rentalPrice, rentalWindow } from '@/lib/rental-window';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
 import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS } from '@/lib/select-options';
-import { Booking, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing } from '@/types';
+import { Booking, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing, SalePaymentMethod } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
@@ -46,7 +47,7 @@ import { useRememberedState } from '@/hooks/useRememberedState';
 import { currentMonthRange } from '@/lib/date';
 import { useToast } from '@/contexts/ToastContext';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
-import { bookingGross, bookingPayNow, defaultTrousersCode, newBookingStatuses, repriceForLength, typedSubtotal as readTypedSubtotal } from '@/lib/booking-draft';
+import { bookingGross, bookingItemsChanged, bookingPayNow, defaultTrousersCode, newBookingStatuses, repriceForLength, typedSubtotal as readTypedSubtotal } from '@/lib/booking-draft';
 import { useBookingDiscountPick } from '@/hooks/useBookingDiscountPick';
 
 type BookingFormItem = {
@@ -199,6 +200,8 @@ export default function BookingsPage() {
   const [payingBooking, setPayingBooking] = useState<Booking | null>(null);
   const [paying, setPaying] = useState(false);
   const [payProofFile, setPayProofFile] = useState<File | null>(null);
+  // The optional receipt for the money a booking save takes, new or edit.
+  const [bookingProofFile, setBookingProofFile] = useState<File | null>(null);
   // The EDC terminal and card Staff picked, for the booking form and for the
   // remaining-balance payment. Each opener clears it, so a pick never carries
   // over to another Booking.
@@ -206,6 +209,9 @@ export default function BookingsPage() {
   const [payFeeRuleId, setPayFeeRuleId] = useState('');
   const [bookingPot, setBookingPot] = useState('');
   const [payPot, setPayPot] = useState('');
+  // How the balance is paid now. It starts at the booking's own method, and
+  // Staff may pick another, as on the cashier POS.
+  const [payMethod, setPayMethod] = useState<SalePaymentMethod>('cash');
   const feeRules = useTransactionFeeRules();
   const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -446,6 +452,18 @@ export default function BookingsPage() {
     setBookingForm(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== index) }));
   };
 
+  // Proof is optional, so a failed upload never stops the booking: the money
+  // is recorded and the proof can be attached later from the booking.
+  const uploadBookingProof = async (bookingId?: string): Promise<string | undefined> => {
+    if (!bookingProofFile || chargeNow <= 0) return undefined;
+    try {
+      return await apiClient.uploadProofFile(bookingProofFile, 'booking_payment', bookingId);
+    } catch {
+      toastError('Proof upload failed', 'The payment is still recorded. Attach the proof from the booking.');
+      return undefined;
+    }
+  };
+
   const submitCreateBooking = async () => {
     // basic validation
     const errs: Record<string, string> = {};
@@ -502,6 +520,7 @@ export default function BookingsPage() {
         discount_amount: bookingDiscount,
         remaining_amount: remainingAmount,
         discount_id: discountId || undefined,
+        payment_proof_url: await uploadBookingProof(),
         created_by: user.id, // Add the current user ID
         items: pricedItems(validItems).map(it => ({
           item_id: it.item_id,
@@ -541,6 +560,7 @@ export default function BookingsPage() {
     resetDiscountPick();
     setSubtotalInput(''); setDpInput('');
     setBookingFeeRuleId(''); setBookingPot('');
+    setBookingProofFile(null);
     setFormErrors({});
   };
 
@@ -590,7 +610,9 @@ export default function BookingsPage() {
     resetDiscountPick();
     setFormErrors({});
     setSubtotalInput(''); setDpInput('');
-    setBookingFeeRuleId(''); setBookingPot('');
+    // The bank the customer paid into before, as picked at the cashier.
+    setBookingFeeRuleId(''); setBookingPot(savedBankPot(booking.payment_pot));
+    setBookingProofFile(null);
     setIsEditModalOpen(true);
   };
 
@@ -662,6 +684,7 @@ export default function BookingsPage() {
             discount_amount: bookingDiscount,
             remaining_amount: remainingAmount,
             discount_id: discountId || undefined,
+            payment_proof_url: await uploadBookingProof(activeBooking.id),
             items: pricedItems(validItems).map(it => ({
               item_id: it.item_id,
               quantity: it.quantity,
@@ -673,22 +696,31 @@ export default function BookingsPage() {
           }
       ) as unknown as import('@/types').CreateBookingRequest;
 
-      await apiClient.updateBooking(activeBooking.id, payload as unknown as Partial<import('@/types').CreateBookingRequest>);
+      const updated = await apiClient.updateBooking(activeBooking.id, payload as unknown as Partial<import('@/types').CreateBookingRequest>);
       const previousPaid = activeBooking.paid_amount || 0;
       const issuedId = activeBooking.id;
-      const paidNow = payNow;
-      const issuedStatus = remainingAmount <= 0 ? 'completed' : paidNow > 0 ? 'partial' : 'pending';
+      const paidNow = updated?.paid_amount ?? payNow;
+      const issuedStatus = updated?.payment_status
+        ?? (remainingAmount <= 0 ? 'completed' : paidNow > 0 ? 'partial' : 'pending');
+      // An upgrade, a downgrade, or a swap of Items issues a new receipt, so
+      // it opens and sends the invoice as a new booking does. A legacy fix by
+      // Admin keeps the money and the receipt as they are.
+      const previousFinal = activeBooking.final_amount
+        ?? Math.max(0, (activeBooking.total_amount || 0) - (activeBooking.discount_amount || 0));
+      const newFinal = updated?.final_amount ?? bookingFinal;
+      const receiptChanged = !paidLocked
+        && (Math.abs(newFinal - previousFinal) > 0.009 || bookingItemsChanged(activeBooking.items, validItems));
       setIsEditModalOpen(false);
       setActiveBooking(null);
       resetDiscountPick();
       setSubtotalInput(''); setDpInput('');
       await reload();
-      if (paidNow > previousPaid) {
+      if (receiptChanged || paidNow > previousPaid) {
         await openIssuedInvoice({
           id: issuedId,
           payment_status: issuedStatus,
           paid_amount: paidNow,
-        }, false);
+        }, receiptChanged);
       }
     } catch (e) {
       console.error('Update booking failed', e);
@@ -852,7 +884,7 @@ export default function BookingsPage() {
       setPayingBooking(null);
       return;
     }
-    if (potMissing(payingBooking.payment_method, payPot)) {
+    if (potMissing(payMethod, payPot)) {
       toastError('Pick the bank', POT_MISSING_MESSAGE);
       return;
     }
@@ -869,11 +901,11 @@ export default function BookingsPage() {
       await apiClient.addPayment(
         payingBooking.id,
         payingRemaining,
-        payingBooking.payment_method || 'cash',
+        payMethod,
         new Date().toISOString().slice(0, 10),
         proofUrl,
         payFeeRuleId || undefined,
-        potForRequest(payingBooking.payment_method, payPot),
+        potForRequest(payMethod, payPot),
       );
       const paidBooking = {
         id: payingBooking.id,
@@ -1045,7 +1077,7 @@ export default function BookingsPage() {
                           </OverflowMenuItem>
                         )}
                         {booking.payment_status === 'partial' && booking.remaining_amount > 0 && (
-                          <OverflowMenuItem icon={<CreditCard className="h-4 w-4 text-slate-400" />} onClick={() => { setPayFeeRuleId(''); setPayPot(''); setPayingBooking(booking); }}>
+                          <OverflowMenuItem icon={<CreditCard className="h-4 w-4 text-slate-400" />} onClick={() => { setPayFeeRuleId(''); setPayPot(savedBankPot(booking.payment_pot)); setPayMethod(payChannelOf(booking.payment_method)); setPayingBooking(booking); }}>
                             Collect balance
                           </OverflowMenuItem>
                         )}
@@ -1130,6 +1162,8 @@ export default function BookingsPage() {
             pot={bookingPot}
             onPotChange={setBookingPot}
             remainingAmount={remainingAmount}
+            proofFile={bookingProofFile}
+            onProofChange={setBookingProofFile}
             submitError={formErrors.submit}
             loading={creating}
             submitLabel="Create"
@@ -1194,6 +1228,8 @@ export default function BookingsPage() {
             pot={bookingPot}
             onPotChange={setBookingPot}
             remainingAmount={remainingAmount}
+            proofFile={bookingProofFile}
+            onProofChange={setBookingProofFile}
             submitError={formErrors.submit}
             loading={creating}
             submitLabel="Save"
@@ -1221,7 +1257,7 @@ export default function BookingsPage() {
           }}
           onCollectBalance={
             activeBooking && activeBooking.payment_status === 'partial' && (activeBooking.remaining_amount || 0) > 0
-              ? () => { setPayFeeRuleId(''); setPayPot(''); setPayingBooking(activeBooking); }
+              ? () => { setPayFeeRuleId(''); setPayPot(savedBankPot(activeBooking.payment_pot)); setPayMethod(payChannelOf(activeBooking.payment_method)); setPayingBooking(activeBooking); }
               : undefined
           }
           onDelete={isAdmin && activeBooking ? () => setDeletingBooking(activeBooking) : undefined}
@@ -1300,8 +1336,9 @@ export default function BookingsPage() {
                 <div className="rounded-xl bg-slate-50 px-3 py-2">
                   <div className="flex justify-between"><span>Paid</span><span className="tabular-nums">{formatCurrency(payingBooking.paid_amount || 0)}</span></div>
                   <div className="flex justify-between font-semibold text-slate-900"><span>Remaining</span><span className="tabular-nums">{formatCurrency(payingRemaining)}</span></div>
-                  <TransactionFeeLines amount={payingRemaining} method={payingBooking.payment_method} pot={payPot} onPotChange={setPayPot} ruleId={payFeeRuleId} onRuleIdChange={setPayFeeRuleId} className="mt-1" />
                 </div>
+                <PaymentMethodPicker value={payMethod} onChange={setPayMethod} testIdPrefix="collect-pay" disabled={paying} />
+                <TransactionFeeLines amount={payingRemaining} method={payMethod} pot={payPot} onPotChange={setPayPot} ruleId={payFeeRuleId} onRuleIdChange={setPayFeeRuleId} className="text-slate-600" />
                 <ProofPick
                   id="booking-payment-proof"
                   file={payProofFile}
@@ -1780,6 +1817,8 @@ function BookingFormTotals({
   pot,
   onPotChange,
   remainingAmount,
+  proofFile,
+  onProofChange,
   submitError,
   loading,
   submitLabel,
@@ -1801,6 +1840,9 @@ function BookingFormTotals({
   pot: string;
   onPotChange: (pot: string) => void;
   remainingAmount: number;
+  /** The optional receipt for the money this save takes. */
+  proofFile: File | null;
+  onProofChange: (file: File | null) => void;
   submitError?: string;
   loading: boolean;
   submitLabel: string;
@@ -1841,6 +1883,15 @@ function BookingFormTotals({
           <span className="tabular-nums">{formatCurrency(remainingAmount)}</span>
         </div>
       </div>
+      {chargeNow > 0 && (
+        <ProofPick
+          id="booking-form-proof"
+          file={proofFile}
+          onChange={onProofChange}
+          disabled={loading}
+          hint="Attach the transfer or QRIS receipt when the customer pays online."
+        />
+      )}
       {submitError && <div className="text-sm text-red-600">{submitError}</div>}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>

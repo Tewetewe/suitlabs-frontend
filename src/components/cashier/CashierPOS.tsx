@@ -5,12 +5,9 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import {
-  Banknote,
   Calendar,
   Check,
-  CreditCard,
   HandCoins,
-  Landmark,
   Minus,
   Package,
   Plus,
@@ -21,7 +18,6 @@ import {
   ShoppingBag,
   Trash2,
   UserPlus,
-  Wallet,
   X,
   ChevronDown,
 } from 'lucide-react';
@@ -45,6 +41,7 @@ import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoComplete
 import NewCustomerModal from '@/components/modals/NewCustomerModal';
 import { ProofPick } from '@/components/payments/ProofPick';
 import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
+import { PaymentMethodPicker } from '@/components/payments/PaymentMethodPicker';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { SaleInvoiceModal } from '@/components/modals/SaleInvoiceModal';
 import { useCashierChrome } from '@/components/cashier/CashierChromeContext';
@@ -109,14 +106,6 @@ type DoneReceipt = {
   /** Where the total was charged: QRIS or the EDC. */
   via: string;
 };
-
-const PAY_CHANNELS: Array<{ value: PayChannel; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { value: 'cash', label: 'Cash', icon: Banknote },
-  { value: 'qris', label: 'QRIS', icon: QrCode },
-  { value: 'transfer', label: 'Transfer', icon: Landmark },
-  { value: 'debit', label: 'Debit', icon: Wallet },
-  { value: 'cc', label: 'Card', icon: CreditCard },
-];
 
 const PAGE_SIZE = 24;
 
@@ -1040,28 +1029,7 @@ export function CashierPOS() {
           </div>
         )}
 
-        <div>
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Method</div>
-          <div className="grid grid-cols-5 gap-1.5">
-            {PAY_CHANNELS.map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                type="button"
-                data-testid={`pos-pay-${value}`}
-                onClick={() => setPayChannel(value)}
-                className={clsx(
-                  'flex min-h-14 flex-col items-center justify-center rounded-xl text-[11px] font-semibold touch-manipulation',
-                  payChannel === value
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'glass-control text-slate-600'
-                )}
-              >
-                <Icon className="mb-0.5 h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <PaymentMethodPicker value={payChannel} onChange={setPayChannel} testIdPrefix="pos-pay" />
 
         {mode === 'rental' && paidAmount > 0 && (
           <ProofPick
