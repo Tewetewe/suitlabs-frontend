@@ -1,16 +1,21 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ExternalLink, RefreshCcw, Sheet } from 'lucide-react';
 
 import { PageShell } from '@/components/ui/PageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { RebuildBookingTabsCard } from '@/components/admin/RebuildBookingTabsCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBranch } from '@/contexts/BranchContext';
 import apiClient from '@/lib/api';
 import type { GoogleSheetsStatus, GoogleSyncRun, ItemSyncResult } from '@/types';
+import { anyRunning, itemSyncResultFromRuns } from '@/lib/item-sync-runs';
+
+/** How often the page asks for the runs while a sync works. */
+const POLL_MS = 3000;
 
 export default function BulkInputSyncPage() {
   const router = useRouter();
@@ -24,6 +29,9 @@ export default function BulkInputSyncPage() {
   const [result, setResult] = useState<ItemSyncResult | null>(null);
   const [sheetStatus, setSheetStatus] = useState<GoogleSheetsStatus | null>(null);
   const [sheetRuns, setSheetRuns] = useState<GoogleSyncRun[]>([]);
+  // The runs of the sync in progress. The sync works in the background, so
+  // the page follows these runs until each one ends.
+  const [watchedRunIds, setWatchedRunIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -40,6 +48,12 @@ export default function BulkInputSyncPage() {
       .then(([status, runs]) => {
         setSheetStatus(status);
         setSheetRuns(runs);
+        // A sync started before the page opened is followed too.
+        const running = runs.filter((run) => run.status === 'running');
+        if (running.length > 0) {
+          setWatchedRunIds(running.map((run) => run.id));
+          setSheetSyncing(viewingAll ? 'all' : running[0].branch_id || 'all');
+        }
       })
       .catch(() => {
         setSheetStatus(null);
@@ -52,15 +66,38 @@ export default function BulkInputSyncPage() {
     setError(null);
     setResult(null);
     try {
-      const response = await apiClient.syncItemsFromGoogleSheets(branchId);
-      setResult(response.result);
-      setSheetRuns((prev) => [response.run, ...prev.filter((run) => run.id !== response.run.id)]);
+      const runs = await apiClient.syncItemsFromGoogleSheets(branchId);
+      const ids = new Set(runs.map((run) => run.id));
+      setSheetRuns((prev) => [...runs, ...prev.filter((run) => !ids.has(run.id))]);
+      setWatchedRunIds(runs.map((run) => run.id));
+      if (runs.length === 0) setSheetSyncing(null);
     } catch (e: unknown) {
       setError(getErrorMessage(e, 'Google Sheets sync failed'));
-    } finally {
       setSheetSyncing(null);
     }
   }
+
+  // Follow the runs of the sync until each one ends, then show their result.
+  const checkWatchedRuns = useCallback(async () => {
+    try {
+      const runs = await apiClient.getGoogleSheetsRuns('item_import', 50);
+      setSheetRuns(runs);
+      const watched = runs.filter((run) => watchedRunIds.includes(run.id));
+      if (watched.length === watchedRunIds.length && !anyRunning(watched)) {
+        setResult(itemSyncResultFromRuns(watched));
+        setWatchedRunIds([]);
+        setSheetSyncing(null);
+      }
+    } catch {
+      // A failed check tries again on the next tick.
+    }
+  }, [watchedRunIds]);
+
+  useEffect(() => {
+    if (watchedRunIds.length === 0) return;
+    const timer = window.setInterval(() => void checkWatchedRuns(), POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [watchedRunIds, checkWatchedRuns]);
 
   const lastSheetRun = sheetRuns[0] || null;
   const shopSheets = sheetStatus?.branches || [];
@@ -215,6 +252,12 @@ export default function BulkInputSyncPage() {
                 </div>
                 )}
 
+                {watchedRunIds.length > 0 && (
+                  <div className="rounded-xl bg-slate-50 ring-1 ring-black/5 px-4 py-3 text-sm text-slate-700" data-testid="item-sync-running">
+                    Syncing in the background. You can leave this page; the sync goes on, and its result shows here when it ends.
+                  </div>
+                )}
+
                 {error && (
                   <div className="rounded-xl bg-red-50 ring-1 ring-red-200 px-4 py-3 text-sm text-red-700">
                     {error}
@@ -249,6 +292,7 @@ export default function BulkInputSyncPage() {
               </div>
             </CardContent>
           </Card>
+          <RebuildBookingTabsCard disabled={!sheetStatus?.configured} />
         </div>
       </PageShell>
     </>

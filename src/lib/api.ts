@@ -76,7 +76,6 @@ import {
   GoogleSheetsStatus,
   GoogleSyncJobType,
   GoogleSyncRun,
-  ItemSyncResult,
   Branch,
   WAReminder,
   WAReminderStatusInfo,
@@ -509,12 +508,37 @@ class APIClient {
     return this.handleResponse<{ run: GoogleSyncRun }>(response).run;
   }
 
-  async syncItemsFromGoogleSheets(branchId?: string): Promise<{ result: ItemSyncResult; run: GoogleSyncRun }> {
-    const response = await this.client.post<APIResponse<{ result: ItemSyncResult; run: GoogleSyncRun }>>(
+  /**
+   * Starts an item sync. It runs in the background: one run for each shop
+   * sheet comes back at once with status running, and each run records its
+   * counts and row errors when it ends.
+   */
+  async syncItemsFromGoogleSheets(branchId?: string): Promise<GoogleSyncRun[]> {
+    const response = await this.client.post<APIResponse<{ runs: GoogleSyncRun[] }>>(
       '/api/v1/admin/google-sheets/items/sync',
       branchId ? { branch_id: branchId } : {}
     );
-    return this.handleResponse<{ result: ItemSyncResult; run: GoogleSyncRun }>(response);
+    return response.data.data?.runs || [];
+  }
+
+  /**
+   * Starts a rebuild of every monthly booking tab. It runs in the background:
+   * the run comes back at once with status running.
+   */
+  async startGoogleSheetsBookingTabRebuild(removeUnknown: boolean): Promise<GoogleSyncRun> {
+    const response = await this.client.post<APIResponse<{ run: GoogleSyncRun }>>(
+      '/api/v1/admin/google-sheets/booking-tabs/rebuild',
+      { remove_unknown: removeUnknown },
+    );
+    return response.data.data!.run;
+  }
+
+  /** The newest booking tab rebuild, or null when none ran. */
+  async getGoogleSheetsBookingTabRebuild(): Promise<GoogleSyncRun | null> {
+    const response = await this.client.get<APIResponse<{ run: GoogleSyncRun | null }>>(
+      '/api/v1/admin/google-sheets/booking-tabs/rebuild',
+    );
+    return response.data.data?.run ?? null;
   }
 
   async retryGoogleSheetsBookingExport(runId: string): Promise<GoogleSyncRun> {

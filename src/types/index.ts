@@ -30,7 +30,7 @@ export interface ItemSyncResult {
   errors: ItemSyncRowError[];
 }
 
-export type GoogleSyncJobType = 'item_import' | 'booking_export' | 'legacy_booking_import';
+export type GoogleSyncJobType = 'item_import' | 'booking_export' | 'legacy_booking_import' | 'booking_tab_rebuild';
 export type GoogleSyncStatus = 'running' | 'completed' | 'failed';
 
 export type WAReminderType = 'pickup' | 'return';
@@ -2035,3 +2035,4 @@ export interface DashboardStats {
   lowStockItems: number;
   maintenanceItems: number;
 }
+
