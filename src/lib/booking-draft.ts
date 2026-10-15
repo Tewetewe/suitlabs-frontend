@@ -122,3 +122,16 @@ export function defaultTrousersCode(item: { type?: string; trousers_code?: strin
   if (!item?.trousers_code) return '';
   return item.type === 'suit' || item.type === 'jacket' ? item.trousers_code : '';
 }
+
+type ItemLine = { item_id: string; quantity: number };
+
+/** True when an edit changed which Items the booking holds, or how many of each. */
+export function bookingItemsChanged(before: ItemLine[] | undefined, after: ItemLine[]): boolean {
+  const key = (lines: ItemLine[]) =>
+    lines
+      .filter((line) => line.item_id)
+      .map((line) => `${line.item_id}×${line.quantity}`)
+      .sort()
+      .join(',');
+  return key(before || []) !== key(after);
+}

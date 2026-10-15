@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/DataDisplay';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { ProofList } from '@/components/payments/ProofList';
+import { BookingPaymentList } from '@/components/payments/BookingPaymentList';
 import { formatCurrency } from '@/lib/currency';
 import { formatDateShort } from '@/lib/date';
 import { formatPaymentMethod } from '@/lib/payment-methods';
@@ -219,6 +220,10 @@ export function BookingDetailsModal({
               tone={remaining > 0 ? 'danger' : 'success'}
             />
           </div>
+        </DetailSection>
+
+        <DetailSection label="Payments">
+          <BookingPaymentList bookingId={booking.id} paymentMethod={booking.payment_method} />
         </DetailSection>
 
         <DetailSection label="Payment proofs">
