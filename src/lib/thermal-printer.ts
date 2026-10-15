@@ -15,6 +15,7 @@ import {
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from './branch-scope';
+import { refundableDeposit as refundableAfterCharges } from './deposit';
 import { TRANSACTION_FEE_LABEL } from './transaction-fee';
 import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
 import { itemTags } from './item-name';
@@ -604,7 +605,7 @@ export class ThermalPrinterService {
     );
     const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
     const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
-    const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
+    const refundableDeposit = refundableAfterCharges(rental);
 
     generator.separator();
     generator
@@ -652,6 +653,9 @@ export class ThermalPrinterService {
 
     if ((rental.security_deposit || 0) > 0) {
       generator.text(`Deposit: ${formatCurrencyForPrint(rental.security_deposit)}`).lineFeed();
+      if ((rental.deposit_applied_to_sales || 0) > 0) {
+        generator.text(`Lost items: (${formatCurrencyForPrint(rental.deposit_applied_to_sales || 0)})`).lineFeed();
+      }
       if ((rental.damage_charges || 0) > 0) {
         generator.text(`Deduction: (${formatCurrencyForPrint(rental.damage_charges)})`).lineFeed();
       }
@@ -769,6 +773,7 @@ export class ThermalPrinterService {
         discount: sale.discount_amount,
         fee: sale.transaction_fee,
         paid: sale.paid_amount || 0,
+        fromDeposit: sale.deposit_applied,
         owed: sale.total_amount || 0,
       }),
     );

@@ -92,7 +92,7 @@ export default function DepositAgreementPage() {
                 {formatCurrency(view.deposit_amount)}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {view.deposit_percent}% {isEN ? 'of the rental' : 'dari nilai sewa'} ({formatCurrency(view.booking_amount)}) · {isEN ? 'refundable' : 'dapat dikembalikan'}
+                {view.deposit_percent}% {isEN ? 'of the replacement fees below' : 'dari total biaya penggantian di bawah'} ({formatCurrency(view.replacement_total ?? 0)}) · {isEN ? 'refundable' : 'dapat dikembalikan'}
               </p>
             </div>
 

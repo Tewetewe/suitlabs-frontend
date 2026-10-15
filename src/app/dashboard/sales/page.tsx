@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge, EmptyState, FilterBar, InfiniteScrollSentinel, SkeletonRow } from '@/components/ui/DataDisplay';
+import { depositHeld, depositLeft } from '@/lib/deposit';
 import { SaleComposer } from '@/components/sales/SaleComposer';
 import { apiClient } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
@@ -254,6 +255,7 @@ function SalesPageInner() {
         customerId={customerId || linkedRental?.user_id}
         rentalItems={linkedRental?.items || []}
         rentalStatus={linkedRental?.status}
+        depositLeft={linkedRental && depositHeld(linkedRental) ? depositLeft(linkedRental) : 0}
         submitLabel={rentalId ? 'Charge and record' : 'Complete sale'}
         submitting={submitting}
         onSubmit={handleCreate}

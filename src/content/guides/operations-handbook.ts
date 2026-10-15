@@ -364,7 +364,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     </div>
     <div class="card">
       <h3>Security deposit</h3>
-      <p>Collected at Pickup as a percentage of the booking amount, set by <code>SECURITY_DEPOSIT_PERCENT</code>. It is <b>held, not earned</b> — it credits <b>Customer Deposits</b>, a liability on the balance sheet, and stays there until Return. Set the percent to 0 and both the deposit and the agreement disappear from Pickup.</p>
+      <p>Collected at Pickup as a percentage of the rented Items' replacement fees (their selling prices), set by <code>SECURITY_DEPOSIT_PERCENT</code>. At 100 the deposit covers a lost Item in full: the lost-item Sale takes the replacement fee from the deposit first, and the release refunds only what is left. The 7-day automatic release skips a rental while a missing Item is not paid or waived. Every rented Item needs a selling price, or the agreement cannot be sent. It is <b>held, not earned</b> — it credits <b>Customer Deposits</b>, a liability on the balance sheet, and stays there until Return. Set the percent to 0 and both the deposit and the agreement disappear from Pickup.</p>
     </div>
     <div class="card">
       <h3>Deposit agreement</h3>

@@ -6,6 +6,7 @@ import { downloadReceiptPdf } from '@/lib/receipt-image';
 import { printRentalInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue, rentalInvoiceNumber } from '@/lib/barcode';
+import { refundableDeposit as refundableAfterCharges } from '@/lib/deposit';
 import { formatCurrency } from '@/lib/currency';
 import { TRANSACTION_FEE_LABEL } from '@/lib/transaction-fee';
 import { InvoicePrintActions } from '@/components/print/InvoicePrintActions';
@@ -57,7 +58,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
   const itemsSubtotal = items.reduce((sum, item) => sum + (item.total_price || (item.unit_price || 0) * (item.quantity || 1)), 0);
   const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
   const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
-  const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
+  const refundableDeposit = refundableAfterCharges(rental);
   const rackItems = items.map((line) => ({
     name: line.item?.name || 'Item',
     code: line.item?.code,
@@ -188,6 +189,9 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
               {(rental.security_deposit || 0) > 0 && (
                 <>
                   <div className="receipt-line">Deposit: {formatCurrency(rental.security_deposit || 0)}</div>
+                  {(rental.deposit_applied_to_sales || 0) > 0 && (
+                    <div className="receipt-line receipt-discount">Lost items: ({formatCurrency(rental.deposit_applied_to_sales || 0)})</div>
+                  )}
                   {(rental.damage_charges || 0) > 0 && (
                     <div className="receipt-line receipt-discount">Deduction: ({formatCurrency(rental.damage_charges || 0)})</div>
                   )}

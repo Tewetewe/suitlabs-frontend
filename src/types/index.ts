@@ -1127,6 +1127,8 @@ export interface Rental {
   security_deposit: number;
   late_fee: number;
   damage_charges: number;
+  /** Part of the deposit that paid lost-item Sales. */
+  deposit_applied_to_sales?: number;
   /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */
   transaction_fee?: number;
   identity_card_url?: string; // URL to uploaded identity card image
@@ -1192,6 +1194,8 @@ export interface DepositAgreementView {
   rental_date: string;
   return_date: string;
   booking_amount: number;
+  /** Sum of the replacement fees listed; the deposit is deposit_percent of it. */
+  replacement_total?: number;
   deposit_amount: number;
   deposit_percent: number;
   items: DepositAgreementItemView[];
@@ -1233,6 +1237,8 @@ export interface Sale {
   discount_amount: number;
   total_amount: number;
   paid_amount: number;
+  /** Part of paid_amount taken from the rental's Security Deposit. */
+  deposit_applied?: number;
   /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */
   transaction_fee?: number;
   payment_method?: SalePaymentMethod;
@@ -1262,6 +1268,8 @@ export interface CreateSaleRequest {
   source?: SaleSource;
   discount_amount?: number;
   paid_amount?: number;
+  /** Part of the payment taken from the held Security Deposit of the rental. */
+  from_deposit?: number;
   payment_method?: SalePaymentMethod;
   /** EDC terminal and card for a card payment; may be empty when one rule covers the method. */
   fee_rule_id?: string;

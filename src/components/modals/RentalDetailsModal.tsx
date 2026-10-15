@@ -18,6 +18,7 @@ import { BranchBadge } from '@/components/branch/BranchBadge';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { ProofList } from '@/components/payments/ProofList';
 import { FeeWaiverList } from '@/components/payments/FeeWaiverList';
+import { refundableDeposit } from '@/lib/deposit';
 import { formatCurrency } from '@/lib/currency';
 import { calculateDuration, formatDateShort, formatDateTime } from '@/lib/date';
 import { customerLanguageLabel } from '@/lib/select-options';
@@ -76,7 +77,8 @@ export function RentalDetailsModal({
 
   const items = rental.items || [];
   const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
-  const refundable = (rental.security_deposit || 0) - (rental.damage_charges || 0);
+  // Lost-item Sales and damage both come off the deposit.
+  const refundable = refundableDeposit(rental);
   const deltaDays = Math.ceil((new Date(rental.return_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const remainingDays = Math.max(0, deltaDays);
   const overdueDays = Math.max(0, -deltaDays);
@@ -203,6 +205,9 @@ export function RentalDetailsModal({
             <MoneyRow label="Total" value={formatCurrency(total)} tone="total" />
             {(rental.security_deposit || 0) > 0 && (
               <MoneyRow label="Deposit" value={formatCurrency(rental.security_deposit)} />
+            )}
+            {(rental.deposit_applied_to_sales || 0) > 0 && (
+              <MoneyRow label="Lost items from deposit" value={`−${formatCurrency(rental.deposit_applied_to_sales || 0)}`} tone="danger" />
             )}
             {(rental.security_deposit || 0) > 0 && (
               <MoneyRow

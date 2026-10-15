@@ -35,6 +35,7 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
     discount: sale.discount_amount,
     fee: sale.transaction_fee,
     paid: sale.paid_amount || 0,
+    fromDeposit: sale.deposit_applied,
     owed: sale.total_amount || 0,
   });
   const shopSubtitle = receiptSubtitle(sale.branch?.receipt_subtitle);
