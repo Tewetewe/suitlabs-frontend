@@ -85,6 +85,7 @@ import {
   WAReminderDraft,
   FeeWaiver,
   LateFeePreview,
+  LegacyDuplicate,
   LegacyImportPreview,
   LegacyImportRequest,
   DepositAgreementView,
@@ -506,6 +507,22 @@ class APIClient {
   async syncLegacyBookings(body: LegacyImportRequest): Promise<GoogleSyncRun> {
     const response = await this.client.post<APIResponse<{ run: GoogleSyncRun }>>('/api/v1/admin/legacy-bookings/sync', body);
     return this.handleResponse<{ run: GoogleSyncRun }>(response).run;
+  }
+
+  /** Admin only. The bookings the legacy Sync set aside as duplicates in a shop, newest first. */
+  async getLegacyDuplicates(branchId: string): Promise<LegacyDuplicate[]> {
+    const response = await this.client.get<APIResponse<{ duplicates: LegacyDuplicate[] }>>(
+      `/api/v1/admin/legacy-bookings/duplicates?branch_id=${encodeURIComponent(branchId)}`,
+    );
+    return this.handleResponse<{ duplicates: LegacyDuplicate[] }>(response).duplicates || [];
+  }
+
+  /** Admin only. Puts a booking set aside back: its status, its money, and its row on the monthly tab. */
+  async restoreLegacyDuplicate(id: string): Promise<LegacyDuplicate> {
+    const response = await this.client.post<APIResponse<{ duplicate: LegacyDuplicate }>>(
+      `/api/v1/admin/legacy-bookings/duplicates/${encodeURIComponent(id)}/restore`,
+    );
+    return this.handleResponse<{ duplicate: LegacyDuplicate }>(response).duplicate;
   }
 
   /**

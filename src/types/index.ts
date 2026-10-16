@@ -96,6 +96,10 @@ export interface LegacyImportRow {
   same_customer_row?: number;
   /** An imported row whose sheet Status moved forward, as "Booked → Back". Sync writes it. */
   status_update?: string;
+  /** What Sync does so the row keeps one Booking: link an edited row, or cancel a stale duplicate. */
+  fix?: string;
+  /** The total or amount paid Sync brings up to the sheet, as "total Rp 400.000 → Rp 450.000". */
+  money_update?: string;
   event_date?: string;
   pickup_date?: string;
   return_date?: string;
@@ -132,11 +136,45 @@ export interface LegacyImportPreview {
   imported: number;
   /** Imported rows whose status Sync moves forward. */
   status_updates: number;
+  /** Rows Sync gives back one Booking each. */
+  fixes?: number;
+  /** Rows whose total or amount paid Sync brings up to the sheet. */
+  money_updates?: number;
+  /** Imported bookings of the period that no row names any more. */
+  unmatched?: LegacyUnmatched[];
   other_months: number;
   /** Each product with no Item yet, once. A pick is optional. */
   needs: LegacyItemNeed[];
   /** Rows that would import with no Item. */
   without_item: number;
+}
+
+/** An imported booking whose row was deleted, or whose phone or event day was edited. */
+export interface LegacyUnmatched {
+  booking_id: string;
+  customer_name: string;
+  phone: string;
+  event_date: string;
+  status: string;
+}
+
+/** An imported booking the legacy Sync set aside as a duplicate. Admin can restore it. */
+export interface LegacyDuplicate {
+  id: string;
+  booking_id: string;
+  rental_id?: string;
+  kept_booking_id: string;
+  branch_id: string;
+  booking_status: string;
+  rental_status?: string;
+  removed_by?: string;
+  removed_at: string;
+  restored_by?: string;
+  restored_at?: string;
+  customer_name: string;
+  phone: string;
+  event_date?: string;
+  final_amount: number;
 }
 
 /** What the legacy Preview and Sync read. */

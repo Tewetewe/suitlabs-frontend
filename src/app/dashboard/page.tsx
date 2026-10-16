@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { MetricTile, PageShell, StatGrid } from '@/components/ui/PageShell';
 import { Badge } from '@/components/ui/DataDisplay';
 import { Button } from '@/components/ui/Button';
+import { TodayPickupsReturns } from '@/components/dashboard/TodayPickupsReturns';
 import { apiClient } from '@/lib/api';
 import { Booking, DashboardStats, AssetReport, AccountingReport, Rental } from '@/types';
 import { Package, Users, Calendar, DollarSign, AlertTriangle, Wrench, ArrowRight, Wallet, TrendingUp, Landmark, Store, HandCoins } from 'lucide-react';
@@ -175,6 +176,9 @@ export default function DashboardPage() {
           </Link>
         }
       >
+        {/* The Pickups and Returns of today, first, so staff see them at once. */}
+        <TodayPickupsReturns />
+
         {/* KPI Stats */}
         <StatGrid
           stats={statItems.map(s => ({
