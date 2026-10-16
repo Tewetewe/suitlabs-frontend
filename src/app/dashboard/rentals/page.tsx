@@ -39,6 +39,7 @@ import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { useRememberedState } from '@/hooks/useRememberedState';
 import { itemDisplayName } from '@/lib/item-name';
+import { partyName } from '@/lib/booking-name';
 
 /** Whole days since the suit came back, or null when it has not. */
 function daysSinceReturn(rental: Rental): number | null {
@@ -53,6 +54,10 @@ export default function RentalsPage() {
   const isAdmin = user?.role === 'admin';
   const [deletingRental, setDeletingRental] = useState<Rental | null>(null);
   const [deletingRentalBusy, setDeletingRentalBusy] = useState(false);
+  // A cancelled Rental Admin brings back, with the reason for the notes.
+  const [reactivating, setReactivating] = useState<Rental | null>(null);
+  const [reactivateReason, setReactivateReason] = useState('');
+  const [reactivateBusy, setReactivateBusy] = useState(false);
   const { warning, success, error: toastError } = useToast();
   const [searchTerm, setSearchTerm] = useRememberedState('rentals.search', '');
   const debouncedSearch = useDebouncedValue(searchTerm, 400);
@@ -403,9 +408,7 @@ export default function RentalsPage() {
   const filteredRentals = Array.isArray(rentals) ? rentals.filter(rental => {
     const q = searchTerm.toLowerCase().trim();
     if (!q) return true;
-    const customerName = rental.customer
-      ? `${rental.customer.first_name} ${rental.customer.last_name}`.toLowerCase()
-      : '';
+    const customerName = partyName(rental.booking, rental.customer).toLowerCase();
     return (
       rental.id.toLowerCase().includes(q) ||
       customerName.includes(q) ||
@@ -524,9 +527,7 @@ export default function RentalsPage() {
             />
           ) : (
             filteredRentals.map((rental) => {
-              const customerName = rental.customer
-                ? `${rental.customer.first_name} ${rental.customer.last_name}`.trim()
-                : `Rental #${rental.id.slice(-8)}`;
+              const customerName = partyName(rental.booking, rental.customer) || `Rental #${rental.id.slice(-8)}`;
               const itemSummary = (rental.items || [])
                 .slice(0, 2)
                 .map((line) => {
@@ -641,6 +642,16 @@ export default function RentalsPage() {
                             </OverflowMenuItem>
                           </>
                         )}
+                        {isAdmin && rental.status === 'cancelled' && !rental.actual_return_date && (
+                          <OverflowMenuItem
+                            onClick={() => {
+                              setReactivateReason('');
+                              setReactivating(rental);
+                            }}
+                          >
+                            Reactivate
+                          </OverflowMenuItem>
+                        )}
                       </OverflowMenu>
                     </div>
                   </CardContent>
@@ -676,6 +687,40 @@ export default function RentalsPage() {
           onClose={() => setShowCreateModal(false)}
           onSuccess={() => { void reload(); }}
         />
+
+        <ConfirmModal
+          isOpen={!!reactivating}
+          title="Reactivate rental"
+          description={
+            reactivating
+              ? `Bring this rental back as ${reactivating.actual_pickup_date ? 'Active (it was picked up)' : 'Pending'}? A booking cancelled with it comes back too, with the money its cancel reversed. It stops if another booking holds one of the Items on these days.`
+              : undefined
+          }
+          confirmLabel="Reactivate"
+          loading={reactivateBusy}
+          onClose={() => setReactivating(null)}
+          onConfirm={async () => {
+            if (!reactivating) return;
+            setReactivateBusy(true);
+            try {
+              await apiClient.reactivateRental(reactivating.id, reactivateReason.trim());
+              success('Rental reactivated');
+              setReactivating(null);
+              await reload();
+            } catch (e) {
+              toastError('Could not reactivate the rental', apiErrorMessage(e, 'Please try again.'));
+            } finally {
+              setReactivateBusy(false);
+            }
+          }}
+        >
+          <Textarea
+            label="Reason (goes in the rental notes)"
+            value={reactivateReason}
+            onChange={(e) => setReactivateReason(e.target.value)}
+            rows={2}
+          />
+        </ConfirmModal>
 
         <ConfirmModal
           isOpen={!!deletingRental}

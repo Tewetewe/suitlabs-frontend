@@ -1287,6 +1287,16 @@ class APIClient {
     return response.data.data!;
   }
 
+  /**
+   * Admin only. Undoes the cancel of a Rental: it goes back to Pending, or to
+   * Active when its pickup is on record. A Booking cancelled with it comes
+   * back too, with the money the cancel reversed.
+   */
+  async reactivateRental(rentalId: string, reason: string): Promise<Rental> {
+    const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/reactivate`, { reason });
+    return this.handleResponse<Rental>(response);
+  }
+
   async changeRentalDates(rentalId: string, rentalDate: string, returnDate: string): Promise<Rental> {
     const response = await this.client.put<APIResponse<Rental>>(`/api/v1/rentals/${rentalId}/change-dates`, {
       rental_date: rentalDate,
