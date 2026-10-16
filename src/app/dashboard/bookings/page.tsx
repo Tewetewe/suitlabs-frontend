@@ -49,6 +49,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
 import { bookingGross, bookingItemsChanged, customLinesChanged, customLinesForRequest, customLinesTotal, type CustomLineDraft, bookingPayNow, defaultTrousersCode, newBookingStatuses, repriceForLength, typedSubtotal as readTypedSubtotal } from '@/lib/booking-draft';
 import { useBookingDiscountPick } from '@/hooks/useBookingDiscountPick';
+import { partyName } from '@/lib/booking-name';
 
 type BookingFormItem = {
   item_id: string;
@@ -110,8 +111,7 @@ function currentMonthEventRange(): BookingFilters {
 }
 
 function bookingCustomerName(booking: Booking) {
-  if (!booking.customer) return `Booking #${booking.id.slice(-8)}`;
-  return `${booking.customer.first_name} ${booking.customer.last_name}`.trim();
+  return partyName(booking, booking.customer) || `Booking #${booking.id.slice(-8)}`;
 }
 
 function bookingItemSummary(booking: Booking) {
