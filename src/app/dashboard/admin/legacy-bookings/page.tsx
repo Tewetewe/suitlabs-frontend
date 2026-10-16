@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/DataDisplay';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { LegacyDuplicatesCard } from '@/components/admin/LegacyDuplicatesCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBranch } from '@/contexts/BranchContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -72,6 +73,8 @@ export default function LegacyBookingsPage() {
   const [branchId, setBranchId] = useState(JIMBARAN_ID);
   const [tab, setTab] = useState('Legacy Dev');
   const [month, setMonth] = useState(thisMonth());
+  // Every row of every date in one Preview and Sync.
+  const [allMonths, setAllMonths] = useState(false);
   const [preview, setPreview] = useState<LegacyImportPreview | null>(null);
   // The Sync runs in the background on the server; the page follows its run.
   const [syncRun, setSyncRun] = useState<GoogleSyncRun | null>(null);
@@ -104,7 +107,9 @@ export default function LegacyBookingsPage() {
     if (isAdmin) void loadRuns();
   }, [isAdmin, loadRuns]);
 
-  const request = (picked: Record<string, string>) => ({ branch_id: branchId, tab: tab.trim(), month, choices: picked });
+  const request = (picked: Record<string, string>) => ({
+    branch_id: branchId, tab: tab.trim(), month: allMonths ? 'all' : month, choices: picked,
+  });
 
   const onPreview = async (picked: Record<string, string> = choices) => {
     setLoading(true);
@@ -212,12 +217,25 @@ export default function LegacyBookingsPage() {
                 onChange={(e) => setBranchId(e.target.value)}
               />
               <Input label="Tab name" value={tab} onChange={(e) => setTab(e.target.value)} />
-              <Input
-                label="Month of the event day"
-                type="month"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-              />
+              <div className="space-y-2">
+                <Input
+                  label="Month of the event day"
+                  type="month"
+                  value={month}
+                  disabled={allMonths}
+                  onChange={(e) => setMonth(e.target.value)}
+                />
+                <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-slate-900"
+                    style={{ appearance: 'auto' }}
+                    checked={allMonths}
+                    onChange={(e) => setAllMonths(e.target.checked)}
+                  />
+                  All months: every row of every date
+                </label>
+              </div>
             </div>
             <p className="text-xs text-slate-500">
               The sheet&apos;s Booking Date is the event day: pickup is the day before and the return the day after. The
@@ -228,19 +246,27 @@ export default function LegacyBookingsPage() {
               balances do not change. No WhatsApp goes out and no deposit is taken. Sync runs on the server: you can
               leave this page, and the result shows under Recent syncs.
             </p>
+            <p className="text-xs text-slate-500">
+              The phone number and the event day name a booking. Sync keeps one booking for each row: it links a row
+              edited after its import, and sets a stale duplicate aside. A booking set aside can be restored below. Where the sheet is ahead of the app, Sync brings
+              the booking up to it: the status with its Rental, the total, and the amount paid. Where the app is ahead,
+              the app stays as it is.
+            </p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" loading={loading} disabled={!tab.trim() || !month} onClick={() => void onPreview(choices)}>
+              <Button variant="secondary" loading={loading} disabled={!tab.trim() || (!month && !allMonths)} onClick={() => void onPreview(choices)}>
                 <Search className="h-4 w-4" />
                 Preview
               </Button>
               <Button
                 loading={syncing}
-                disabled={!preview || (preview.ready === 0 && !preview.status_updates) || syncing}
+                disabled={!preview || (preview.ready === 0 && !preview.status_updates && !preview.fixes && !preview.money_updates) || syncing}
                 onClick={() => setConfirming(true)}
               >
                 <RefreshCcw className="h-4 w-4" />
                 Sync {preview ? `${preview.ready} ready` : ''}
                 {preview?.status_updates ? `, ${preview.status_updates} status updates` : ''}
+                {preview?.fixes ? `, ${preview.fixes} duplicate fixes` : ''}
+                {preview?.money_updates ? `, ${preview.money_updates} money updates` : ''}
               </Button>
             </div>
           </CardContent>
@@ -344,6 +370,32 @@ export default function LegacyBookingsPage() {
           </Card>
         )}
 
+        <LegacyDuplicatesCard branchId={branchId} refreshKey={syncRun?.finished_at} />
+
+        {preview && (preview.unmatched?.length ?? 0) > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Imported bookings with no row</CardTitle>
+              <p className="mt-1 text-xs text-slate-500">
+                No row of the tab has this phone and event day any more: the row was deleted, or its phone or Booking
+                Date was edited. Sync leaves these bookings as they are. Check each one in the app.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ul className="divide-y divide-black/5">
+                {preview.unmatched!.map((b) => (
+                  <li key={b.booking_id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <span className="font-medium text-slate-900">{b.customer_name || b.phone}</span>
+                    <span className="text-slate-600">
+                      {b.phone} · event {b.event_date} · {b.status} · {b.booking_id.slice(0, 8)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle size="lg">Recent syncs</CardTitle>
@@ -378,7 +430,7 @@ export default function LegacyBookingsPage() {
         title="Sync legacy bookings"
         description={
           preview
-            ? `Write ${preview.ready} ready rows of ${preview.tab} (${preview.month}) as Bookings with their Rentals, and move ${preview.status_updates || 0} imported rows forward to the Status on the sheet? Blocked rows are skipped. A status only moves forward (Booked → Rented → Back); a booking already further along, or cancelled, in the app stays as it is.`
+            ? `Write ${preview.ready} ready rows of ${preview.tab} (${preview.month}) as Bookings with their Rentals, and move ${preview.status_updates || 0} imported rows forward to the Status on the sheet? Blocked rows are skipped. A status only moves forward (Booked → Rented → Back); a booking already further along, or cancelled, in the app stays as it is.${preview.fixes ? ` ${preview.fixes} rows get one Booking each: an edited row links to its Booking, and a stale duplicate is set aside (Cancelled, its money reversed). You can restore it under Duplicates set aside.` : ''}${preview.money_updates ? ` ${preview.money_updates} bookings take the total or the amount paid on the sheet: a new total posts an adjusting entry, and the extra amount paid posts as a payment of today (cash to the Cash Drawer, other methods to Bank, unassigned).` : ''}`
             : undefined
         }
         confirmLabel="Sync"
@@ -408,6 +460,8 @@ function LegacyRowCard({ row }: { row: LegacyImportRow }) {
         </Badge>
         {row.without_item && row.state !== 'imported' && <Badge variant="warning">No Item</Badge>}
         {row.status_update && <Badge variant="warning">Status update: {row.status_update}</Badge>}
+        {row.fix && <Badge variant="danger">{row.fix}</Badge>}
+        {row.money_update && <Badge variant="warning">Money: {row.money_update}</Badge>}
       </div>
       <div className="text-sm text-slate-600">
         Event {row.event_date || '?'} · pickup {row.pickup_date || '?'} · return {row.return_date || '?'}

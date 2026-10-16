@@ -113,6 +113,14 @@ export default function PickupPrepPage() {
 
   useEffect(() => {
     if (!canUse) return;
+    // A link may ask for a day, such as today from the Dashboard. That day stays put.
+    const asked = new URLSearchParams(window.location.search).get('date') || '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(asked)) {
+      setDate(asked);
+      setPinned(true);
+      void load(asked);
+      return;
+    }
     void load('');
   }, [canUse, load]);
 
