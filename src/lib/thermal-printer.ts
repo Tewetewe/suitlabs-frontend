@@ -15,6 +15,7 @@ import {
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from './branch-scope';
+import { customLineCharged } from './booking-draft';
 import { refundableDeposit as refundableAfterCharges } from './deposit';
 import { TRANSACTION_FEE_LABEL } from './transaction-fee';
 import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
@@ -599,10 +600,15 @@ export class ThermalPrinterService {
       total_price: number;
       discount_amount?: number;
     }>;
+    // Custom lines of the Booking charge things not in the catalogue, such as a tie.
+    const customLines = rental.booking?.custom_lines || [];
+    const hasPackage = Boolean(rental.booking?.package_pricing_id);
     const itemsSubtotal = items.reduce(
       (sum, item) => sum + (item.total_price || (item.unit_price || 0) * (item.quantity || 1)),
       0
-    );
+    ) + customLines
+      .filter((line) => customLineCharged(line, hasPackage))
+      .reduce((sum, line) => sum + (line.total_price ?? line.quantity * line.unit_price), 0);
     const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
     const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
     const refundableDeposit = refundableAfterCharges(rental);
@@ -631,9 +637,16 @@ export class ThermalPrinterService {
           .text(`    ${quantity} x ${formatCurrencyForPrint(unitPrice)} = ${formatCurrencyForPrint(itemTotal)}`)
           .lineFeed();
       });
-    } else {
+    } else if (customLines.length === 0) {
       generator.text('Rental Package').lineFeed();
     }
+    customLines.forEach((line) => {
+      generator.text(`  ${line.name}`).lineFeed();
+      const priced = customLineCharged(line, hasPackage)
+        ? `    ${line.quantity} x ${formatCurrencyForPrint(line.unit_price)} = ${formatCurrencyForPrint(line.total_price ?? line.quantity * line.unit_price)}`
+        : `    ${line.quantity} x included in package`;
+      generator.text(priced).lineFeed();
+    });
 
     generator.separator();
     generator.text(`Subtotal: ${formatCurrencyForPrint(itemsSubtotal || rental.total_cost || 0)}`).lineFeed();

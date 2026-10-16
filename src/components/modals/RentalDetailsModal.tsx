@@ -19,6 +19,7 @@ import { SafeImage } from '@/components/ui/SafeImage';
 import { ProofList } from '@/components/payments/ProofList';
 import { FeeWaiverList } from '@/components/payments/FeeWaiverList';
 import { refundableDeposit } from '@/lib/deposit';
+import { customLineCharged } from '@/lib/booking-draft';
 import { formatCurrency } from '@/lib/currency';
 import { calculateDuration, formatDateShort, formatDateTime } from '@/lib/date';
 import { customerLanguageLabel } from '@/lib/select-options';
@@ -76,6 +77,9 @@ export function RentalDetailsModal({
   if (!rental) return null;
 
   const items = rental.items || [];
+  // Things not in the catalogue that the Booking charged, such as a tie.
+  const customLines = rental.booking?.custom_lines || [];
+  const hasPackage = Boolean(rental.booking?.package_pricing_id);
   const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
   // Lost-item Sales and damage both come off the deposit.
   const refundable = refundableDeposit(rental);
@@ -177,7 +181,7 @@ export function RentalDetailsModal({
         />
 
         <DetailSection label="Items">
-          {items.length === 0 ? (
+          {items.length === 0 && customLines.length === 0 ? (
             <p className="text-sm text-slate-500">No items</p>
           ) : (
             <DetailList>
@@ -187,6 +191,14 @@ export function RentalDetailsModal({
                   title={`${line.item?.name || 'Item'}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
                   subtitle={[line.item?.code, line.item?.brand, ...itemTags(line.item), line.item?.color, line.item?.size?.label].filter(Boolean).join(' · ')}
                   trailing={formatCurrency(line.total_price || 0)}
+                />
+              ))}
+              {customLines.map((line, index) => (
+                <DetailListItem
+                  key={line.id || `custom-${index}`}
+                  title={`${line.name}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
+                  subtitle={customLineCharged(line, hasPackage) ? 'Custom item · not in the catalogue' : 'Custom item · included in package'}
+                  trailing={customLineCharged(line, hasPackage) ? formatCurrency(line.total_price ?? line.quantity * line.unit_price) : undefined}
                 />
               ))}
             </DetailList>

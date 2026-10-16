@@ -35,7 +35,7 @@ import { itemTags } from '@/lib/item-name';
 import type { AvailabilityTone } from '@/lib/item-availability';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
 import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
-import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus } from 'lucide-react';
+import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus, Trash2 } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { BookingDetailsModal } from '@/components/modals/BookingDetailsModal';
@@ -47,7 +47,7 @@ import { useRememberedState } from '@/hooks/useRememberedState';
 import { currentMonthRange } from '@/lib/date';
 import { useToast } from '@/contexts/ToastContext';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
-import { bookingGross, bookingItemsChanged, bookingPayNow, defaultTrousersCode, newBookingStatuses, repriceForLength, typedSubtotal as readTypedSubtotal } from '@/lib/booking-draft';
+import { bookingGross, bookingItemsChanged, customLinesChanged, customLinesForRequest, customLinesTotal, type CustomLineDraft, bookingPayNow, defaultTrousersCode, newBookingStatuses, repriceForLength, typedSubtotal as readTypedSubtotal } from '@/lib/booking-draft';
 import { useBookingDiscountPick } from '@/hooks/useBookingDiscountPick';
 
 type BookingFormItem = {
@@ -101,6 +101,7 @@ function emptyBookingForm(): BookingFormState {
     payment_status: 'pending',
     payment_method: 'dp_transfer',
     items: [{ item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue: 'any', is_addon: false }],
+    custom_lines: [],
   };
 }
 
@@ -231,6 +232,8 @@ export default function BookingsPage() {
     payment_status: Booking['payment_status'];
     payment_method: NonNullable<Booking['payment_method']>;
     items: Array<BookingFormItem>;
+    /** Priced lines for things not in the catalogue yet, such as a tie. */
+    custom_lines: CustomLineDraft[];
   }>(emptyBookingForm);
   const itemIdsKey = useMemo(() => Array.from(new Set(bookingForm.items.map(it => it.item_id).filter(Boolean))).sort().join(','), [bookingForm.items]);
 
@@ -255,7 +258,10 @@ export default function BookingsPage() {
     canEditSubtotal ? Number(subtotalInput) || 0 : 0,
     itemsSubtotal,
   );
-  const bookingTotal = bookingGross({ packagePrice, addonSubtotal, itemsSubtotal, extra: extraCharge });
+  // Custom lines price things not in the catalogue; they add on top.
+  // With a package, only add-on custom lines are charged; the package includes the rest.
+  const customSubtotal = customLinesTotal(bookingForm.custom_lines, !!selectedPackageId);
+  const bookingTotal = bookingGross({ packagePrice, addonSubtotal, itemsSubtotal, extra: extraCharge, customSubtotal });
   // The Items as saved: the extra of a typed Subtotal sits on the main line.
   const pricedItems = (items: BookingFormState['items']) => {
     const lines = items.map((it) => ({ quantity: it.quantity, unit_price: it.unit_price }));
@@ -448,6 +454,20 @@ export default function BookingsPage() {
     setBookingForm(prev => ({ ...prev, items: [...prev.items, { item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue, is_addon: isAddon }] }));
   };
 
+  const addCustomLine = () => {
+    // With a package a new line starts as a charged add-on, so a price is never lost by mistake.
+    setBookingForm(prev => ({ ...prev, custom_lines: [...prev.custom_lines, { name: '', quantity: 1, unit_price: 0, is_addon: !!selectedPackageId }] }));
+  };
+  const updateCustomLine = (index: number, patch: Partial<CustomLineDraft>) => {
+    setBookingForm(prev => ({
+      ...prev,
+      custom_lines: prev.custom_lines.map((line, i) => (i === index ? { ...line, ...patch } : line)),
+    }));
+  };
+  const removeCustomLine = (index: number) => {
+    setBookingForm(prev => ({ ...prev, custom_lines: prev.custom_lines.filter((_, i) => i !== index) }));
+  };
+
   const removeItemLine = (index: number) => {
     setBookingForm(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== index) }));
   };
@@ -522,6 +542,7 @@ export default function BookingsPage() {
         discount_id: discountId || undefined,
         payment_proof_url: await uploadBookingProof(),
         created_by: user.id, // Add the current user ID
+        custom_lines: customLinesForRequest(bookingForm.custom_lines),
         items: pricedItems(validItems).map(it => ({
           item_id: it.item_id,
           quantity: it.quantity,
@@ -597,7 +618,13 @@ export default function BookingsPage() {
         discount_amount: it.discount_amount || 0,
         catalogue: it.item?.type === 'trousers' ? 'trousers' as const : 'any' as const,
         is_addon: !!it.is_addon,
-      }))
+      })),
+      custom_lines: (booking.custom_lines || []).map((line) => ({
+        name: line.name,
+        quantity: line.quantity,
+        unit_price: line.unit_price,
+        is_addon: !!line.is_addon,
+      })),
     });
     setItemLabels(prev => {
       const next = { ...prev };
@@ -685,6 +712,8 @@ export default function BookingsPage() {
             remaining_amount: remainingAmount,
             discount_id: discountId || undefined,
             payment_proof_url: await uploadBookingProof(activeBooking.id),
+            // The list replaces the stored custom lines; an empty list clears them.
+            custom_lines: customLinesForRequest(bookingForm.custom_lines),
             items: pricedItems(validItems).map(it => ({
               item_id: it.item_id,
               quantity: it.quantity,
@@ -709,7 +738,8 @@ export default function BookingsPage() {
         ?? Math.max(0, (activeBooking.total_amount || 0) - (activeBooking.discount_amount || 0));
       const newFinal = updated?.final_amount ?? bookingFinal;
       const receiptChanged = !paidLocked
-        && (Math.abs(newFinal - previousFinal) > 0.009 || bookingItemsChanged(activeBooking.items, validItems));
+        && (Math.abs(newFinal - previousFinal) > 0.009 || bookingItemsChanged(activeBooking.items, validItems)
+          || customLinesChanged(activeBooking.custom_lines, bookingForm.custom_lines));
       setIsEditModalOpen(false);
       setActiveBooking(null);
       resetDiscountPick();
@@ -1140,6 +1170,9 @@ export default function BookingsPage() {
             updateItemField={updateItemField}
             addItemLine={addItemLine}
             removeItemLine={removeItemLine}
+            addCustomLine={addCustomLine}
+            updateCustomLine={updateCustomLine}
+            removeCustomLine={removeCustomLine}
             handleSelectPackage={handleSelectPackage}
             setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
@@ -1162,6 +1195,7 @@ export default function BookingsPage() {
             pot={bookingPot}
             onPotChange={setBookingPot}
             remainingAmount={remainingAmount}
+            customSubtotal={customSubtotal}
             proofFile={bookingProofFile}
             onProofChange={setBookingProofFile}
             submitError={formErrors.submit}
@@ -1206,6 +1240,9 @@ export default function BookingsPage() {
             updateItemField={updateItemField}
             addItemLine={addItemLine}
             removeItemLine={removeItemLine}
+            addCustomLine={addCustomLine}
+            updateCustomLine={updateCustomLine}
+            removeCustomLine={removeCustomLine}
             handleSelectPackage={handleSelectPackage}
             setDiscountId={setDiscountId}
             setDiscountCode={setDiscountCode}
@@ -1228,6 +1265,7 @@ export default function BookingsPage() {
             pot={bookingPot}
             onPotChange={setBookingPot}
             remainingAmount={remainingAmount}
+            customSubtotal={customSubtotal}
             proofFile={bookingProofFile}
             onProofChange={setBookingProofFile}
             submitError={formErrors.submit}
@@ -1370,6 +1408,7 @@ type BookingFormState = {
   payment_status: Booking['payment_status'];
   payment_method: NonNullable<Booking['payment_method']>;
   items: BookingFormItem[];
+  custom_lines: CustomLineDraft[];
 };
 
 function BookingFormFields({
@@ -1402,6 +1441,9 @@ function BookingFormFields({
   updateItemField,
   addItemLine,
   removeItemLine,
+  addCustomLine,
+  updateCustomLine,
+  removeCustomLine,
   handleSelectPackage,
   setDiscountId,
   setDiscountCode,
@@ -1447,6 +1489,9 @@ function BookingFormFields({
   updateItemField: (index: number, field: keyof BookingFormItem, value: string | number | boolean) => void;
   addItemLine: (catalogue?: 'any' | 'trousers', isAddon?: boolean) => void;
   removeItemLine: (index: number) => void;
+  addCustomLine: () => void;
+  updateCustomLine: (index: number, patch: Partial<CustomLineDraft>) => void;
+  removeCustomLine: (index: number) => void;
   handleSelectPackage: (pkgId: string) => void;
   setDiscountId: (id: string) => void;
   setDiscountCode: (code: string) => void;
@@ -1563,6 +1608,7 @@ function BookingFormFields({
             <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={itemsLocked || needsEventDate}>Add add-on</Button>
           )}
           <Button size="sm" onClick={() => addItemLine()} disabled={itemsLocked || needsEventDate}>Add item</Button>
+          <Button size="sm" variant="secondary" onClick={addCustomLine} disabled={locked || needsEventDate} data-testid="booking-add-custom-line">Add custom item</Button>
         </div>
         {needsEventDate && (
           <p className="text-sm font-medium text-amber-700" data-testid="booking-needs-event-date">
@@ -1642,6 +1688,59 @@ function BookingFormFields({
             );
           })}
         </div>
+        {bookingForm.custom_lines.length > 0 && (
+          <div className="space-y-3" data-testid="booking-custom-lines">
+            <p className="text-xs text-slate-500">
+              Custom items are not in the catalogue yet, such as a tie. They print on the invoice with their price, and no stock moves.
+            </p>
+            {bookingForm.custom_lines.map((line, idx) => (
+              <div key={idx} className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-black/15 bg-white p-3">
+                <div className="min-w-[12rem] flex-1">
+                  <Input
+                    label="Custom item"
+                    value={line.name}
+                    onChange={(e) => updateCustomLine(idx, { name: e.target.value })}
+                    placeholder="e.g. Black satin tie"
+                    maxLength={200}
+                    disabled={locked}
+                  />
+                </div>
+                <div className="w-20">
+                  <NumberInput
+                    label="Qty"
+                    min={1}
+                    value={line.quantity}
+                    onChange={(n) => updateCustomLine(idx, { quantity: Math.max(1, Number(n) || 1) })}
+                    disabled={locked}
+                  />
+                </div>
+                <div className="w-40">
+                  <CurrencyInput
+                    label="Price"
+                    value={line.unit_price}
+                    onChange={(n) => updateCustomLine(idx, { unit_price: n || 0 })}
+                    disabled={locked || (!!selectedPackageId && !line.is_addon)}
+                    helperText={selectedPackageId && !line.is_addon ? 'Included in the package' : undefined}
+                  />
+                </div>
+                {selectedPackageId && (
+                  <label className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={!!line.is_addon}
+                      onChange={(e) => updateCustomLine(idx, { is_addon: e.target.checked })}
+                      disabled={locked}
+                    />
+                    Add-on
+                  </label>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => removeCustomLine(idx)} disabled={locked} aria-label="Remove custom item">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </FieldGroup>
 
       <FieldGroup title="Payment">
@@ -1817,6 +1916,7 @@ function BookingFormTotals({
   pot,
   onPotChange,
   remainingAmount,
+  customSubtotal = 0,
   proofFile,
   onProofChange,
   submitError,
@@ -1840,6 +1940,8 @@ function BookingFormTotals({
   pot: string;
   onPotChange: (pot: string) => void;
   remainingAmount: number;
+  /** The custom lines, added on top of the package or the Items. */
+  customSubtotal?: number;
   /** The optional receipt for the money this save takes. */
   proofFile: File | null;
   onProofChange: (file: File | null) => void;
@@ -1860,7 +1962,13 @@ function BookingFormTotals({
         ) : (
           <div className="flex justify-between">
             <span>Items</span>
-            <span className="tabular-nums">{formatCurrency(bookingTotal)}</span>
+            <span className="tabular-nums">{formatCurrency(bookingTotal - customSubtotal)}</span>
+          </div>
+        )}
+        {customSubtotal > 0 && (
+          <div className="flex justify-between" data-testid="booking-custom-subtotal">
+            <span>Custom items</span>
+            <span className="tabular-nums">{formatCurrency(customSubtotal)}</span>
           </div>
         )}
         {bookingDiscount > 0 && (
