@@ -436,7 +436,8 @@ function RentalChecklist({
                       )}
                     </div>
                     <div className="truncate text-xs text-slate-500">
-                      {[item.name, item.size, item.color].filter(Boolean).join(' · ')}
+                      {/* An Acc name carries its size and colour; a Suit shows them after it. */}
+                      {[item.name, item.size, item.color].filter((part, index) => part && (index === 0 || !item.name.includes(part))).join(' · ')}
                       {item.quantity > 1 ? ` ×${item.quantity}` : ''}
                     </div>
                   </div>
@@ -498,6 +499,17 @@ function RentalChecklist({
             );
           })}
         </ul>
+
+        {(rental.custom_lines || []).length > 0 && (
+          <div className="mt-3 rounded-2xl border border-dashed border-black/15 px-4 py-3 text-sm" data-testid="prep-custom-lines">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Also pack (not in the catalogue)</div>
+            <ul className="mt-1 space-y-0.5 text-slate-800">
+              {(rental.custom_lines || []).map((line, index) => (
+                <li key={index}>{line.name}{line.quantity > 1 ? ` ×${line.quantity}` : ''}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm sm:grid-cols-3">
           {rental.has_addons ? (

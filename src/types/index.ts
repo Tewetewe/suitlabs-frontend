@@ -30,7 +30,7 @@ export interface ItemSyncResult {
   errors: ItemSyncRowError[];
 }
 
-export type GoogleSyncJobType = 'item_import' | 'booking_export' | 'legacy_booking_import';
+export type GoogleSyncJobType = 'item_import' | 'booking_export' | 'legacy_booking_import' | 'booking_tab_rebuild';
 export type GoogleSyncStatus = 'running' | 'completed' | 'failed';
 
 export type WAReminderType = 'pickup' | 'return';
@@ -449,6 +449,8 @@ export interface PickupPrep {
   items_total: number;
   items: PickupPrepItem[];
   has_addons: boolean;
+  /** Things not in the catalogue to pack, such as a tie. "Add-ons ready" covers them. */
+  custom_lines?: Array<{ name: string; quantity: number }>;
   addons_ready: boolean;
   deposit_required: boolean;
   agreement_sent_at?: string;
@@ -924,6 +926,8 @@ export interface Item {
   id: string;
   code: string;
   name: string;
+  /** The complete name Staff see and search by: the printed name with the brand kept (Item.StaffName). */
+  display_name?: string;
   description?: string;
   trousers_code?: string;
   detail_size?: string;
@@ -1033,6 +1037,17 @@ export type BookingInstitution =
 
 // Booking Types
 
+/** A priced line for something not in the catalogue yet, such as a tie. It moves no stock. */
+export interface BookingCustomLine {
+  id?: string;
+  name: string;
+  quantity: number;
+  unit_price: number;
+  total_price?: number;
+  /** With a package: true charges it on top, false includes it in the package price. */
+  is_addon?: boolean;
+}
+
 /** One payment or refund of a Booking, read from the books. */
 export interface BookingPayment {
   /** The shop day the money moved (YYYY-MM-DD). */
@@ -1052,6 +1067,8 @@ export interface Booking {
   legacy_ref?: string;
   /** The bank of the last non-cash payment: bca or bni. Empty for cash or none named. */
   payment_pot?: string;
+  /** Priced lines for things not in the catalogue yet. */
+  custom_lines?: BookingCustomLine[];
   customer_id: string;
   customer?: Customer;
   /** The Pickup date. */
@@ -1127,6 +1144,8 @@ export interface Rental {
   security_deposit: number;
   late_fee: number;
   damage_charges: number;
+  /** Part of the deposit that paid lost-item Sales. */
+  deposit_applied_to_sales?: number;
   /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */
   transaction_fee?: number;
   identity_card_url?: string; // URL to uploaded identity card image
@@ -1192,6 +1211,8 @@ export interface DepositAgreementView {
   rental_date: string;
   return_date: string;
   booking_amount: number;
+  /** Sum of the replacement fees listed; the deposit is deposit_percent of it. */
+  replacement_total?: number;
   deposit_amount: number;
   deposit_percent: number;
   items: DepositAgreementItemView[];
@@ -1233,6 +1254,8 @@ export interface Sale {
   discount_amount: number;
   total_amount: number;
   paid_amount: number;
+  /** Part of paid_amount taken from the rental's Security Deposit. */
+  deposit_applied?: number;
   /** Transaction Fees (QRIS and card) the customer paid on top; not shop revenue. */
   transaction_fee?: number;
   payment_method?: SalePaymentMethod;
@@ -1262,6 +1285,8 @@ export interface CreateSaleRequest {
   source?: SaleSource;
   discount_amount?: number;
   paid_amount?: number;
+  /** Part of the payment taken from the held Security Deposit of the rental. */
+  from_deposit?: number;
   payment_method?: SalePaymentMethod;
   /** EDC terminal and card for a card payment; may be empty when one rule covers the method. */
   fee_rule_id?: string;
@@ -1838,6 +1863,8 @@ export interface CreateItemRequest {
 
 export interface CreateBookingRequest {
   customer_id: string;
+  /** Priced lines for things not in the catalogue yet. On an update, the list replaces the stored one. */
+  custom_lines?: Array<{ name: string; quantity: number; unit_price: number; is_addon: boolean }>;
   booking_date: string; // ISO string, the Pickup date
   appointment_date?: string; // ISO string, the Return date
   /** The day the Customer wears the Items. Fills empty Pickup and Return dates. */
@@ -2027,3 +2054,4 @@ export interface DashboardStats {
   lowStockItems: number;
   maintenanceItems: number;
 }
+

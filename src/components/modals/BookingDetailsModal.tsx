@@ -18,12 +18,14 @@ import { Badge } from '@/components/ui/DataDisplay';
 import { BranchBadge } from '@/components/branch/BranchBadge';
 import { ProofList } from '@/components/payments/ProofList';
 import { BookingPaymentList } from '@/components/payments/BookingPaymentList';
+import { customLineCharged } from '@/lib/booking-draft';
 import { formatCurrency } from '@/lib/currency';
 import { formatDateShort } from '@/lib/date';
 import { formatPaymentMethod } from '@/lib/payment-methods';
 import { occasionLabel, customerLanguageLabel } from '@/lib/select-options';
 import { Booking } from '@/types';
 import { CreditCard, FileText, Printer, ShoppingBag } from 'lucide-react';
+import { itemDisplayName } from '@/lib/item-name';
 
 interface BookingDetailsModalProps {
   isOpen: boolean;
@@ -178,7 +180,7 @@ export function BookingDetailsModal({
         />
 
         <DetailSection label="Items">
-          {items.length === 0 && !hasPackage ? (
+          {items.length === 0 && !hasPackage && (booking.custom_lines || []).length === 0 ? (
             <p className="text-sm text-slate-500">No items</p>
           ) : (
             <DetailList>
@@ -194,12 +196,20 @@ export function BookingDetailsModal({
                 return (
                   <DetailListItem
                     key={line.id}
-                    title={`${line.item?.name || 'Item'}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
+                    title={`${itemDisplayName(line.item, 'Item')}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
                     subtitle={[line.item?.code, line.is_addon ? 'Add-on' : null].filter(Boolean).join(' · ') || undefined}
                     trailing={showPrice ? formatCurrency(line.final_price || line.total_price || 0) : undefined}
                   />
                 );
               })}
+              {(booking.custom_lines || []).map((line, index) => (
+                <DetailListItem
+                  key={line.id || `custom-${index}`}
+                  title={`${line.name}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
+                  subtitle={customLineCharged(line, hasPackage) ? 'Custom item · not in the catalogue' : 'Custom item · included in package'}
+                  trailing={customLineCharged(line, hasPackage) ? formatCurrency(line.total_price ?? line.quantity * line.unit_price) : undefined}
+                />
+              ))}
             </DetailList>
           )}
         </DetailSection>

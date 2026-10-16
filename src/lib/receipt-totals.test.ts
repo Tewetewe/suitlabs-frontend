@@ -27,3 +27,14 @@ describe('receiptTotals', () => {
     assert.ok(!lines.some((l) => l.label.startsWith('Due')));
   });
 });
+
+describe('receiptTotals from the deposit', () => {
+  it('shows the deposit part and counts only the money paid now', () => {
+    const lines = receiptTotals({ subtotal: 2_000_000, paid: 2_000_000, owed: 2_000_000, fromDeposit: 1_500_000 });
+    assert.deepEqual(lines.map((line) => [line.label, line.amount]), [
+      ['Subtotal', 2_000_000],
+      ['From deposit', 1_500_000],
+      ['TOTAL PAID', 500_000],
+    ]);
+  });
+});

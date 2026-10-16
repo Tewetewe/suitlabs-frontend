@@ -8,6 +8,7 @@ import { useBranch } from '@/contexts/BranchContext';
 import { useToast } from '@/contexts/ToastContext';
 import { apiClient } from '@/lib/api';
 import { Item } from '@/types';
+import { itemDisplayName } from '@/lib/item-name';
 
 interface TransferItemModalProps {
   isOpen: boolean;
@@ -36,7 +37,7 @@ export function TransferItemModal({ isOpen, item, onClose, onTransferred }: Tran
     try {
       setSaving(true);
       const updated = await apiClient.transferItem(item.id, toBranchId);
-      success('Item transferred', `${item.name} now lives at the destination shop`);
+      success('Item transferred', `${itemDisplayName(item)} now lives at the destination shop`);
       onTransferred(updated);
       onClose();
     } catch (err: unknown) {
@@ -66,7 +67,7 @@ export function TransferItemModal({ isOpen, item, onClose, onTransferred }: Tran
     >
       <div className="space-y-4">
         <p className="text-sm text-slate-600">
-          Move <span className="font-medium text-slate-900">{item.name}</span> to another shop.
+          Move <span className="font-medium text-slate-900">{itemDisplayName(item)}</span> to another shop.
           Only available items can be transferred.
         </p>
         {!canTransfer && (

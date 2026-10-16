@@ -26,6 +26,7 @@ import { CompleteRentalModal, DEPOSIT_GRACE_DAYS, isDepositHeld } from '@/compon
 import { ProofPick } from '@/components/payments/ProofPick';
 import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
 import { PotPicker } from '@/components/payments/PotPicker';
+import { depositLeft, refundableDeposit } from '@/lib/deposit';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { PageShell } from '@/components/ui/PageShell';
@@ -37,6 +38,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { useRememberedState } from '@/hooks/useRememberedState';
+import { itemDisplayName } from '@/lib/item-name';
 
 /** Whole days since the suit came back, or null when it has not. */
 function daysSinceReturn(rental: Rental): number | null {
@@ -276,8 +278,9 @@ export default function RentalsPage() {
     setIsSubmitting(true);
     try {
       const parsedCharge = damageCharges ? parseFloat(damageCharges) : 0;
-      const refundable = Math.max((selectedRental.security_deposit || 0) - parsedCharge, 0);
-      const chargedAbove = parsedCharge > (selectedRental.security_deposit || 0);
+      // Lost-item Sales took their part of the deposit first; damage comes off the rest.
+      const refundable = refundableDeposit(selectedRental, parsedCharge);
+      const chargedAbove = parsedCharge > depositLeft(selectedRental);
       if ((refundable > 0 && potMissing(depositRefundMethod, refundPot)) || (chargedAbove && potMissing(chargePaymentMethod, chargePot))) {
         toastError('Pick the bank', POT_MISSING_MESSAGE);
         setIsSubmitting(false);
@@ -406,7 +409,7 @@ export default function RentalsPage() {
     return (
       rental.id.toLowerCase().includes(q) ||
       customerName.includes(q) ||
-      (rental.items?.some(item => item.item?.name?.toLowerCase().includes(q)) || false)
+      (rental.items?.some(item => itemDisplayName(item.item).toLowerCase().includes(q)) || false)
     );
   }) : [];
 
@@ -527,7 +530,7 @@ export default function RentalsPage() {
               const itemSummary = (rental.items || [])
                 .slice(0, 2)
                 .map((line) => {
-                  const name = line.item?.name || 'Item';
+                  const name = itemDisplayName(line.item, 'Item');
                   return line.item?.code ? `${name} ${line.item.code}` : name;
                 })
                 .join(', ') + ((rental.items?.length || 0) > 2 ? ` +${rental.items!.length - 2}` : '');
@@ -801,14 +804,19 @@ export default function RentalsPage() {
             <CurrencyInput label="Damage charge" value={damageCharges} onChange={(n) => setDamageCharges(n ? String(n) : '')} helperText="Leave 0 if the item came back clean." />
             {selectedRental && (
               <div className="space-y-3 rounded-2xl border border-slate-200 px-4 py-3">
+                {(selectedRental.deposit_applied_to_sales || 0) > 0 && (
+                  <p className="text-xs text-slate-500">
+                    Lost-item fees took {formatCurrency(selectedRental.deposit_applied_to_sales || 0)} of the {formatCurrency(selectedRental.security_deposit || 0)} deposit.
+                  </p>
+                )}
                 <p className="text-sm font-medium text-slate-800">
                   Refundable deposit{' '}
-                  {formatCurrency(Math.max((selectedRental.security_deposit || 0) - (damageCharges ? parseFloat(damageCharges) || 0 : 0), 0))}
+                  {formatCurrency(refundableDeposit(selectedRental, damageCharges ? parseFloat(damageCharges) || 0 : 0))}
                 </p>
-                {(damageCharges ? parseFloat(damageCharges) || 0 : 0) > (selectedRental.security_deposit || 0) && (
+                {(damageCharges ? parseFloat(damageCharges) || 0 : 0) > depositLeft(selectedRental) && (
                   <p className="text-xs font-medium text-amber-700">
                     Collect{' '}
-                    {formatCurrency((damageCharges ? parseFloat(damageCharges) || 0 : 0) - (selectedRental.security_deposit || 0))}
+                    {formatCurrency((damageCharges ? parseFloat(damageCharges) || 0 : 0) - depositLeft(selectedRental))}
                     {' '}from the customer. Damage runs past the deposit.
                   </p>
                 )}
@@ -834,7 +842,7 @@ export default function RentalsPage() {
                   helperText="Only used when damage runs past the deposit."
                 />
                 <TransactionFeeLines
-                  amount={(damageCharges ? parseFloat(damageCharges) || 0 : 0) - (selectedRental.security_deposit || 0)}
+                  amount={(damageCharges ? parseFloat(damageCharges) || 0 : 0) - depositLeft(selectedRental)}
                   method={chargePaymentMethod}
                   pot={chargePot}
                   onPotChange={setChargePot}

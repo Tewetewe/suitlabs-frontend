@@ -14,7 +14,7 @@ import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
-import { customerItemName } from '@/lib/item-name';
+import { customerLineName, customerItemName } from '@/lib/item-name';
 
 interface SaleInvoiceModalProps {
   isOpen: boolean;
@@ -35,6 +35,7 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
     discount: sale.discount_amount,
     fee: sale.transaction_fee,
     paid: sale.paid_amount || 0,
+    fromDeposit: sale.deposit_applied,
     owed: sale.total_amount || 0,
   });
   const shopSubtitle = receiptSubtitle(sale.branch?.receipt_subtitle);
@@ -50,7 +51,7 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
     ? [sale.customer.first_name, sale.customer.last_name].filter(Boolean).join(' ').trim() || 'Walk-in'
     : 'Walk-in';
   const rackItems = (sale.items || []).map((line) => ({
-    name: line.item?.name || 'Item',
+    name: (customerItemName(line.item) || 'Item'),
     code: line.item?.code,
     size: line.item?.size?.label,
     quantity: line.quantity,
@@ -130,11 +131,11 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
                 <div className="receipt-label">ITEMS:</div>
                 {(sale.items || []).length > 0 ? (
                   (sale.items || []).map((line) => {
-                    const name = customerItemName(line.item) || 'Item';
-                    const size = line.item?.size?.label ? ` - ${line.item.size.label}` : '';
+                    // The customer name carries the size already.
+                    const name = customerLineName(line.item) || 'Item';
                     return (
                       <div key={line.id} className="receipt-item">
-                        <div className="receipt-line">  {name}{size}</div>
+                        <div className="receipt-line">  {name}</div>
                         <div className="receipt-line">    {line.quantity} x {formatCurrency(line.unit_price || 0)} = {formatCurrency(line.line_total || 0)}</div>
                       </div>
                     );

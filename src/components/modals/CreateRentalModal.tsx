@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { FileText } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import axios from 'axios';
+import { itemDisplayName } from '@/lib/item-name';
 
 interface CreateRentalModalProps {
   isOpen: boolean;
@@ -194,7 +195,7 @@ export function CreateRentalModal({ isOpen, onClose, onSuccess }: CreateRentalMo
             <div className="space-y-1 text-sm text-slate-700">
               {selectedBooking.items.map((it, idx) => (
                 <div key={it.id || idx}>
-                  {it.item?.name || 'Item'} × {it.quantity}
+                  {itemDisplayName(it.item, 'Item')} × {it.quantity}
                 </div>
               ))}
             </div>

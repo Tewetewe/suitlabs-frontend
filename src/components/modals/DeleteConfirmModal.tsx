@@ -4,6 +4,7 @@ import React from 'react';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { Button } from '@/components/ui/Button';
 import { Item } from '@/types';
+import { itemDisplayName } from '@/lib/item-name';
 
 interface DeleteConfirmModalProps {
   isOpen: boolean;
@@ -36,7 +37,7 @@ export default function DeleteConfirmModal({
       {item && (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
-            Remove <span className="font-medium text-slate-900">{item.name}</span> ({item.code}) from inventory? This cannot be undone.
+            Remove <span className="font-medium text-slate-900">{itemDisplayName(item)}</span> ({item.code}) from inventory? This cannot be undone.
           </p>
           <p className="text-xs capitalize text-slate-500">{item.status} · {item.condition}</p>
         </div>

@@ -23,7 +23,7 @@ import EditItemModal from '@/components/modals/EditItemModal';
 import { useToast } from '@/contexts/ToastContext';
 import { ArrowRightLeft, ChevronLeft, ChevronRight, Edit, X, ZoomIn } from 'lucide-react';
 import clsx from 'clsx';
-import { customerItemName, itemGenderLabel, itemQualityLabel } from '@/lib/item-name';
+import { customerItemName, itemGenderLabel, itemQualityLabel, itemDisplayName } from '@/lib/item-name';
 
 function itemStatusVariant(status: string): 'success' | 'primary' | 'warning' | 'danger' | 'default' {
   switch (status) {
@@ -289,7 +289,7 @@ export default function ItemDetailPage() {
   return (
     <>
       <PageShell
-        title={item?.name || 'Item'}
+        title={itemDisplayName(item, 'Item')}
         subtitle={item ? `#${item.code}` : undefined}
         toolbar={
           <Link href="/dashboard/items">

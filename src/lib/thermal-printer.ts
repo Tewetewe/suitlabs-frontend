@@ -15,9 +15,11 @@ import {
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from './branch-scope';
+import { customLineCharged } from './booking-draft';
+import { refundableDeposit as refundableAfterCharges } from './deposit';
 import { TRANSACTION_FEE_LABEL } from './transaction-fee';
 import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
-import { itemTags } from './item-name';
+import { itemTags, customerLineName } from './item-name';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -598,13 +600,18 @@ export class ThermalPrinterService {
       total_price: number;
       discount_amount?: number;
     }>;
+    // Custom lines of the Booking charge things not in the catalogue, such as a tie.
+    const customLines = rental.booking?.custom_lines || [];
+    const hasPackage = Boolean(rental.booking?.package_pricing_id);
     const itemsSubtotal = items.reduce(
       (sum, item) => sum + (item.total_price || (item.unit_price || 0) * (item.quantity || 1)),
       0
-    );
+    ) + customLines
+      .filter((line) => customLineCharged(line, hasPackage))
+      .reduce((sum, line) => sum + (line.total_price ?? line.quantity * line.unit_price), 0);
     const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
     const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
-    const refundableDeposit = Math.max((rental.security_deposit || 0) - (rental.damage_charges || 0), 0);
+    const refundableDeposit = refundableAfterCharges(rental);
 
     generator.separator();
     generator
@@ -619,9 +626,8 @@ export class ThermalPrinterService {
 
     if (items.length > 0) {
       items.forEach((item) => {
-        const itemName = item.item?.name || 'Item';
-        const itemSize = item.item?.size?.label || '';
-        const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
+        // The customer name carries the size already, and hides the supplier.
+        const description = customerLineName(item.item) || 'Item';
         const quantity = item.quantity || 1;
         const unitPrice = item.unit_price || item.total_price || 0;
         const itemTotal = item.total_price || unitPrice * quantity;
@@ -630,9 +636,16 @@ export class ThermalPrinterService {
           .text(`    ${quantity} x ${formatCurrencyForPrint(unitPrice)} = ${formatCurrencyForPrint(itemTotal)}`)
           .lineFeed();
       });
-    } else {
+    } else if (customLines.length === 0) {
       generator.text('Rental Package').lineFeed();
     }
+    customLines.forEach((line) => {
+      generator.text(`  ${line.name}`).lineFeed();
+      const priced = customLineCharged(line, hasPackage)
+        ? `    ${line.quantity} x ${formatCurrencyForPrint(line.unit_price)} = ${formatCurrencyForPrint(line.total_price ?? line.quantity * line.unit_price)}`
+        : `    ${line.quantity} x included in package`;
+      generator.text(priced).lineFeed();
+    });
 
     generator.separator();
     generator.text(`Subtotal: ${formatCurrencyForPrint(itemsSubtotal || rental.total_cost || 0)}`).lineFeed();
@@ -652,6 +665,9 @@ export class ThermalPrinterService {
 
     if ((rental.security_deposit || 0) > 0) {
       generator.text(`Deposit: ${formatCurrencyForPrint(rental.security_deposit)}`).lineFeed();
+      if ((rental.deposit_applied_to_sales || 0) > 0) {
+        generator.text(`Lost items: (${formatCurrencyForPrint(rental.deposit_applied_to_sales || 0)})`).lineFeed();
+      }
       if ((rental.damage_charges || 0) > 0) {
         generator.text(`Deduction: (${formatCurrencyForPrint(rental.damage_charges)})`).lineFeed();
       }
@@ -748,9 +764,9 @@ export class ThermalPrinterService {
     const saleItems = sale.items || [];
     if (saleItems.length > 0) {
       saleItems.forEach((line) => {
-        const name = line.item?.name || 'Item';
-        const size = line.item?.size?.label ? ` - ${line.item.size.label}` : '';
-        generator.text(`  ${name}${size}`).lineFeed();
+        // The customer name carries the size already, and hides the supplier.
+        const name = customerLineName(line.item) || 'Item';
+        generator.text(`  ${name}`).lineFeed();
         generator
           .text(
             `    ${line.quantity} x ${formatCurrencyForPrint(line.unit_price || 0)} = ${formatCurrencyForPrint(line.line_total || 0)}`
@@ -769,6 +785,7 @@ export class ThermalPrinterService {
         discount: sale.discount_amount,
         fee: sale.transaction_fee,
         paid: sale.paid_amount || 0,
+        fromDeposit: sale.deposit_applied,
         owed: sale.total_amount || 0,
       }),
     );
@@ -847,7 +864,8 @@ export class ThermalPrinterService {
 
     // The brand is the supplier, for staff only, so the gender and tier take its
     // place. The name may carry them already; print each only once.
-    const extras = [...itemTags(item).filter((tag) => !item.name.includes(tag)), item.color].filter(Boolean);
+    // The complete name carries the tags and the colour; print what it lacks.
+    const extras = [...itemTags(item), item.color].filter((word): word is string => !!word && !item.name.includes(word));
     if (extras.length > 0) {
       generator.text(extras.join(' / ')).lineFeed();
     }

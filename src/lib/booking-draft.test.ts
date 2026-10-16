@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   bookingGross,
+  customLinesChanged,
+  customLinesForRequest,
+  customLinesTotal,
   bookingItemsChanged,
   bookingPayNow,
   defaultTrousersCode,
@@ -85,5 +88,44 @@ describe('bookingItemsChanged', () => {
     assert.equal(bookingItemsChanged(before, [{ item_id: 'tie', quantity: 1 }, { item_id: 'suit', quantity: 1 }]), false);
     assert.equal(bookingItemsChanged(before, [{ item_id: 'suit-2', quantity: 1 }, { item_id: 'tie', quantity: 1 }]), true);
     assert.equal(bookingItemsChanged(before, [{ item_id: 'suit', quantity: 2 }, { item_id: 'tie', quantity: 1 }]), true);
+  });
+});
+
+describe('custom lines', () => {
+  const lines = [
+    { name: ' Black satin tie ', quantity: 2, unit_price: 25_000 },
+    { name: '', quantity: 1, unit_price: 99_000 },
+  ];
+
+  it('sends only named lines, trimmed', () => {
+    assert.deepEqual(customLinesForRequest(lines), [{ name: 'Black satin tie', quantity: 2, unit_price: 25_000, is_addon: false }]);
+    assert.equal(customLinesTotal(lines), 50_000);
+  });
+
+  it('adds on top of a package or the Items', () => {
+    assert.equal(bookingGross({ packagePrice: 0, addonSubtotal: 0, itemsSubtotal: 300_000, customSubtotal: 50_000 }), 350_000);
+    assert.equal(bookingGross({ packagePrice: 1_000_000, addonSubtotal: 0, itemsSubtotal: 0, customSubtotal: 50_000 }), 1_050_000);
+  });
+
+  it('sees a new price but not an unnamed line', () => {
+    assert.equal(customLinesChanged(lines, lines), false);
+    assert.equal(customLinesChanged(lines, [{ name: 'Black satin tie', quantity: 2, unit_price: 30_000 }]), true);
+    assert.equal(customLinesChanged(lines, [{ name: 'Black satin tie', quantity: 2, unit_price: 25_000 }]), false);
+  });
+});
+
+describe('custom lines with a package', () => {
+  const lines = [
+    { name: 'Tie', quantity: 1, unit_price: 80_000 },
+    { name: 'Pocket square', quantity: 1, unit_price: 50_000, is_addon: true },
+  ];
+
+  it('charges only the add-ons; the package includes the rest', () => {
+    assert.equal(customLinesTotal(lines, true), 50_000);
+    assert.equal(customLinesTotal(lines, false), 130_000);
+  });
+
+  it('sees a switch between included and add-on', () => {
+    assert.equal(customLinesChanged(lines, [{ ...lines[0], is_addon: true }, lines[1]]), true);
   });
 });

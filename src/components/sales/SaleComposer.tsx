@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/DataDisplay';
 import NewCustomerModal from '@/components/modals/NewCustomerModal';
 import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
+import { customerItemName } from '@/lib/item-name';
 
 export type CartLine = {
   key: string;
@@ -39,6 +40,11 @@ type SaleComposerProps = {
    * sale on the server, so the composer says so before anything is typed.
    */
   rentalStatus?: Rental['status'];
+  /**
+   * The Security Deposit the rental still holds. A lost-item fee comes off it
+   * first, and the customer pays only the rest.
+   */
+  depositLeft?: number;
   submitLabel?: string;
   onSubmit: (payload: CreateSaleRequest) => Promise<void>;
   submitting?: boolean;
@@ -69,6 +75,7 @@ export function SaleComposer({
   customerId,
   rentalItems = [],
   rentalStatus,
+  depositLeft = 0,
   submitLabel = 'Complete Sale',
   onSubmit,
   submitting = false,
@@ -87,6 +94,8 @@ export function SaleComposer({
   const [notes, setNotes] = useState('');
   const [lostFees, setLostFees] = useState<Record<string, string>>({});
   const [lostChecked, setLostChecked] = useState<Record<string, boolean>>({});
+  // A typed amount from the deposit; '' takes as much as the deposit covers.
+  const [fromDepositInput, setFromDepositInput] = useState('');
 
   useEffect(() => {
     setSelectedCustomerId(customerId || '');
@@ -185,6 +194,14 @@ export function SaleComposer({
   const subtotal = allLines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
   const discountAmount = Number(discount) || 0;
   const total = Math.max(0, subtotal - discountAmount);
+  // A lost-item fee comes off the held deposit first. Only the rest is paid
+  // now, so the method, the bank and the fee follow the rest.
+  const canUseDeposit = depositLeft > 0 && lostLines.length > 0;
+  const depositCap = Math.min(depositLeft, total);
+  const fromDeposit = canUseDeposit
+    ? Math.min(fromDepositInput === '' ? depositCap : Number(fromDepositInput) || 0, depositCap)
+    : 0;
+  const payNow = Math.max(0, total - fromDeposit);
 
   const lostCount = lostLines.reduce((sum, line) => sum + line.quantity, 0);
   const soldCount = cart.reduce((sum, line) => sum + line.quantity, 0);
@@ -205,8 +222,8 @@ export function SaleComposer({
       : discountAmount > subtotal
         ? 'The discount is larger than the subtotal.'
         : feelessLost.length > 0
-          ? `Type a replacement fee for ${feelessLost.map((line) => line.item.name).join(', ')}.`
-          : potMissing(paymentMethod, pot)
+          ? `Type a replacement fee for ${feelessLost.map((line) => customerItemName(line.item)).join(', ')}.`
+          : payNow > 0 && potMissing(paymentMethod, pot)
             ? POT_MISSING_MESSAGE
             : null;
 
@@ -225,9 +242,10 @@ export function SaleComposer({
       source: rentalId ? 'rental_return' : bookingId ? 'booking_addon' : 'standalone',
       discount_amount: discountAmount,
       paid_amount: total,
+      from_deposit: fromDeposit > 0 ? fromDeposit : undefined,
       payment_method: paymentMethod,
       fee_rule_id: feeRuleId || undefined,
-      pot: potForRequest(paymentMethod, pot),
+      pot: payNow > 0 ? potForRequest(paymentMethod, pot) : undefined,
       notes,
       items: allLines.map((line) => ({
         item_id: line.item.id,
@@ -289,7 +307,7 @@ export function SaleComposer({
                         onChange={(e) => setLostChecked((prev) => ({ ...prev, [line.item_id]: e.target.checked }))}
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-slate-900">{item.name}</span>
+                        <span className="block truncate text-sm font-medium text-slate-900">{customerItemName(item)}</span>
                         <span className="block truncate text-xs text-slate-500">
                           {item.code} · {line.quantity} rented
                           {alreadyLost ? ' · already recorded lost' : ''}
@@ -342,7 +360,7 @@ export function SaleComposer({
             {results.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-black/5 px-3 py-2">
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-slate-900">{item.name}</div>
+                  <div className="truncate text-sm font-medium text-slate-900">{customerItemName(item)}</div>
                   <div className="text-xs text-slate-500">
                     {item.code} · stock {item.available_qty ?? item.quantity} · {formatCurrency(defaultSellPrice(item))}
                   </div>
@@ -377,7 +395,7 @@ export function SaleComposer({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-slate-900">{line.item.name}</div>
+                        <div className="truncate text-sm font-medium text-slate-900">{customerItemName(line.item)}</div>
                         <div className="text-xs text-slate-500">{line.item.code}</div>
                       </div>
                       {/* A lost line comes from the panel above, so removing it
@@ -385,7 +403,7 @@ export function SaleComposer({
                           scroll back up and hunt for the checkbox. */}
                       <button
                         type="button"
-                        aria-label={lost ? `Stop charging ${line.item.name} as lost` : `Remove ${line.item.name}`}
+                        aria-label={lost ? `Stop charging ${customerItemName(line.item)} as lost` : `Remove ${customerItemName(line.item)}`}
                         className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-red-600"
                         onClick={() => {
                           if (lost) {
@@ -534,7 +552,25 @@ export function SaleComposer({
             <span>Total</span>
             <span className="tabular-nums">{formatCurrency(total)}</span>
           </div>
-          <TransactionFeeLines amount={total} method={paymentMethod} pot={pot} onPotChange={setPot} ruleId={feeRuleId} onRuleIdChange={setFeeRuleId} className="text-sm text-slate-500" />
+          {canUseDeposit && (
+            <>
+              <CurrencyInput
+                label="From deposit"
+                value={fromDepositInput === '' ? depositCap : fromDepositInput}
+                onChange={(n) => setFromDepositInput(n === depositCap ? '' : String(n || 0))}
+                error={Number(fromDepositInput) > depositCap ? `The deposit covers at most ${formatCurrency(depositCap)}.` : undefined}
+                helperText={`The rental holds ${formatCurrency(depositLeft)}. The fee comes off it first; the release refunds what is left.`}
+                data-testid="sale-from-deposit"
+              />
+              <div className="flex items-center justify-between text-base font-semibold">
+                <span>Pay now</span>
+                <span className="tabular-nums">{formatCurrency(payNow)}</span>
+              </div>
+            </>
+          )}
+          {payNow > 0 && (
+            <TransactionFeeLines amount={payNow} method={paymentMethod} pot={pot} onPotChange={setPot} ruleId={feeRuleId} onRuleIdChange={setFeeRuleId} className="text-sm text-slate-500" />
+          )}
 
           {/* Marking an item lost changes stock, so the cashier reads what the
               button is about to do before pressing it. */}

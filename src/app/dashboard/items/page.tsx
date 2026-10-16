@@ -38,7 +38,7 @@ import { useRememberedState } from '@/hooks/useRememberedState';
 import { TransferItemModal } from '@/components/modals/TransferItemModal';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { useBranch } from '@/contexts/BranchContext';
-import { ITEM_GENDER_LABELS, itemGenderTag, itemQualityLabel, itemTags, itemTierTag } from '@/lib/item-name';
+import { ITEM_GENDER_LABELS, itemGenderTag, itemQualityLabel, itemTags, itemTierTag, itemDisplayName } from '@/lib/item-name';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
 import { availabilityCardNote, availabilityNote, type AvailabilityTone } from '@/lib/item-availability';
 
@@ -218,7 +218,7 @@ export default function ItemsPage() {
     try {
       await apiClient.updateItem(id, itemData);
       const item = items.find(i => i.id === id);
-      const itemName = item ? item.name : 'Item';
+      const itemName = item ? itemDisplayName(item) : 'Item';
       success('Item Updated Successfully!', `${itemName} has been updated.`);
       await reload(); // Reload items after successful update
     } catch (error) {
@@ -377,7 +377,7 @@ export default function ItemsPage() {
           href={`/dashboard/items/${item.id}`}
           className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900 hover:text-indigo-700"
         >
-          {item.name}
+          {itemDisplayName(item)}
         </Link>
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-xs text-slate-500">
@@ -419,7 +419,7 @@ export default function ItemsPage() {
               href={`/dashboard/items/${item.id}`}
               className="line-clamp-1 font-semibold text-slate-900 hover:text-indigo-700"
             >
-              {item.name}
+              {itemDisplayName(item)}
             </Link>
             <p className="mt-0.5 truncate text-sm text-slate-500">
               {itemFacts(item)}

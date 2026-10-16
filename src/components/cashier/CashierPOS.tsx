@@ -51,12 +51,15 @@ import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS, customerLanguageLa
 import { issueBookingInvoice } from '@/lib/issue-invoice';
 import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
 import { Badge } from '@/components/ui/DataDisplay';
-import { itemTags } from '@/lib/item-name';
+import { itemDetails, customerItemName } from '@/lib/item-name';
 import { availabilityCardNote, availabilityNote } from '@/lib/item-availability';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
 import {
   bookingGross,
   bookingPayNow,
+  customLinesForRequest,
+  customLinesTotal,
+  type CustomLineDraft,
   defaultTrousersCode,
   newBookingStatuses,
   repriceForLength,
@@ -197,6 +200,9 @@ export function CashierPOS() {
   // A typed down payment; '' is half of the total.
   const [dpInput, setDpInput] = useState('');
   const [notes, setNotes] = useState('');
+  // Priced lines for things not in the catalogue yet, such as a tie. Only a
+  // rental takes them: a Sale line must be a catalogue Item.
+  const [customLines, setCustomLines] = useState<CustomLineDraft[]>([]);
   // Optional: '' is no guarantee left.
   const [guarantee, setGuarantee] = useState('');
   const [takeDeposit, setTakeDeposit] = useState(false);
@@ -230,8 +236,10 @@ export function CashierPOS() {
     .filter((line) => line.is_addon)
     .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
   const discountAmount = Number(discount) || 0;
+  // With a package, only add-on custom lines are charged; the package includes the rest.
+  const customSubtotal = mode === 'rental' ? customLinesTotal(customLines, !!packageId) : 0;
   const gross = mode === 'rental'
-    ? bookingGross({ packagePrice, addonSubtotal: addonTotal, itemsSubtotal: subtotal })
+    ? bookingGross({ packagePrice, addonSubtotal: addonTotal, itemsSubtotal: subtotal, customSubtotal })
     : subtotal;
   const typedOff = Math.max(0, gross - (mode === 'rental' && packagePrice > 0 ? 0 : discountAmount));
   // The Discount picked for a rental, as on the New Booking form. The backend
@@ -448,7 +456,7 @@ export function CashierPOS() {
   // Returns false when the Item did not go into the cart.
   const addItem = useCallback((item: Item): boolean => {
     if (!canSell(item, mode) && mode === 'sale') {
-      error('Not sellable', `${item.name} is not marked as sellable or is out of stock.`);
+      error('Not sellable', `${customerItemName(item)} is not marked as sellable or is out of stock.`);
       return false;
     }
     // The event day sets the pickup and return dates that the availability
@@ -485,7 +493,7 @@ export function CashierPOS() {
       // A clash warns but does not stop the sale: staff decide.
       void checkAvailability(item.id).then((result) => {
         if (result?.status === 'booked') {
-          warning('Booked on these dates', `${item.name}: ${availabilityNote(result).text}`);
+          warning('Booked on these dates', `${customerItemName(item)}: ${availabilityNote(result).text}`);
         }
       });
     }
@@ -521,6 +529,14 @@ export function CashierPOS() {
     setCart((prev) => prev.map((line) => (line.key === key ? { ...line, quantity } : line)));
   };
 
+  // An Item with no catalogue price takes a typed price, unless the package
+  // includes it. A catalogue price stays fixed here, as before.
+  const lineCharged = (line: CartLine) => !(mode === 'rental' && packageId && !line.is_addon);
+  const lacksCatalogPrice = (line: CartLine) => catalogPrice(line.item, mode, rentalLength) <= 0;
+  const setLinePrice = (key: string, price: number) => {
+    setCart((prev) => prev.map((line) => (line.key === key ? { ...line, unit_price: Math.max(0, price) } : line)));
+  };
+
   const toggleAddon = (key: string) => {
     setCart((prev) => prev.map((line) => (line.key === key ? { ...line, is_addon: !line.is_addon } : line)));
   };
@@ -535,6 +551,7 @@ export function CashierPOS() {
 
   const resetTicket = () => {
     setCart([]);
+    setCustomLines([]);
     setCustomer(null);
     setPackageId('');
     setDiscount('');
@@ -593,7 +610,7 @@ export function CashierPOS() {
     }
     try {
       const item = await apiClient.searchByBarcode(cleaned);
-      if (addItem(item)) success('Scanned', item.name);
+      if (addItem(item)) success('Scanned', customerItemName(item));
     } catch {
       setSearch(cleaned);
       error('Not found', `No item for barcode ${cleaned}`);
@@ -708,6 +725,7 @@ export function CashierPOS() {
           discount_id: discountPick.discountId || undefined,
           remaining_amount: remaining,
           created_by: user?.id,
+          custom_lines: customLinesForRequest(customLines),
           items: pricedCart.map((line, index) => ({
             item_id: line.item.id,
             quantity: line.quantity,
@@ -743,6 +761,7 @@ export function CashierPOS() {
         }
       }
       setCart([]);
+      setCustomLines([]);
       setCartOpen(false);
       setProofFile(null);
     } catch (e) {
@@ -845,15 +864,25 @@ export function CashierPOS() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-slate-900">{line.item.name}</div>
+                      <div className="truncate text-sm font-semibold text-slate-900">{customerItemName(line.item)}</div>
                       <div className="text-xs text-slate-500">
-                        {[line.item.code, ...itemTags(line.item), line.item.size?.label ? `Size ${line.item.size.label}` : null].filter(Boolean).join(' · ') || 'Item'}
+                        {itemDetails(line.item)}
                       </div>
                       {mode === 'rental' && (
                         <AvailabilityNote note={availabilityNoteFor(line.item.id)} testId="pos-availability" />
                       )}
                       {mode === 'rental' && !packageId && missingFourHourPrice(line.item, rentalLength) && (
                         <div className="text-[11px] font-medium text-amber-700" data-testid="pos-no-4h-price">No 4-hour price: 3-day price used</div>
+                      )}
+                      {lacksCatalogPrice(line) && lineCharged(line) && (
+                        <div className="mt-1 w-36" data-testid="pos-line-price">
+                          <CurrencyInput
+                            label="Price"
+                            value={line.unit_price}
+                            onChange={(n) => setLinePrice(line.key, n || 0)}
+                            error={line.unit_price <= 0 ? 'No price in the catalogue: type it' : undefined}
+                          />
+                        </div>
                       )}
                       {mode === 'rental' && !!packageId && (
                         <button
@@ -1075,6 +1104,77 @@ export function CashierPOS() {
 
         {mode === 'rental' && discountPicker}
 
+        {mode === 'rental' && (
+          <div className="space-y-2" data-testid="pos-custom-lines">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Custom items</div>
+              <button
+                type="button"
+                onClick={() => setCustomLines((prev) => [...prev, { name: '', quantity: 1, unit_price: 0, is_addon: !!packageId }])}
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-indigo-700 touch-manipulation"
+                data-testid="pos-add-custom-line"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add
+              </button>
+            </div>
+            {customLines.length === 0 ? (
+              <p className="text-xs text-slate-500">For things not in the catalogue yet, such as a tie. They print on the receipt with their price.</p>
+            ) : (
+              customLines.map((line, index) => (
+                <div key={index} className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      label="Item"
+                      value={line.name}
+                      onChange={(e) => setCustomLines((prev) => prev.map((entry, i) => (i === index ? { ...entry, name: e.target.value } : entry)))}
+                      placeholder="e.g. Black satin tie"
+                      maxLength={200}
+                    />
+                  </div>
+                  <div className="w-16">
+                    <Input
+                      label="Qty"
+                      type="number"
+                      min={1}
+                      value={line.quantity}
+                      onChange={(e) => setCustomLines((prev) => prev.map((entry, i) => (i === index ? { ...entry, quantity: Math.max(1, Number(e.target.value) || 1) } : entry)))}
+                    />
+                  </div>
+                  <div className="w-32">
+                    <CurrencyInput
+                      label="Price"
+                      value={line.unit_price}
+                      onChange={(n) => setCustomLines((prev) => prev.map((entry, i) => (i === index ? { ...entry, unit_price: n || 0 } : entry)))}
+                      disabled={!!packageId && !line.is_addon}
+                    />
+                  </div>
+                  {!!packageId && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomLines((prev) => prev.map((entry, i) => (i === index ? { ...entry, is_addon: !entry.is_addon } : entry)))}
+                      className={clsx(
+                        'mb-1 inline-flex min-h-9 items-center rounded-full px-2.5 text-[11px] font-semibold touch-manipulation',
+                        line.is_addon ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600',
+                      )}
+                    >
+                      {line.is_addon ? 'Add-on' : 'Included'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 touch-manipulation"
+                    onClick={() => setCustomLines((prev) => prev.filter((_, i) => i !== index))}
+                    aria-label="Remove custom item"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
         <Input
           label="Notes"
           value={notes}
@@ -1101,7 +1201,13 @@ export function CashierPOS() {
           ) : (
             <div className="flex justify-between text-slate-500">
               <span>Subtotal</span>
-              <span className="tabular-nums">{formatCurrency(gross)}</span>
+              <span className="tabular-nums">{formatCurrency(gross - customSubtotal)}</span>
+            </div>
+          )}
+          {customSubtotal > 0 && (
+            <div className="flex justify-between text-slate-500" data-testid="pos-custom-subtotal">
+              <span>Custom items</span>
+              <span className="tabular-nums">{formatCurrency(customSubtotal)}</span>
             </div>
           )}
           {pickedDiscountAmount > 0 && (
@@ -1434,11 +1540,11 @@ export function CashierPOS() {
                       </div>
                       <div className="space-y-0.5 p-2.5">
                         <div className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">
-                          {item.name}
+                          {customerItemName(item)}
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate text-xs text-slate-500">
-                            {[item.code, ...itemTags(item), item.size?.label].filter(Boolean).join(' · ') || item.color || item.brand}
+                            {itemDetails(item) || item.color || item.brand}
                           </span>
                           <span className="text-sm font-bold tabular-nums text-slate-900">
                             {formatCurrency(catalogPrice(item, mode, rentalLength))}

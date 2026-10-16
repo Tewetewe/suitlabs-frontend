@@ -49,19 +49,63 @@ export function typedSubtotal(typed: number, itemsSubtotal: number): { tooLow: b
   };
 }
 
-/** The amount before Discount: a package with its add-ons, or the Items with the Subtotal extra. */
+/**
+ * The amount before Discount: a package with its add-ons, or the Items with
+ * the Subtotal extra. Custom lines add on top either way, as in
+ * Booking.CalculateTotals.
+ */
 export function bookingGross({
   packagePrice,
   addonSubtotal,
   itemsSubtotal,
   extra = 0,
+  customSubtotal = 0,
 }: {
   packagePrice: number;
   addonSubtotal: number;
   itemsSubtotal: number;
   extra?: number;
+  customSubtotal?: number;
 }): number {
-  return packagePrice > 0 ? packagePrice + addonSubtotal : itemsSubtotal + extra;
+  return (packagePrice > 0 ? packagePrice + addonSubtotal : itemsSubtotal + extra) + customSubtotal;
+}
+
+/**
+ * A custom line as a form holds it: a name, a quantity and a price. With a
+ * package, is_addon charges it on top, and any other line is included in the
+ * package price (BookingCustomLine.Charged).
+ */
+export type CustomLineDraft = { name: string; quantity: number; unit_price: number; is_addon?: boolean };
+
+/** True when the line adds to the amount: always without a package, as an add-on with one. */
+export function customLineCharged(line: Pick<CustomLineDraft, 'is_addon'>, hasPackage: boolean): boolean {
+  return !hasPackage || !!line.is_addon;
+}
+
+/** The custom lines a save sends: named ones only, with a quantity of at least 1. */
+export function customLinesForRequest(lines: CustomLineDraft[]): Required<CustomLineDraft>[] {
+  return lines
+    .map((line) => ({
+      name: line.name.trim(),
+      quantity: Math.max(1, Math.floor(line.quantity || 1)),
+      unit_price: Math.max(0, line.unit_price || 0),
+      is_addon: !!line.is_addon,
+    }))
+    .filter((line) => line.name !== '');
+}
+
+/** The sum of the custom lines that are charged. */
+export function customLinesTotal(lines: CustomLineDraft[], hasPackage = false): number {
+  return customLinesForRequest(lines)
+    .filter((line) => customLineCharged(line, hasPackage))
+    .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+}
+
+/** True when an edit changed the custom lines: a name, a quantity, a price, or add-on or included. */
+export function customLinesChanged(before: CustomLineDraft[] | undefined, after: CustomLineDraft[]): boolean {
+  const key = (lines: CustomLineDraft[]) =>
+    customLinesForRequest(lines).map((line) => `${line.name}×${line.quantity}@${line.unit_price}${line.is_addon ? '+' : ''}`).join('|');
+  return key(before || []) !== key(after);
 }
 
 /**

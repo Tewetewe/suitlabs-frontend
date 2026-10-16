@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { customerItemName, itemGenderTag, itemTags, itemTierTag } from './item-name';
+import { customerItemName, customerLineName, itemDetails, itemGenderTag, itemTags, itemTierTag } from './item-name';
 
 describe('customerItemName', () => {
   // name, brand, type, gender, quality, want
@@ -59,5 +59,43 @@ describe('itemTags', () => {
   it('shows nothing on an Acc tab Item for now', () => {
     assert.deepEqual(itemTags({ type: 'shirt', gender: 'kids', quality: 'standard' }), []);
     assert.deepEqual(itemTags(null), []);
+  });
+});
+
+describe('customerItemName for Acc tab Items', () => {
+  it('follows the Suit name and drops repeated words', () => {
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{ name: 'Vest', brand: 'Goldy', type: 'vest', color: 'Black', size: { label: 'L' } }, 'Black L - Vest'],
+      [{ name: 'Regular Shirt', brand: 'SuitLabs', type: 'shirt', color: 'Off-White', size: { label: 'XL' } }, 'Off White XL - Regular Shirt'],
+      [{ name: 'Black Formal Vest', type: 'vest', color: 'Black', size: { label: 'M' } }, 'M - Black Formal Vest'],
+      [{ name: 'Sepatu Oxford', type: 'shoes', color: 'Full Black', size: { label: '44' } }, 'Full Black 44 - Sepatu Oxford'],
+      [{ name: 'Oxford', type: 'shoes', color: 'Full Black', size: { label: '44' } }, 'Full Black 44 - Oxford Shoes'],
+      [{ name: 'Sapu Tangan', type: 'accessory', color: 'Basic Putih' }, 'Basic Putih - Sapu Tangan'],
+      [{ name: 'Silk Blue Tie', type: 'tie', color: 'Blue' }, 'Silk Blue Tie'],
+      [{ name: 'Parayu kids', type: 'shirt' }, 'Parayu kids - Shirt'],
+    ];
+    for (const [item, want] of cases) {
+      assert.equal(customerItemName(item), want);
+    }
+  });
+});
+
+describe('customerItemName for Suit tab Items', () => {
+  it('shows the size before the dash and keeps the shade', () => {
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{ name: 'Dark Grey - Mubeng', brand: 'Mubeng', type: 'suit', gender: 'men', quality: 'premium', color: 'Grey', size: { label: 'XXL' } }, 'Dark Grey 2XL - Mens Premium Suit'],
+      [{ name: 'Black XXL - Goldy', brand: 'Goldy', type: 'suit', gender: 'men', quality: 'premium', color: 'Black', size: { label: 'XXL' } }, 'Black 2XL - Mens Premium Suit'],
+      [{ name: 'Black L - Goldy', brand: 'Goldy', type: 'suit', gender: 'men', quality: 'premium', color: 'Black', size: { label: 'L' } }, 'Black L - Mens Premium Suit'],
+      [{ name: 'Dark Navy', type: 'suit', gender: 'men', quality: 'standard', color: 'Navy', size: { label: 'L' } }, 'Dark Navy L - Mens Standard Suit'],
+      [{ name: 'Tuxedo Shawl Lapel - Goldy', brand: 'Goldy', type: 'suit', gender: 'men', quality: 'premium', color: 'off-white', size: { label: 'M' } }, 'Off White Tuxedo Shawl Lapel M - Mens Premium Suit'],
+    ];
+    for (const [item, want] of cases) {
+      assert.equal(customerItemName(item), want);
+      assert.equal(customerLineName(item), want);
+    }
+  });
+
+  it('shows the code under a staff name', () => {
+    assert.equal(itemDetails({ code: 'BVE-SL001' }), 'BVE-SL001');
   });
 });

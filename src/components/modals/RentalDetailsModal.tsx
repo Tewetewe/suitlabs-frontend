@@ -18,12 +18,14 @@ import { BranchBadge } from '@/components/branch/BranchBadge';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { ProofList } from '@/components/payments/ProofList';
 import { FeeWaiverList } from '@/components/payments/FeeWaiverList';
+import { refundableDeposit } from '@/lib/deposit';
+import { customLineCharged } from '@/lib/booking-draft';
 import { formatCurrency } from '@/lib/currency';
 import { calculateDuration, formatDateShort, formatDateTime } from '@/lib/date';
 import { customerLanguageLabel } from '@/lib/select-options';
 import { Rental } from '@/types';
 import { Printer, ShoppingBag, MessageCircle } from 'lucide-react';
-import { itemTags } from '@/lib/item-name';
+import { itemDisplayName } from '@/lib/item-name';
 
 interface RentalDetailsModalProps {
   isOpen: boolean;
@@ -75,8 +77,12 @@ export function RentalDetailsModal({
   if (!rental) return null;
 
   const items = rental.items || [];
+  // Things not in the catalogue that the Booking charged, such as a tie.
+  const customLines = rental.booking?.custom_lines || [];
+  const hasPackage = Boolean(rental.booking?.package_pricing_id);
   const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
-  const refundable = (rental.security_deposit || 0) - (rental.damage_charges || 0);
+  // Lost-item Sales and damage both come off the deposit.
+  const refundable = refundableDeposit(rental);
   const deltaDays = Math.ceil((new Date(rental.return_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const remainingDays = Math.max(0, deltaDays);
   const overdueDays = Math.max(0, -deltaDays);
@@ -175,16 +181,24 @@ export function RentalDetailsModal({
         />
 
         <DetailSection label="Items">
-          {items.length === 0 ? (
+          {items.length === 0 && customLines.length === 0 ? (
             <p className="text-sm text-slate-500">No items</p>
           ) : (
             <DetailList>
               {items.map((line) => (
                 <DetailListItem
                   key={line.id || `${line.item_id}-${line.quantity}`}
-                  title={`${line.item?.name || 'Item'}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
-                  subtitle={[line.item?.code, line.item?.brand, ...itemTags(line.item), line.item?.color, line.item?.size?.label].filter(Boolean).join(' · ')}
+                  title={`${itemDisplayName(line.item, 'Item')}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
+                  subtitle={line.item?.code}
                   trailing={formatCurrency(line.total_price || 0)}
+                />
+              ))}
+              {customLines.map((line, index) => (
+                <DetailListItem
+                  key={line.id || `custom-${index}`}
+                  title={`${line.name}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
+                  subtitle={customLineCharged(line, hasPackage) ? 'Custom item · not in the catalogue' : 'Custom item · included in package'}
+                  trailing={customLineCharged(line, hasPackage) ? formatCurrency(line.total_price ?? line.quantity * line.unit_price) : undefined}
                 />
               ))}
             </DetailList>
@@ -203,6 +217,9 @@ export function RentalDetailsModal({
             <MoneyRow label="Total" value={formatCurrency(total)} tone="total" />
             {(rental.security_deposit || 0) > 0 && (
               <MoneyRow label="Deposit" value={formatCurrency(rental.security_deposit)} />
+            )}
+            {(rental.deposit_applied_to_sales || 0) > 0 && (
+              <MoneyRow label="Lost items from deposit" value={`−${formatCurrency(rental.deposit_applied_to_sales || 0)}`} tone="danger" />
             )}
             {(rental.security_deposit || 0) > 0 && (
               <MoneyRow
