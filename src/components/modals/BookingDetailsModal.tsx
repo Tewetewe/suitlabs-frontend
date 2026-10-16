@@ -25,6 +25,7 @@ import { formatPaymentMethod } from '@/lib/payment-methods';
 import { occasionLabel, customerLanguageLabel } from '@/lib/select-options';
 import { Booking } from '@/types';
 import { CreditCard, FileText, Printer, ShoppingBag } from 'lucide-react';
+import { itemDisplayName } from '@/lib/item-name';
 
 interface BookingDetailsModalProps {
   isOpen: boolean;
@@ -195,7 +196,7 @@ export function BookingDetailsModal({
                 return (
                   <DetailListItem
                     key={line.id}
-                    title={`${line.item?.name || 'Item'}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
+                    title={`${itemDisplayName(line.item, 'Item')}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
                     subtitle={[line.item?.code, line.is_addon ? 'Add-on' : null].filter(Boolean).join(' · ') || undefined}
                     trailing={showPrice ? formatCurrency(line.final_price || line.total_price || 0) : undefined}
                   />

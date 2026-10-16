@@ -926,6 +926,8 @@ export interface Item {
   id: string;
   code: string;
   name: string;
+  /** The complete name Staff see and search by: the printed name with the brand kept (Item.StaffName). */
+  display_name?: string;
   description?: string;
   trousers_code?: string;
   detail_size?: string;

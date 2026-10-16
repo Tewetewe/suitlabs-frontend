@@ -19,7 +19,7 @@ import { customLineCharged } from './booking-draft';
 import { refundableDeposit as refundableAfterCharges } from './deposit';
 import { TRANSACTION_FEE_LABEL } from './transaction-fee';
 import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
-import { itemTags } from './item-name';
+import { itemTags, customerLineName } from './item-name';
 
 // Bluetooth Service UUIDs for common thermal printers
 // All must be declared in optionalServices for Web Bluetooth to allow access
@@ -626,9 +626,8 @@ export class ThermalPrinterService {
 
     if (items.length > 0) {
       items.forEach((item) => {
-        const itemName = item.item?.name || 'Item';
-        const itemSize = item.item?.size?.label || '';
-        const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
+        // The customer name carries the size already, and hides the supplier.
+        const description = customerLineName(item.item) || 'Item';
         const quantity = item.quantity || 1;
         const unitPrice = item.unit_price || item.total_price || 0;
         const itemTotal = item.total_price || unitPrice * quantity;
@@ -765,9 +764,9 @@ export class ThermalPrinterService {
     const saleItems = sale.items || [];
     if (saleItems.length > 0) {
       saleItems.forEach((line) => {
-        const name = line.item?.name || 'Item';
-        const size = line.item?.size?.label ? ` - ${line.item.size.label}` : '';
-        generator.text(`  ${name}${size}`).lineFeed();
+        // The customer name carries the size already, and hides the supplier.
+        const name = customerLineName(line.item) || 'Item';
+        generator.text(`  ${name}`).lineFeed();
         generator
           .text(
             `    ${line.quantity} x ${formatCurrencyForPrint(line.unit_price || 0)} = ${formatCurrencyForPrint(line.line_total || 0)}`
@@ -865,7 +864,8 @@ export class ThermalPrinterService {
 
     // The brand is the supplier, for staff only, so the gender and tier take its
     // place. The name may carry them already; print each only once.
-    const extras = [...itemTags(item).filter((tag) => !item.name.includes(tag)), item.color].filter(Boolean);
+    // The complete name carries the tags and the colour; print what it lacks.
+    const extras = [...itemTags(item), item.color].filter((word): word is string => !!word && !item.name.includes(word));
     if (extras.length > 0) {
       generator.text(extras.join(' / ')).lineFeed();
     }

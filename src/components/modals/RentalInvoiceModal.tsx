@@ -16,7 +16,7 @@ import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
-import { customerItemName } from '@/lib/item-name';
+import { customerLineName, customerItemName } from '@/lib/item-name';
 
 interface RentalInvoiceModalProps {
   isOpen: boolean;
@@ -67,7 +67,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
   const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
   const refundableDeposit = refundableAfterCharges(rental);
   const rackItems = items.map((line) => ({
-    name: line.item?.name || 'Item',
+    name: (customerItemName(line.item) || 'Item'),
     code: line.item?.code,
     size: line.item?.size?.label,
     quantity: line.quantity,
@@ -160,9 +160,8 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
               <div className="receipt-label">ITEMS:</div>
               {items.length > 0 ? (
                 items.map((item, idx) => {
-                  const itemName = customerItemName(item.item) || 'Item';
-                  const itemSize = item.item?.size?.label || '';
-                  const description = itemSize ? `${itemName} - ${itemSize}` : itemName;
+                  // The customer name carries the size already.
+                  const description = customerLineName(item.item) || 'Item';
                   const quantity = item.quantity || 1;
                   const unitPrice = item.unit_price || item.total_price || 0;
                   const itemTotal = item.total_price || unitPrice * quantity;

@@ -31,7 +31,7 @@ import { Booking, BookingFilters, BookingInstitution, Discount, InvoiceData, Cus
 import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
-import { itemTags } from '@/lib/item-name';
+import { itemDisplayName } from '@/lib/item-name';
 import type { AvailabilityTone } from '@/lib/item-availability';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
 import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
@@ -64,10 +64,8 @@ const DOWN_PAYMENT_TOO_HIGH = 'The DP is above the total. Pick a full payment me
 const SUBTOTAL_TOO_LOW = 'Subtotal is below the Items. Lower an Item price or use a Discount to take money off.';
 
 function itemOptionLabel(it: Item) {
-  const type = it.type ? it.type.charAt(0).toUpperCase() + it.type.slice(1) : 'Item';
-  const tags = itemTags(it).map((tag) => ` · ${tag}`).join('');
-  const size = it.size?.label ? ` · ${it.size.label}` : '';
-  return `${it.name} · ${type}${tags}${size} (${it.code})`;
+  // The complete name carries colour, size, brand, gender, tier and type.
+  return `${itemDisplayName(it)} (${it.code})`;
 }
 
 async function fetchItemOptionsPage(query: string, page: number, type?: 'trousers'): Promise<AutoPageResult> {
@@ -120,7 +118,7 @@ function bookingItemSummary(booking: Booking) {
   const items = booking.items || [];
   if (items.length === 0) return '';
   const names = items.slice(0, 2).map((line) => {
-    const name = line.item?.name || 'Item';
+    const name = itemDisplayName(line.item, 'Item');
     const code = line.item?.code ? ` ${line.item.code}` : '';
     return line.quantity > 1 ? `${name}${code} ×${line.quantity}` : `${name}${code}`;
   });

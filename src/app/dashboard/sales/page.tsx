@@ -26,6 +26,7 @@ import dynamic from 'next/dynamic';
 import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { useRememberedState } from '@/hooks/useRememberedState';
+import { itemDisplayName } from '@/lib/item-name';
 
 const BarcodeScanner = dynamic(() => import('@/components/ui/BarcodeScanner'), { ssr: false });
 
@@ -64,10 +65,10 @@ function lineSummary(sale: Sale): string {
   const sold = lines.filter((line) => line.line_type !== 'replacement');
   const parts: string[] = [];
   if (sold.length > 0) {
-    parts.push(sold.map((line) => line.item?.name || 'Item').join(', '));
+    parts.push(sold.map((line) => itemDisplayName(line.item, 'Item')).join(', '));
   }
   if (lost.length > 0) {
-    const names = lost.map((line) => line.replacement_for_item?.name || line.item?.name || 'Item').join(', ');
+    const names = lost.map((line) => itemDisplayName(line.replacement_for_item || line.item, 'Item')).join(', ');
     parts.push(`lost: ${names}`);
   }
   return parts.join(' · ');

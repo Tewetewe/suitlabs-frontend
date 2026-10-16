@@ -25,7 +25,7 @@ import { calculateDuration, formatDateShort, formatDateTime } from '@/lib/date';
 import { customerLanguageLabel } from '@/lib/select-options';
 import { Rental } from '@/types';
 import { Printer, ShoppingBag, MessageCircle } from 'lucide-react';
-import { itemTags } from '@/lib/item-name';
+import { itemDisplayName } from '@/lib/item-name';
 
 interface RentalDetailsModalProps {
   isOpen: boolean;
@@ -188,8 +188,8 @@ export function RentalDetailsModal({
               {items.map((line) => (
                 <DetailListItem
                   key={line.id || `${line.item_id}-${line.quantity}`}
-                  title={`${line.item?.name || 'Item'}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
-                  subtitle={[line.item?.code, line.item?.brand, ...itemTags(line.item), line.item?.color, line.item?.size?.label].filter(Boolean).join(' · ')}
+                  title={`${itemDisplayName(line.item, 'Item')}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`}
+                  subtitle={line.item?.code}
                   trailing={formatCurrency(line.total_price || 0)}
                 />
               ))}

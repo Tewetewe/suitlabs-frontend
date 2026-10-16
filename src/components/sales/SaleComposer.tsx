@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/DataDisplay';
 import NewCustomerModal from '@/components/modals/NewCustomerModal';
 import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
+import { customerItemName } from '@/lib/item-name';
 
 export type CartLine = {
   key: string;
@@ -221,7 +222,7 @@ export function SaleComposer({
       : discountAmount > subtotal
         ? 'The discount is larger than the subtotal.'
         : feelessLost.length > 0
-          ? `Type a replacement fee for ${feelessLost.map((line) => line.item.name).join(', ')}.`
+          ? `Type a replacement fee for ${feelessLost.map((line) => customerItemName(line.item)).join(', ')}.`
           : payNow > 0 && potMissing(paymentMethod, pot)
             ? POT_MISSING_MESSAGE
             : null;
@@ -306,7 +307,7 @@ export function SaleComposer({
                         onChange={(e) => setLostChecked((prev) => ({ ...prev, [line.item_id]: e.target.checked }))}
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-slate-900">{item.name}</span>
+                        <span className="block truncate text-sm font-medium text-slate-900">{customerItemName(item)}</span>
                         <span className="block truncate text-xs text-slate-500">
                           {item.code} · {line.quantity} rented
                           {alreadyLost ? ' · already recorded lost' : ''}
@@ -359,7 +360,7 @@ export function SaleComposer({
             {results.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-black/5 px-3 py-2">
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-slate-900">{item.name}</div>
+                  <div className="truncate text-sm font-medium text-slate-900">{customerItemName(item)}</div>
                   <div className="text-xs text-slate-500">
                     {item.code} · stock {item.available_qty ?? item.quantity} · {formatCurrency(defaultSellPrice(item))}
                   </div>
@@ -394,7 +395,7 @@ export function SaleComposer({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-slate-900">{line.item.name}</div>
+                        <div className="truncate text-sm font-medium text-slate-900">{customerItemName(line.item)}</div>
                         <div className="text-xs text-slate-500">{line.item.code}</div>
                       </div>
                       {/* A lost line comes from the panel above, so removing it
@@ -402,7 +403,7 @@ export function SaleComposer({
                           scroll back up and hunt for the checkbox. */}
                       <button
                         type="button"
-                        aria-label={lost ? `Stop charging ${line.item.name} as lost` : `Remove ${line.item.name}`}
+                        aria-label={lost ? `Stop charging ${customerItemName(line.item)} as lost` : `Remove ${customerItemName(line.item)}`}
                         className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-red-600"
                         onClick={() => {
                           if (lost) {

@@ -19,6 +19,7 @@ import { formatCurrency } from '@/lib/currency';
 import { DEPOSIT_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { waDeliveryLabel } from '@/lib/wa-delivery';
 import { PickupPrep, Rental, SalePaymentMethod } from '@/types';
+import { customerItemName } from '@/lib/item-name';
 
 function rentalsFromUserResponse(payload: unknown): Rental[] {
   if (!payload || typeof payload !== 'object') return [];
@@ -474,7 +475,7 @@ export function PickupRentalModal({
 
               {rental.items && rental.items.length > 0 && (
                 <RackPullList items={rental.items.map((line) => ({
-                  name: line.item?.name || 'Item',
+                  name: (customerItemName(line.item) || 'Item'),
                   code: line.item?.code,
                   size: line.item?.size?.label,
                   quantity: line.quantity,

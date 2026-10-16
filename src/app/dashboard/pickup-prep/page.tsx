@@ -436,7 +436,8 @@ function RentalChecklist({
                       )}
                     </div>
                     <div className="truncate text-xs text-slate-500">
-                      {[item.name, item.size, item.color].filter(Boolean).join(' · ')}
+                      {/* An Acc name carries its size and colour; a Suit shows them after it. */}
+                      {[item.name, item.size, item.color].filter((part, index) => part && (index === 0 || !item.name.includes(part))).join(' · ')}
                       {item.quantity > 1 ? ` ×${item.quantity}` : ''}
                     </div>
                   </div>

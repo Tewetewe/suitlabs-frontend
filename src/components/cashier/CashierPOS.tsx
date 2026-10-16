@@ -51,7 +51,7 @@ import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS, customerLanguageLa
 import { issueBookingInvoice } from '@/lib/issue-invoice';
 import { cleanScannedCode, looksLikeInvoiceBarcode, looksLikeSaleBarcode } from '@/lib/barcode';
 import { Badge } from '@/components/ui/DataDisplay';
-import { itemTags } from '@/lib/item-name';
+import { itemDetails, customerItemName } from '@/lib/item-name';
 import { availabilityCardNote, availabilityNote } from '@/lib/item-availability';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
 import {
@@ -456,7 +456,7 @@ export function CashierPOS() {
   // Returns false when the Item did not go into the cart.
   const addItem = useCallback((item: Item): boolean => {
     if (!canSell(item, mode) && mode === 'sale') {
-      error('Not sellable', `${item.name} is not marked as sellable or is out of stock.`);
+      error('Not sellable', `${customerItemName(item)} is not marked as sellable or is out of stock.`);
       return false;
     }
     // The event day sets the pickup and return dates that the availability
@@ -493,7 +493,7 @@ export function CashierPOS() {
       // A clash warns but does not stop the sale: staff decide.
       void checkAvailability(item.id).then((result) => {
         if (result?.status === 'booked') {
-          warning('Booked on these dates', `${item.name}: ${availabilityNote(result).text}`);
+          warning('Booked on these dates', `${customerItemName(item)}: ${availabilityNote(result).text}`);
         }
       });
     }
@@ -610,7 +610,7 @@ export function CashierPOS() {
     }
     try {
       const item = await apiClient.searchByBarcode(cleaned);
-      if (addItem(item)) success('Scanned', item.name);
+      if (addItem(item)) success('Scanned', customerItemName(item));
     } catch {
       setSearch(cleaned);
       error('Not found', `No item for barcode ${cleaned}`);
@@ -864,9 +864,9 @@ export function CashierPOS() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-slate-900">{line.item.name}</div>
+                      <div className="truncate text-sm font-semibold text-slate-900">{customerItemName(line.item)}</div>
                       <div className="text-xs text-slate-500">
-                        {[line.item.code, ...itemTags(line.item), line.item.size?.label ? `Size ${line.item.size.label}` : null].filter(Boolean).join(' · ') || 'Item'}
+                        {itemDetails(line.item)}
                       </div>
                       {mode === 'rental' && (
                         <AvailabilityNote note={availabilityNoteFor(line.item.id)} testId="pos-availability" />
@@ -1540,11 +1540,11 @@ export function CashierPOS() {
                       </div>
                       <div className="space-y-0.5 p-2.5">
                         <div className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">
-                          {item.name}
+                          {customerItemName(item)}
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate text-xs text-slate-500">
-                            {[item.code, ...itemTags(item), item.size?.label].filter(Boolean).join(' · ') || item.color || item.brand}
+                            {itemDetails(item) || item.color || item.brand}
                           </span>
                           <span className="text-sm font-bold tabular-nums text-slate-900">
                             {formatCurrency(catalogPrice(item, mode, rentalLength))}

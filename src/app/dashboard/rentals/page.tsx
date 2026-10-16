@@ -38,6 +38,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { useRememberedState } from '@/hooks/useRememberedState';
+import { itemDisplayName } from '@/lib/item-name';
 
 /** Whole days since the suit came back, or null when it has not. */
 function daysSinceReturn(rental: Rental): number | null {
@@ -408,7 +409,7 @@ export default function RentalsPage() {
     return (
       rental.id.toLowerCase().includes(q) ||
       customerName.includes(q) ||
-      (rental.items?.some(item => item.item?.name?.toLowerCase().includes(q)) || false)
+      (rental.items?.some(item => itemDisplayName(item.item).toLowerCase().includes(q)) || false)
     );
   }) : [];
 
@@ -529,7 +530,7 @@ export default function RentalsPage() {
               const itemSummary = (rental.items || [])
                 .slice(0, 2)
                 .map((line) => {
-                  const name = line.item?.name || 'Item';
+                  const name = itemDisplayName(line.item, 'Item');
                   return line.item?.code ? `${name} ${line.item.code}` : name;
                 })
                 .join(', ') + ((rental.items?.length || 0) > 2 ? ` +${rental.items!.length - 2}` : '');
