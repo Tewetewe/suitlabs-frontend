@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { customerItemName, customerLineName, itemDetails, itemGenderTag, itemTags, itemTierTag } from './item-name';
+import { customerItemName, customerLabelName, customerLineName, itemDetails, itemGenderTag, itemTags, itemTierTag } from './item-name';
 
 describe('customerItemName', () => {
   // name, brand, type, gender, quality, want
@@ -73,6 +73,12 @@ describe('customerItemName for Acc tab Items', () => {
       [{ name: 'Sapu Tangan', type: 'accessory', color: 'Basic Putih' }, 'Basic Putih - Sapu Tangan'],
       [{ name: 'Silk Blue Tie', type: 'tie', color: 'Blue' }, 'Silk Blue Tie'],
       [{ name: 'Parayu kids', type: 'shirt' }, 'Parayu kids - Shirt'],
+      // The Acc tab TYPE is a style, kept in pattern. It goes before the colour.
+      [{ name: 'Wingtip Shoe', type: 'shoes', pattern: 'Full', color: 'Black', size: { label: '43' } }, 'Full Black 43 - Wingtip Shoe'],
+      [{ name: 'Vest', type: 'vest', pattern: 'Matte', color: 'Black', size: { label: 'L' } }, 'Matte Black L - Vest'],
+      [{ name: 'French Cuff Shirt', type: 'shirt', pattern: 'French Cuff', color: 'Off-White', size: { label: 'XS' } }, 'Off White XS - French Cuff Shirt'],
+      [{ name: 'Regular Shirt', type: 'shirt', pattern: 'Reguler', color: 'White', size: { label: 'S' } }, 'White S - Regular Shirt'],
+      [{ name: 'Belt', type: 'belt', pattern: 'Black', color: 'Black' }, 'Black - Belt'],
     ];
     for (const [item, want] of cases) {
       assert.equal(customerItemName(item), want);
@@ -97,5 +103,21 @@ describe('customerItemName for Suit tab Items', () => {
 
   it('shows the code under a staff name', () => {
     assert.equal(itemDetails({ code: 'BVE-SL001' }), 'BVE-SL001');
+  });
+});
+
+describe('customerLabelName', () => {
+  it('leaves out the size, which the label prints large', () => {
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{ name: 'Black - Goldy', brand: 'Goldy', type: 'trousers', gender: 'women', quality: 'premium', color: 'Black', size: { label: 'XL' } }, 'Black - Womens Premium Trousers'],
+      [{ name: 'Wingtip Shoe', type: 'shoes', pattern: 'Full', color: 'Black', size: { label: '43' } }, 'Full Black - Wingtip Shoe'],
+      [{ name: 'Black Formal Vest', type: 'vest', color: 'Black', size: { label: 'M' } }, 'Black Formal Vest'],
+      [{ name: 'Vest', type: 'vest', color: 'Black', size: { label: 'XXL' } }, 'Black - Vest'],
+      [{ name: 'Silk Blue Tie', type: 'tie', color: 'Blue' }, 'Silk Blue Tie'],
+      [{ name: 'Lapel Pin - Chain - 01', type: 'accessory', size: { label: 'S' } }, 'Lapel Pin - Chain - 01'],
+    ];
+    for (const [item, want] of cases) {
+      assert.equal(customerLabelName(item), want);
+    }
   });
 });
