@@ -668,6 +668,11 @@ export default function BookingsPage() {
       const payload = (paidLocked
         ? {
             // Lock financial edits after payment completed; allow only non-financial fields
+            // The customer and the days move no money, so a paid booking can
+            // change them too. The rental length stays locked.
+            customer_id: bookingForm.customer_id,
+            booking_date: new Date(bookingForm.booking_date).toISOString(),
+            event_date: bookingForm.event_date ? new Date(bookingForm.event_date).toISOString() : undefined,
             notes: bookingForm.notes,
             appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
             booking_guarantee: bookingGuarantee,
