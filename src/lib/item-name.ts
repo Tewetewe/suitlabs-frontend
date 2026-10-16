@@ -46,6 +46,7 @@ type TaggedItem = {
   gender?: string;
   quality?: string;
   color?: string;
+  pattern?: string;
   size?: { label?: string } | null;
 };
 
@@ -102,6 +103,31 @@ export function customerItemName(item: TaggedItem | null | undefined): string {
   if (!name) return name;
   if (!isSuitTabItem(item)) return accCustomerName(item as TaggedItem, normalizeSizesInText(name));
   return withSizeAndColour(item as TaggedItem, suitCustomerName(item, name));
+}
+
+/**
+ * The name on an Item label. The label prints the size large under the name,
+ * so the name leaves it out: "Black XL - Womens Premium Trousers" reads
+ * "Black - Womens Premium Trousers" (Item.LabelName).
+ */
+export function customerLabelName(item: TaggedItem | null | undefined): string {
+  return removeSize(customerItemName(item), normalizeSizeLabel(item?.size?.label));
+}
+
+/**
+ * Takes the size out of the part before the first dash, where the colour and
+ * size are. With nothing left before the dash, the dash leaves too. A name
+ * with no dash loses the size where it is (backend removeSize).
+ */
+function removeSize(name: string, size: string): string {
+  if (!size) return name;
+  const word = wordPattern(size);
+  const dash = /\s*[-–—]\s/.exec(name);
+  const head = dash ? name.slice(0, dash.index) : name;
+  if (!word.test(head)) return name;
+  const rest = head.replace(word, '').split(/\s+/).filter(Boolean).join(' ');
+  if (!dash) return rest;
+  return rest ? `${rest}${name.slice(dash.index)}` : name.slice(dash.index + dash[0].length).trim();
 }
 
 /** The name on an invoice or receipt line: the complete name carries the size (Item.CustomerLineName). */
@@ -189,10 +215,25 @@ function suitCustomerName(item: TaggedItem | null | undefined, name: string): st
   return tags ? `${name} - ${tags}` : name;
 }
 
+/** A style the Acc tab spells the Indonesian way, as the name spells it (backend accStyleSpellings). */
+const ACC_STYLE_SPELLINGS: Record<string, string> = { reguler: 'Regular' };
+
 /**
- * An Acc tab Item follows the Suit name: colour and size, a dash, then the
- * model and the type, as in "Black L - Vest" or "Off-White XL - Regular
- * Shirt". With no colour and no size, the type follows the dash: "Parayu kids
+ * The style of an Acc tab Item (the TYPE cell, kept in pattern), such as
+ * "Full" in "Full Black 43 - Wingtip Shoe". A style that the name or the
+ * colour already says is not added again (Item.accStyle).
+ */
+function accStyle(item: TaggedItem, model: string, color: string): string {
+  let style = (item.pattern || '').split(/\s+/).filter(Boolean).join(' ');
+  style = ACC_STYLE_SPELLINGS[style.toLowerCase()] ?? style;
+  if (!style || wordPattern(style).test(model) || (color && wordPattern(style).test(color))) return '';
+  return style;
+}
+
+/**
+ * An Acc tab Item follows the Suit name: style, colour and size, a dash, then
+ * the model and the type, as in "Matte Black L - Vest" or "Off-White XL -
+ * Regular Shirt". With no colour and no size, the type follows the dash: "Parayu kids
  * - Shirt". The brand is the supplier and leaves. A word the name already has
  * is not added again, nor a type the name says in another word ("Sepatu
  * Oxford" stays without "Shoes"). The backend keeps the same rule in
@@ -214,6 +255,8 @@ function accCustomerName(item: TaggedItem, name: string): string {
   const typeLabel = label && !wordPattern(label).test(model) && !saysType ? label : '';
   const prefix: string[] = [];
   const color = normalizeColorLabel(item.color);
+  const style = accStyle(item, model, color);
+  if (style) prefix.push(style);
   if (color && !wordPattern(color).test(model)) prefix.push(color);
   const size = normalizeSizeLabel(item.size?.label);
   if (size && !wordPattern(size).test(model) && !wordPattern(size).test(prefix.join(' '))) prefix.push(size);

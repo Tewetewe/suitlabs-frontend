@@ -23,7 +23,7 @@ import EditItemModal from '@/components/modals/EditItemModal';
 import { useToast } from '@/contexts/ToastContext';
 import { ArrowRightLeft, ChevronLeft, ChevronRight, Edit, X, ZoomIn } from 'lucide-react';
 import clsx from 'clsx';
-import { customerItemName, itemGenderLabel, itemQualityLabel, itemDisplayName } from '@/lib/item-name';
+import { customerLabelName, itemGenderLabel, itemQualityLabel, itemDisplayName } from '@/lib/item-name';
 
 function itemStatusVariant(status: string): 'success' | 'primary' | 'warning' | 'danger' | 'default' {
   switch (status) {
@@ -404,7 +404,9 @@ export default function ItemDetailPage() {
                     <DetailRow label="Color" value={item.color} />
                     <DetailRow label="Size" value={item.size?.label} />
                     <DetailRow label="Detail size" value={item.detail_size} />
-                    <DetailRow label="Category" value={item.category?.name} />
+                    {/* The sheet's CATEGORY and SUBCATEGORY: an Item in a subcategory points to the child. */}
+                    <DetailRow label="Category" value={item.category?.parent?.name || item.category?.name} />
+                    <DetailRow label="Subcategory" value={item.category?.parent ? item.category.name : undefined} />
                     <DetailRow label="Owner" value={item.owner} />
                     <DetailRow label="Quantity" value={item.quantity} />
                   </DetailRows>
@@ -473,7 +475,7 @@ export default function ItemDetailPage() {
                     <p className="mb-3 font-mono text-sm text-slate-600">{item.barcode}</p>
                     <BarcodeLabel
                       value={item.barcode}
-                      itemName={customerItemName(item)}
+                      itemName={customerLabelName(item)}
                       itemCode={item.code}
                       sizeLabel={item.size?.label}
                       format="CODE128"

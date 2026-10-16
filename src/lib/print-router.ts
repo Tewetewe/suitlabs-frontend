@@ -36,7 +36,7 @@ import { findOpenReceiptNode, printImageDataUrl, printOpenReceiptBarcode, printR
 import { rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 import { thermalPrinter } from './thermal-printer';
 import { barcodeLabelDataUrl } from './barcode-label';
-import { customerItemName } from './item-name';
+import { customerLabelName } from './item-name';
 
 export type PrintRoute = 'bridge' | 'bprint' | 'thermal' | 'browser';
 
@@ -255,12 +255,12 @@ export type LabelItem = {
  * the on-screen canvas through the print dialog.
  */
 /**
- * Prints the label of an Item, with the name as the customer sees it. The item
- * page passes the label image it shows; the Items list has none, so the
- * browser route draws one here.
+ * Prints the label of an Item, with the name as the customer sees it, less the
+ * size that the label prints large. The item page passes the label image it
+ * shows; the Items list has none, so the browser route draws one here.
  */
 export async function printItemLabel(item: Item, labelImageDataUrl?: string): Promise<PrintOutcome> {
-  const name = customerItemName(item);
+  const name = customerLabelName(item);
   const barcode = item.barcode || item.code;
   return printProductLabel(
     {

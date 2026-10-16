@@ -938,6 +938,8 @@ export interface Item {
   quality?: 'standard' | 'premium';
   brand?: string;
   color?: string;
+  /** On an Acc tab Item: the style from the TYPE cell, such as "Full" or "Matte". */
+  pattern?: string;
   size: { label: string };
   condition: 'excellent' | 'good' | 'fair' | 'poor';
   status: 'available' | 'rented' | 'maintenance' | 'retired' | 'damaged' | 'lost';
@@ -1734,6 +1736,8 @@ export interface Category {
   detail_size?: string;
   owner?: string;
   parent_id?: string;
+  /** The category above a subcategory, as in Shoes above Wingtip. */
+  parent?: Category;
   is_active: boolean;
   created_at: string;
   updated_at: string;
