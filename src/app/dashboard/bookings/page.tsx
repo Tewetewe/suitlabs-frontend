@@ -112,14 +112,14 @@ function currentMonthEventRange(): BookingFilters {
 
 // A charged line with no price gets a message, as on the POS. Not every
 // catalogue price is imported yet, so Staff type it.
-function linePriceError(itemId: string, unitPrice: number, packageLocked: boolean, catalog: number | null) {
-  if (!itemId || packageLocked || unitPrice > 0 || catalog == null) return undefined;
+function linePriceError(itemId: string, unitPrice: number, locked: boolean, catalog: number | null) {
+  if (!itemId || locked || unitPrice > 0 || catalog == null) return undefined;
   return catalog <= 0 ? 'No price in the catalogue: type it' : 'Type the price';
 }
 
 // A typed price that differs from the catalogue shows the catalogue price.
-function linePriceHint(unitPrice: number, packageLocked: boolean, catalog: number | null) {
-  if (packageLocked || unitPrice <= 0 || catalog == null || catalog <= 0 || unitPrice === catalog) return undefined;
+function linePriceHint(unitPrice: number, locked: boolean, catalog: number | null) {
+  if (locked || unitPrice <= 0 || catalog == null || catalog <= 0 || unitPrice === catalog) return undefined;
   return `Catalogue ${formatCurrency(catalog)}`;
 }
 
@@ -1654,11 +1654,19 @@ function BookingFormFields({
           Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair. Remove the trousers line to book the Suit only.
           {selectedPackageId ? ' Mark extras as add-ons to charge them on top of the package.' : ''}
         </p>
-        {paidTotal != null && (
-          <p className="text-xs text-slate-500">
-            This booking is fully paid. The paid total of {formatCurrency(paidTotal)} stays: Save spreads it over the Items, so the prices here do not change the money.
-          </p>
-        )}
+        {paidTotal != null && (() => {
+          const linesTotal = bookingForm.items.reduce((sum, it) => sum + (it.item_id ? it.unit_price * it.quantity : 0), 0)
+            + customLinesTotal(bookingForm.custom_lines, !!selectedPackageId);
+          const gap = paidTotal - linesTotal;
+          return (
+            <p className={`text-xs ${Math.abs(gap) > 0.009 ? 'text-amber-700' : 'text-slate-500'}`} data-testid="booking-paid-split">
+              This booking is fully paid. The paid total of {formatCurrency(paidTotal)} stays. Type the price of each line to split it: one line may carry the price of other Items.
+              {' '}The lines add up to {formatCurrency(linesTotal)}.
+              {gap > 0.009 && ` The Suit line takes the other ${formatCurrency(gap)} when you save.`}
+              {gap < -0.009 && ` That is ${formatCurrency(-gap)} over the paid total, so Save brings the lines down to it.`}
+            </p>
+          );
+        })()}
         {paidFloor != null && (
           <p className={`text-xs ${paidFloor.below ? 'text-red-600' : 'text-slate-500'}`} data-testid="booking-paid-floor">
             Paid {formatCurrency(paidFloor.amount)}. An upgrade adds to the remaining amount. A downgrade cannot go below {formatCurrency(paidFloor.amount)}.
@@ -1668,6 +1676,8 @@ function BookingFormFields({
         <div className={needsEventDate ? 'hidden' : 'space-y-3'}>
           {bookingForm.items.map((it, idx) => {
             const packageLocked = !!selectedPackageId && !it.is_addon;
+            // A paid legacy booking keeps its paid total, but Admin splits it over the lines.
+            const priceLocked = packageLocked || (!!locked && paidTotal == null);
             return (
               <div key={idx} className="space-y-3 rounded-xl border border-black/10 bg-white p-3">
                 <div className="flex items-start gap-2">
@@ -1699,9 +1709,9 @@ function BookingFormFields({
                     label="Price"
                     value={it.unit_price}
                     onChange={(n) => updateItemField(idx, 'unit_price', n)}
-                    disabled={packageLocked || locked}
-                    error={linePriceError(it.item_id, it.unit_price, packageLocked, catalogPriceFor(it.item_id))}
-                    helperText={linePriceHint(it.unit_price, packageLocked, catalogPriceFor(it.item_id))}
+                    disabled={priceLocked}
+                    error={linePriceError(it.item_id, it.unit_price, priceLocked, catalogPriceFor(it.item_id))}
+                    helperText={linePriceHint(it.unit_price, priceLocked, catalogPriceFor(it.item_id))}
                   />
                   <CurrencyInput
                     label="Discount"
