@@ -529,10 +529,11 @@ export function CashierPOS() {
     setCart((prev) => prev.map((line) => (line.key === key ? { ...line, quantity } : line)));
   };
 
-  // An Item with no catalogue price takes a typed price, unless the package
-  // includes it. A catalogue price stays fixed here, as before.
+  // Every charged line takes a typed price, because not every catalogue price
+  // is imported yet. The catalogue price is only the start. A line that the
+  // package includes has no price of its own.
   const lineCharged = (line: CartLine) => !(mode === 'rental' && packageId && !line.is_addon);
-  const lacksCatalogPrice = (line: CartLine) => catalogPrice(line.item, mode, rentalLength) <= 0;
+  const lineCatalogPrice = (line: CartLine) => catalogPrice(line.item, mode, rentalLength);
   const setLinePrice = (key: string, price: number) => {
     setCart((prev) => prev.map((line) => (line.key === key ? { ...line, unit_price: Math.max(0, price) } : line)));
   };
@@ -874,13 +875,18 @@ export function CashierPOS() {
                       {mode === 'rental' && !packageId && missingFourHourPrice(line.item, rentalLength) && (
                         <div className="text-[11px] font-medium text-amber-700" data-testid="pos-no-4h-price">No 4-hour price: 3-day price used</div>
                       )}
-                      {lacksCatalogPrice(line) && lineCharged(line) && (
+                      {lineCharged(line) && (
                         <div className="mt-1 w-36" data-testid="pos-line-price">
                           <CurrencyInput
                             label="Price"
                             value={line.unit_price}
                             onChange={(n) => setLinePrice(line.key, n || 0)}
-                            error={line.unit_price <= 0 ? 'No price in the catalogue: type it' : undefined}
+                            error={line.unit_price <= 0
+                              ? (lineCatalogPrice(line) <= 0 ? 'No price in the catalogue: type it' : 'Type the price')
+                              : undefined}
+                            helperText={line.unit_price > 0 && lineCatalogPrice(line) > 0 && line.unit_price !== lineCatalogPrice(line)
+                              ? `Catalogue ${formatCurrency(lineCatalogPrice(line))}`
+                              : undefined}
                           />
                         </div>
                       )}
