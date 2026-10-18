@@ -707,6 +707,8 @@ export default function BookingsPage() {
             institution: bookingForm.institution || undefined,
             ...(canEditPaidLegacyItems(activeBooking)
               ? {
+                  // The custom lines keep their prices; the Items share the rest of the paid total.
+                  custom_lines: customLinesForRequest(bookingForm.custom_lines),
                   items: validItems.map(it => ({
                     item_id: it.item_id,
                     quantity: it.quantity,
@@ -1643,7 +1645,7 @@ function BookingFormFields({
             <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={itemsLocked || needsEventDate}>Add add-on</Button>
           )}
           <Button size="sm" onClick={() => addItemLine()} disabled={itemsLocked || needsEventDate}>Add item</Button>
-          <Button size="sm" variant="secondary" onClick={addCustomLine} disabled={locked || needsEventDate} data-testid="booking-add-custom-line">Add custom item</Button>
+          <Button size="sm" variant="secondary" onClick={addCustomLine} disabled={itemsLocked || needsEventDate} data-testid="booking-add-custom-line">Add custom item</Button>
         </div>
         {needsEventDate && (
           <p className="text-sm font-medium text-amber-700" data-testid="booking-needs-event-date">
@@ -1703,7 +1705,7 @@ function BookingFormFields({
                     value={it.quantity}
                     onChange={(n) => updateItemField(idx, 'quantity', n)}
                     error={formErrors[`item_qty_${idx}`]}
-                    disabled={locked}
+                    disabled={itemsLocked}
                   />
                   <CurrencyInput
                     label="Price"
@@ -1749,7 +1751,7 @@ function BookingFormFields({
                     onChange={(e) => updateCustomLine(idx, { name: e.target.value })}
                     placeholder="e.g. Black satin tie"
                     maxLength={200}
-                    disabled={locked}
+                    disabled={itemsLocked}
                   />
                 </div>
                 <div className="w-20">
@@ -1758,7 +1760,7 @@ function BookingFormFields({
                     min={1}
                     value={line.quantity}
                     onChange={(n) => updateCustomLine(idx, { quantity: Math.max(1, Number(n) || 1) })}
-                    disabled={locked}
+                    disabled={itemsLocked}
                   />
                 </div>
                 <div className="w-40">
@@ -1766,7 +1768,7 @@ function BookingFormFields({
                     label="Price"
                     value={line.unit_price}
                     onChange={(n) => updateCustomLine(idx, { unit_price: n || 0 })}
-                    disabled={locked || (!!selectedPackageId && !line.is_addon)}
+                    disabled={itemsLocked || (!!selectedPackageId && !line.is_addon)}
                     helperText={selectedPackageId && !line.is_addon ? 'Included in the package' : undefined}
                   />
                 </div>
@@ -1776,12 +1778,12 @@ function BookingFormFields({
                       type="checkbox"
                       checked={!!line.is_addon}
                       onChange={(e) => updateCustomLine(idx, { is_addon: e.target.checked })}
-                      disabled={locked}
+                      disabled={itemsLocked}
                     />
                     Add-on
                   </label>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => removeCustomLine(idx)} disabled={locked} aria-label="Remove custom item">
+                <Button variant="ghost" size="sm" onClick={() => removeCustomLine(idx)} disabled={itemsLocked} aria-label="Remove custom item">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
