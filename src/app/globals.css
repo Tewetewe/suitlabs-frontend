@@ -92,6 +92,13 @@ svg {
   border: 1px solid rgba(15, 23, 42, 0.10);
 }
 
+/* A locked field must look locked, so nobody types into it and waits. */
+.glass-control:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
 .hairline-border {
   border-color: var(--glass-border-soft);
 }
