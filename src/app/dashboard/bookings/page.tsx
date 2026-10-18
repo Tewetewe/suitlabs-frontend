@@ -110,6 +110,19 @@ function currentMonthEventRange(): BookingFilters {
   return { event_from: from, event_to: to };
 }
 
+// A charged line with no price gets a message, as on the POS. Not every
+// catalogue price is imported yet, so Staff type it.
+function linePriceError(itemId: string, unitPrice: number, packageLocked: boolean, catalog: number | null) {
+  if (!itemId || packageLocked || unitPrice > 0 || catalog == null) return undefined;
+  return catalog <= 0 ? 'No price in the catalogue: type it' : 'Type the price';
+}
+
+// A typed price that differs from the catalogue shows the catalogue price.
+function linePriceHint(unitPrice: number, packageLocked: boolean, catalog: number | null) {
+  if (packageLocked || unitPrice <= 0 || catalog == null || catalog <= 0 || unitPrice === catalog) return undefined;
+  return `Catalogue ${formatCurrency(catalog)}`;
+}
+
 function bookingCustomerName(booking: Booking) {
   return partyName(booking, booking.customer) || `Booking #${booking.id.slice(-8)}`;
 }
@@ -368,6 +381,13 @@ export default function BookingsPage() {
     setBookingForm(prev => {
       const items = prev.items.map((it, i) => {
         if (i !== index) return it;
+        // A new Item starts at its own catalogue price, not the price of the
+        // Item it replaces. An Item not loaded yet gets its price from the
+        // effect below, which fills a line at 0.
+        if (field === 'item_id' && String(value) !== it.item_id) {
+          const picked = itemCacheRef.current.get(String(value));
+          return { ...it, item_id: String(value), unit_price: picked ? rentalPrice(picked, prev.rental_length) : 0 };
+        }
         if (field === 'item_id' || field === 'catalogue') return { ...it, [field]: String(value) };
         if (field === 'is_addon') return { ...it, is_addon: Boolean(value) };
         return { ...it, [field]: typeof value === 'string' ? Number(value) : value };
@@ -447,6 +467,13 @@ export default function BookingsPage() {
     };
     fillItemsAndPairTrousers();
   }, [itemIdsKey]);
+
+  // The catalogue price of an Item at the form's rental length. Null while the
+  // Item is not loaded yet.
+  const catalogPriceFor = (itemId: string): number | null => {
+    const item = itemCacheRef.current.get(itemId);
+    return item ? rentalPrice(item, bookingForm.rental_length) : null;
+  };
 
   const addItemLine = (catalogue: 'any' | 'trousers' = 'any', isAddon = false) => {
     setBookingForm(prev => ({ ...prev, items: [...prev.items, { item_id: '', quantity: 1, unit_price: 0, discount_amount: 0, catalogue, is_addon: isAddon }] }));
@@ -1149,6 +1176,7 @@ export default function BookingsPage() {
           <BookingFormFields
             bookingForm={bookingForm}
             availabilityNoteFor={availabilityNoteFor}
+            catalogPriceFor={catalogPriceFor}
             requireEventDate
             showStatus={false}
             formErrors={formErrors}
@@ -1218,6 +1246,7 @@ export default function BookingsPage() {
           <BookingFormFields
             bookingForm={bookingForm}
             availabilityNoteFor={availabilityNoteFor}
+            catalogPriceFor={catalogPriceFor}
             formErrors={formErrors}
             selectedPackageId={selectedPackageId}
             packageOptions={packageOptions}
@@ -1436,6 +1465,7 @@ function BookingFormFields({
   fetchCustomerOptions,
   itemLabels,
   availabilityNoteFor,
+  catalogPriceFor,
   requireEventDate = false,
   fetchItemPage,
   fetchTrousersPage,
@@ -1483,6 +1513,8 @@ function BookingFormFields({
   itemLabels: Record<string, string>;
   /** Free, same-day handover, or booked, for an item on the form's dates. */
   availabilityNoteFor: (itemId: string) => { tone: AvailabilityTone; text: string } | null;
+  /** The catalogue price of an Item, or null while it loads. The typed price may differ. */
+  catalogPriceFor: (itemId: string) => number | null;
   /** New Booking: the event day comes first, because it sets the dates the items are checked on. */
   requireEventDate?: boolean;
   fetchItemPage: (query: string, page: number) => Promise<AutoPageResult>;
@@ -1668,6 +1700,8 @@ function BookingFormFields({
                     value={it.unit_price}
                     onChange={(n) => updateItemField(idx, 'unit_price', n)}
                     disabled={packageLocked || locked}
+                    error={linePriceError(it.item_id, it.unit_price, packageLocked, catalogPriceFor(it.item_id))}
+                    helperText={linePriceHint(it.unit_price, packageLocked, catalogPriceFor(it.item_id))}
                   />
                   <CurrencyInput
                     label="Discount"
