@@ -14,7 +14,7 @@ const adminState = path.join(__dirname, '.auth', 'admin.json');
 // day when tomorrow has no free Item, so the list is opened on that day.
 async function openPickupPrep(page: Page, pickupDate: string) {
   await page.goto('/dashboard/pickup-prep');
-  await expect(page.getByRole('heading', { name: 'Pickup Prep (H-1)' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pickup Prep' })).toBeVisible();
   const date = page.getByTestId('pickup-prep-date');
   await expect(date).not.toHaveValue('');
   if ((await date.inputValue()) !== pickupDate) await date.fill(pickupDate);
@@ -75,6 +75,18 @@ test.describe('Pickup Prep (H-1)', () => {
     await expect(scanner).toBeVisible();
     await scanner.getByRole('button', { name: /close/i }).first().click();
     await expect(scanner).toHaveCount(0);
+  });
+
+  test('NF-02b Today opens the Pickups of today; Tomorrow (H-1) goes back', async ({ page }) => {
+    await page.goto('/dashboard/pickup-prep');
+    const date = page.getByTestId('pickup-prep-date');
+    await expect(date).toHaveValue(localISODate(1));
+    await page.getByTestId('pickup-prep-today').click();
+    await expect(date).toHaveValue(localISODate(0));
+    await expect(page.getByTestId('pickup-prep-today')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('pickup-prep-tomorrow').click();
+    await expect(date).toHaveValue(localISODate(1));
+    await expect(page.getByTestId('pickup-prep-tomorrow')).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
