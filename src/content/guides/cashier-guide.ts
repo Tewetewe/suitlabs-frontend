@@ -548,14 +548,14 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
   <h3>Pickup Prep — the day before Pickup</h3>
   <ol class="steps">
-    <li><b>Open Pickup Prep.</b><span>It opens on <b>tomorrow</b>. Change the date to see another day.</span></li>
+    <li><b>Open Pickup Prep.</b><span>It opens on <b>tomorrow</b> (H-1). Tap <b>Today</b> to check the Pickups of today, or change the date to see another day.</span></li>
     <li><b>Pull every Item from the rack.</b><span>Scan the code, or tick <b>Found on rack</b>. Then tick <b>Clean &amp; steamed</b>, <b>No damage</b> and <b>Size matches</b>. <b>All OK</b> ticks all four at once.</span></li>
     <li><b>Mark a problem.</b><span><b>Damaged</b> sends the Item to maintenance at once, so nobody else books it. <b>Not found</b> only flags it. Write what is wrong and which Item replaces it.</span></li>
     <li><b>Pack the add-ons and check the money.</b><span>Tick <b>Add-ons packed</b>. Send the Deposit Agreement if the card says it is not sent. The card also shows the balance to collect at Pickup.</span></li>
   </ol>
   <div class="flag">
     <span class="flag-t">Pickup Prep warns, it does not block</span>
-    <p>Pickup still works when the card is not ready. Walk-in and same-day bookings have no H-1 check. The Pickup screen shows the warning so you look again.</p>
+    <p>Pickup still works when the card is not ready. For a walk-in or a same-day booking, check the Items on <b>Today</b> before the Pickup. The Pickup screen shows the warning so you look again.</p>
   </div>
 
   <h3>Return Check — every return, every day</h3>

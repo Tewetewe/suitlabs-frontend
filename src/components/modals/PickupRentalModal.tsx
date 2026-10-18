@@ -119,8 +119,8 @@ export function PickupRentalModal({
     if (!customerId) return;
 
     let cancelled = false;
-    // The H-1 checklist only warns. Walk-in and same-day Bookings have no H-1,
-    // so a missing checklist must not stop Pickup.
+    // The checklist only warns. Staff may skip it for a walk-in or a same-day
+    // Booking, so a missing checklist must not stop Pickup.
     apiClient
       .getPickupPrep(rental.id)
       .then((row) => {
@@ -328,8 +328,8 @@ export function PickupRentalModal({
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div>
                     {prep.status === 'problem'
-                      ? 'The H-1 check found a problem: '
-                      : `H-1 check not finished (${prep.items_passed}/${prep.items_total} Items). `}
+                      ? 'Pickup Prep found a problem: '
+                      : `Pickup Prep not finished (${prep.items_passed}/${prep.items_total} Items). `}
                     {prep.items
                       .filter((item) => item.problem)
                       .map((item) => `${item.code} ${item.problem === 'damaged' ? 'damaged' : 'not found'}${item.problem_note ? ` (${item.problem_note})` : ''}`)

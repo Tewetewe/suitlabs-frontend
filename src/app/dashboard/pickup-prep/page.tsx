@@ -60,6 +60,20 @@ function checkFromItem(item: PickupPrepItem): PickupPrepItemCheck {
   };
 }
 
+// shiftDay moves a YYYY-MM-DD date by a number of days.
+function shiftDay(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// localDay is the device date, for the time before the backend gives tomorrow.
+function localDay(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function recount(day: PickupPrepDay, rentals: PickupPrep[]): PickupPrepDay {
   return {
     ...day,
@@ -79,6 +93,8 @@ export default function PickupPrepPage() {
   const [date, setDate] = useState('');
   // False while the page follows tomorrow. A date picked by hand stays put.
   const [pinned, setPinned] = useState(false);
+  // Tomorrow in shop time, from the backend. Today is the day before it.
+  const [tomorrow, setTomorrow] = useState('');
   const [day, setDay] = useState<PickupPrepDay | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,8 +111,11 @@ export default function PickupPrepPage() {
     try {
       const result = await apiClient.getPickupPrepDay(forDate || undefined);
       setDay(result);
-      // The first load has no date: the backend picks tomorrow in shop time.
-      if (!forDate) setDate(result.date);
+      // A load with no date follows tomorrow: the backend picks it in shop time.
+      if (!forDate) {
+        setDate(result.date);
+        setTomorrow(result.date);
+      }
     } catch (e: unknown) {
       setError(errorMessage(e, 'Failed to load the pickup checklist'));
       if (!quiet) setDay(null);
@@ -126,6 +145,17 @@ export default function PickupPrepPage() {
 
   // Every 5 minutes: after midnight the H-1 list moves to the new tomorrow.
   useAutoRefresh(() => void load(pinned ? date : '', true), 5 * 60_000, canUse);
+
+  const today = tomorrow ? shiftDay(tomorrow, -1) : localDay(0);
+  const showToday = () => {
+    setDate(today);
+    setPinned(true);
+    void load(today);
+  };
+  const showTomorrow = () => {
+    setPinned(false);
+    void load('');
+  };
 
   const replaceRental = useCallback((prep: PickupPrep) => {
     setDay((current) => {
@@ -271,10 +301,30 @@ export default function PickupPrepPage() {
 
   return (
     <PageShell
-      title="Pickup Prep (H-1)"
-      subtitle="Check every Item for the next day's Pickups: found, clean, no damage, size matches."
+      title="Pickup Prep"
+      subtitle="Check every Item before its Pickup: found, clean, no damage, size matches. Do it on H-1, or on the Pickup day."
       toolbar={
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex gap-2 sm:self-end" role="group" aria-label="Pickup day">
+            <Button
+              size="sm"
+              variant={pinned && date === today ? 'primary' : 'secondary'}
+              aria-pressed={pinned && date === today}
+              onClick={showToday}
+              data-testid="pickup-prep-today"
+            >
+              Today
+            </Button>
+            <Button
+              size="sm"
+              variant={!pinned || date === tomorrow ? 'primary' : 'secondary'}
+              aria-pressed={!pinned || date === tomorrow}
+              onClick={showTomorrow}
+              data-testid="pickup-prep-tomorrow"
+            >
+              Tomorrow (H-1)
+            </Button>
+          </div>
           <div className="w-full sm:w-48">
             <Input
               type="date"
