@@ -62,7 +62,7 @@ type BookingFormItem = {
 
 const ITEM_PICKER_PAGE_SIZE = 20;
 const DOWN_PAYMENT_TOO_HIGH = 'The DP is above the total. Pick a full payment method to take it all.';
-const SUBTOTAL_TOO_LOW = 'Subtotal is below the Items. Lower an Item price or use a Discount to take money off.';
+const SUBTOTAL_TOO_LOW = 'Subtotal is below the lines. Lower a price or use a Discount to take money off.';
 
 function itemOptionLabel(it: Item) {
   // The complete name carries colour, size, brand, gender, tier and type.
@@ -286,14 +286,17 @@ export default function BookingsPage() {
   const canEditSubtotal = !selectedPackageId
     && bookingForm.items.some((it) => it.item_id)
     && !(isEditModalOpen && paidLocked);
-  const { tooLow: subtotalTooLow, extra: extraCharge } = readTypedSubtotal(
-    canEditSubtotal ? Number(subtotalInput) || 0 : 0,
-    itemsSubtotal,
-  );
   // Custom lines price things not in the catalogue; they add on top.
   // With a package, only add-on custom lines are charged; the package includes the rest.
   const customSubtotal = customLinesTotal(bookingForm.custom_lines, !!selectedPackageId);
-  const bookingTotal = bookingGross({ packagePrice, addonSubtotal, itemsSubtotal, extra: extraCharge, customSubtotal });
+  // The Subtotal counts every charged line: the Items (or the package and its
+  // add-ons) and the custom items.
+  const linesSubtotal = bookingGross({ packagePrice, addonSubtotal, itemsSubtotal, customSubtotal });
+  const { tooLow: subtotalTooLow, extra: extraCharge } = readTypedSubtotal(
+    canEditSubtotal ? Number(subtotalInput) || 0 : 0,
+    linesSubtotal,
+  );
+  const bookingTotal = linesSubtotal + extraCharge;
   // The Items as saved: the extra of a typed Subtotal sits on the main line.
   const pricedItems = (items: BookingFormState['items']) => {
     const lines = items.map((it) => ({ quantity: it.quantity, unit_price: it.unit_price }));
@@ -301,14 +304,19 @@ export default function BookingsPage() {
     const prices = unitPricesForSubtotal(lines, base + extraCharge);
     return items.map((it, index) => ({ ...it, unit_price: prices[index] }));
   };
-  const subtotalField = canEditSubtotal
+  // The Subtotal shows whenever there is a line. It takes a typed value only
+  // where canEditSubtotal allows; otherwise it shows the sum of the lines.
+  const subtotalField = bookingForm.items.some((it) => it.item_id) || bookingForm.custom_lines.length > 0
     ? {
-        value: subtotalInput === '' ? itemsSubtotal : subtotalInput,
-        onChange: (n: number) => setSubtotalInput(n && n !== itemsSubtotal ? String(n) : ''),
+        value: subtotalInput === '' || !canEditSubtotal ? linesSubtotal : subtotalInput,
+        onChange: (n: number) => setSubtotalInput(n && n !== linesSubtotal ? String(n) : ''),
+        disabled: !canEditSubtotal,
         error: subtotalTooLow ? SUBTOTAL_TOO_LOW : undefined,
-        helperText: extraCharge > 0
-          ? `Items ${formatCurrency(itemsSubtotal)}. The extra ${formatCurrency(extraCharge)} goes on the price of the main Item when you save.`
-          : 'Raise it to charge items that are not in the catalogue yet.',
+        helperText: !canEditSubtotal
+          ? (selectedPackageId ? 'The package, its add-ons and the custom items.' : 'The Items and the custom items.')
+          : extraCharge > 0
+            ? `Lines ${formatCurrency(linesSubtotal)}. The extra ${formatCurrency(extraCharge)} goes on the price of the main Item when you save.`
+            : 'The Items and the custom items. Raise it to charge items that are not in the catalogue yet.',
       }
     : undefined;
   const bookingDiscount = packagePrice > 0 ? addonDiscount : itemsDiscount;
@@ -1541,7 +1549,7 @@ function BookingFormFields({
   chargeNowFee: number;
   locked?: boolean;
   /** The editable Subtotal, absent when the booking cannot take one. */
-  subtotalField?: { value: number | string; onChange: (value: number) => void; error?: string; helperText: string };
+  subtotalField?: { value: number | string; onChange: (value: number) => void; disabled?: boolean; error?: string; helperText: string };
   /** The editable down payment, absent for a full payment or a paid booking. */
   downPaymentField?: { value: number | string; onChange: (value: number) => void; error?: string };
   /** Item lines locked; defaults to locked. A paid legacy booking unlocks them for Admin. */
@@ -1876,6 +1884,7 @@ function BookingFormFields({
             label="Subtotal"
             value={subtotalField.value}
             onChange={subtotalField.onChange}
+            disabled={subtotalField.disabled}
             error={subtotalField.error}
             helperText={subtotalField.helperText}
           />
@@ -2064,6 +2073,12 @@ function BookingFormTotals({
           <div className="flex justify-between" data-testid="booking-custom-subtotal">
             <span>Custom items</span>
             <span className="tabular-nums">{formatCurrency(customSubtotal)}</span>
+          </div>
+        )}
+        {(customSubtotal > 0 || (!!selectedPackageId && addonSubtotal > 0)) && (
+          <div className="flex justify-between font-medium text-slate-700" data-testid="booking-lines-subtotal">
+            <span>Subtotal</span>
+            <span className="tabular-nums">{formatCurrency(bookingTotal)}</span>
           </div>
         )}
         {bookingDiscount > 0 && (

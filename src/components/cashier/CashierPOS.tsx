@@ -195,7 +195,7 @@ export function CashierPOS() {
   const [payCoverage, setPayCoverage] = useState<PayCoverage>('dp');
   const [discount, setDiscount] = useState('');
   // A typed Subtotal above the catalogue one, for items not in the catalogue
-  // yet. '' is the catalogue subtotal.
+  // yet. '' is the sum of the lines.
   const [subtotalInput, setSubtotalInput] = useState('');
   // A typed down payment; '' is half of the total.
   const [dpInput, setDpInput] = useState('');
@@ -221,16 +221,6 @@ export function CashierPOS() {
 
   const selectedPackage = packages.find((pkg) => pkg.id === packageId);
   const catalogueSubtotal = cart.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
-  // A package sets its own price, so only a cart with no package takes a typed Subtotal.
-  const canEditSubtotal = cart.length > 0 && !(mode === 'rental' && packageId);
-  const { tooLow: subtotalTooLow, extra: subtotalExtra } = readTypedSubtotal(
-    canEditSubtotal ? Number(subtotalInput) || 0 : 0,
-    catalogueSubtotal,
-  );
-  const subtotal = catalogueSubtotal + subtotalExtra;
-  const pricedUnits = unitPricesForSubtotal(cart, subtotal);
-  // The cart as charged: the extra of a typed Subtotal sits on the main line.
-  const pricedCart = cart.map((line, index) => ({ ...line, unit_price: pricedUnits[index] }));
   const packagePrice = selectedPackage?.price || 0;
   const addonTotal = cart
     .filter((line) => line.is_addon)
@@ -238,9 +228,22 @@ export function CashierPOS() {
   const discountAmount = Number(discount) || 0;
   // With a package, only add-on custom lines are charged; the package includes the rest.
   const customSubtotal = mode === 'rental' ? customLinesTotal(customLines, !!packageId) : 0;
-  const gross = mode === 'rental'
-    ? bookingGross({ packagePrice, addonSubtotal: addonTotal, itemsSubtotal: subtotal, customSubtotal })
-    : subtotal;
+  // The Subtotal counts every charged line: the Items (or the package and its
+  // add-ons) and the custom items.
+  const linesSubtotal = mode === 'rental'
+    ? bookingGross({ packagePrice, addonSubtotal: addonTotal, itemsSubtotal: catalogueSubtotal, customSubtotal })
+    : catalogueSubtotal;
+  // A package sets its own price, so only a cart with no package takes a typed Subtotal.
+  const canEditSubtotal = cart.length > 0 && !(mode === 'rental' && packageId);
+  const { tooLow: subtotalTooLow, extra: subtotalExtra } = readTypedSubtotal(
+    canEditSubtotal ? Number(subtotalInput) || 0 : 0,
+    linesSubtotal,
+  );
+  // The extra of a typed Subtotal sits on the main Item line.
+  const subtotal = catalogueSubtotal + subtotalExtra;
+  const pricedUnits = unitPricesForSubtotal(cart, subtotal);
+  const pricedCart = cart.map((line, index) => ({ ...line, unit_price: pricedUnits[index] }));
+  const gross = linesSubtotal + subtotalExtra;
   const typedOff = Math.max(0, gross - (mode === 'rental' && packagePrice > 0 ? 0 : discountAmount));
   // The Discount picked for a rental, as on the New Booking form. The backend
   // applies it on save, before it takes the payment.
@@ -632,7 +635,7 @@ export function CashierPOS() {
       return;
     }
     if (subtotalTooLow) {
-      error('Subtotal too low', `It is below the catalogue subtotal of ${formatCurrency(catalogueSubtotal)}. Use Discount to take money off.`);
+      error('Subtotal too low', `It is below the lines, ${formatCurrency(linesSubtotal)}. Use Discount to take money off.`);
       setCartOpen(true);
       return;
     }
@@ -1086,16 +1089,19 @@ export function CashierPOS() {
           />
         )}
 
-        {canEditSubtotal && (
+        {cart.length > 0 && (
           <CurrencyInput
             label="Subtotal"
-            value={subtotalInput === '' ? catalogueSubtotal : subtotalInput}
-            onChange={(n) => setSubtotalInput(n && n !== catalogueSubtotal ? String(n) : '')}
-            error={subtotalTooLow ? `Below the catalogue ${formatCurrency(catalogueSubtotal)}. Use Discount to take money off.` : undefined}
+            value={subtotalInput === '' || !canEditSubtotal ? linesSubtotal : subtotalInput}
+            onChange={(n) => setSubtotalInput(n && n !== linesSubtotal ? String(n) : '')}
+            disabled={!canEditSubtotal}
+            error={subtotalTooLow ? `Below the lines ${formatCurrency(linesSubtotal)}. Use Discount to take money off.` : undefined}
             helperText={
-              subtotal > catalogueSubtotal
-                ? `Catalogue ${formatCurrency(catalogueSubtotal)}. The extra ${formatCurrency(subtotal - catalogueSubtotal)} goes on the price of the main item.`
-                : 'Raise it to charge items that are not in the catalogue yet.'
+              !canEditSubtotal
+                ? 'The package, its add-ons and the custom items.'
+                : subtotalExtra > 0
+                  ? `Lines ${formatCurrency(linesSubtotal)}. The extra ${formatCurrency(subtotalExtra)} goes on the price of the main item.`
+                  : 'The Items and the custom items. Raise it to charge items that are not in the catalogue yet.'
             }
           />
         )}
@@ -1206,7 +1212,7 @@ export function CashierPOS() {
             </>
           ) : (
             <div className="flex justify-between text-slate-500">
-              <span>Subtotal</span>
+              <span>{customSubtotal > 0 ? 'Items' : 'Subtotal'}</span>
               <span className="tabular-nums">{formatCurrency(gross - customSubtotal)}</span>
             </div>
           )}
@@ -1214,6 +1220,12 @@ export function CashierPOS() {
             <div className="flex justify-between text-slate-500" data-testid="pos-custom-subtotal">
               <span>Custom items</span>
               <span className="tabular-nums">{formatCurrency(customSubtotal)}</span>
+            </div>
+          )}
+          {(customSubtotal > 0 || (mode === 'rental' && packagePrice > 0 && addonTotal > 0)) && (
+            <div className="flex justify-between font-semibold text-slate-700" data-testid="pos-lines-subtotal">
+              <span>Subtotal</span>
+              <span className="tabular-nums">{formatCurrency(gross)}</span>
             </div>
           )}
           {pickedDiscountAmount > 0 && (
