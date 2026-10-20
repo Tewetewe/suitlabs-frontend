@@ -22,7 +22,7 @@ import { discountCodeHelp, discountOptionLabel, discountPickerHelp, offeredDisco
 import { TRANSACTION_FEE_LABEL, transactionFee } from '@/lib/transaction-fee';
 import { useTransactionFeeRules } from '@/hooks/useTransactionFeeRules';
 import { useDepositSettings } from '@/hooks/useDepositSettings';
-import { POT_MISSING_MESSAGE, potForRequest, potMissing, savedBankPot } from '@/lib/pots';
+import { BANK_POTS, POT_MISSING_MESSAGE, potForRequest, potMissing, savedBankPot } from '@/lib/pots';
 import { formatDateShort } from '@/lib/date';
 import { RENTAL_LENGTHS, type RentalLength, rentalPrice, rentalWindow } from '@/lib/rental-window';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
@@ -110,6 +110,30 @@ function currentMonthEventRange(): BookingFilters {
   return { event_from: from, event_to: to };
 }
 
+// The names of the fields a save checks, for the message next to Save.
+const FIELD_NAMES: Record<string, string> = {
+  customer_id: 'Customer',
+  event_date: 'Event day',
+  booking_date: 'Pickup date',
+  institution: 'Occasion',
+  booking_guarantee: 'Guarantee',
+  items: 'Items',
+  subtotal: 'Subtotal',
+  down_payment: 'Down payment',
+};
+
+// A field error shows next to its field, which may sit far above the Save
+// button. So a blocked save also names the fields next to Save; otherwise
+// Save looks like it did nothing.
+function withErrorSummary(errs: Record<string, string>): Record<string, string> {
+  const names = Array.from(new Set(Object.keys(errs)
+    .filter((key) => key !== 'submit')
+    .map((key) => (key.startsWith('item_qty_') ? 'Item quantity' : FIELD_NAMES[key] || key))));
+  if (names.length === 0) return errs;
+  const summary = `Not saved. Fix the fields marked in red: ${names.join(', ')}.`;
+  return { ...errs, submit: errs.submit ? `${errs.submit} ${summary}` : summary };
+}
+
 // A charged line with no price gets a message, as on the POS. Not every
 // catalogue price is imported yet, so Staff type it.
 function linePriceError(itemId: string, unitPrice: number, locked: boolean, catalog: number | null) {
@@ -173,21 +197,18 @@ export default function BookingsPage() {
   const { enabled: depositEnabled } = useDepositSettings();
   const { warning, success, error: toastError } = useToast();
   const isAdmin = user?.role === 'admin';
-  // A fully paid booking can still upgrade or downgrade its Items before
-  // Pickup. An upgrade opens the difference again; a downgrade stops at the
+  // A fully paid booking can still upgrade or downgrade its Items, in every
+  // status. An upgrade opens the difference again; a downgrade stops at the
   // money already paid.
   const canChangePaidItems = (b: Booking | null) =>
-    !!b && b.payment_status === 'completed' && !b.legacy_ref
-    && (b.status === 'pending' || b.status === 'confirmed' || b.status === 'pending_approval');
-  // Edit is for a booking that is not fully paid, or a paid one above. Admin may
-  // also edit an imported legacy booking that is, to add or fix its Item after
-  // the import.
-  const canEditBooking = (b: Booking) =>
-    b.payment_status !== 'completed' || canChangePaidItems(b) || (isAdmin && Boolean(b.legacy_ref));
-  // A fully paid legacy booking can import with no Item. Admin adds or swaps it
+    !!b && b.payment_status === 'completed' && !b.legacy_ref;
+  // Every booking opens Edit, in every status, imported ones too. The form
+  // itself locks the money of a paid booking: paidLocked below.
+  const canEditBooking = (b: Booking) => Boolean(b.id);
+  // A fully paid legacy booking can import with no Item. Staff add or swap it
   // here; the backend spreads the paid total over the lines, so money stays.
   const canEditPaidLegacyItems = (b: Booking | null) =>
-    !!b && b.payment_status === 'completed' && isAdmin && Boolean(b.legacy_ref);
+    !!b && b.payment_status === 'completed' && Boolean(b.legacy_ref);
   const [deletingBooking, setDeletingBooking] = useState<Booking | null>(null);
   const [deletingBookingBusy, setDeletingBookingBusy] = useState(false);
   // The list opens on the bookings with their event day in this month.
@@ -529,12 +550,13 @@ export default function BookingsPage() {
     const validItems = bookingForm.items.filter(it => it.item_id && it.item_id.trim() !== '');
     if (validItems.length === 0) errs.items = 'At least one valid item is required';
     
+    // An empty line is skipped on save, so only a filled line needs a quantity.
     bookingForm.items.forEach((it, idx) => {
-      if (!it.item_id) errs[`item_${idx}`] = 'Item ID required';
-      if (!it.quantity || it.quantity < 1) errs[`item_qty_${idx}`] = 'Quantity >= 1';
+      if (it.item_id && (!it.quantity || it.quantity < 1)) errs[`item_qty_${idx}`] = 'Quantity >= 1';
     });
-    setFormErrors(errs);
-    if (Object.keys(errs).length > 0) return;
+    const createErrors = withErrorSummary(errs);
+    setFormErrors(createErrors);
+    if (Object.keys(createErrors).length > 0) return;
 
     try {
       setCreating(true);
@@ -609,6 +631,15 @@ export default function BookingsPage() {
     setBookingProofFile(null);
     setFormErrors({});
   };
+
+  // The saved customer, so Edit shows the name even when the customer is not
+  // on the first page of the customer list.
+  const editCustomerOption = useMemo(
+    () => (activeBooking?.customer
+      ? { value: activeBooking.customer_id, label: customerOptionLabel(activeBooking.customer) }
+      : undefined),
+    [activeBooking],
+  );
 
   const openCreate = () => {
     setActiveBooking(null);
@@ -688,8 +719,13 @@ export default function BookingsPage() {
     if (validItems.length === 0) errs.items = 'At least one valid item is required';
     
     if (belowPaid) errs.items = belowPaidMessage;
-    setFormErrors(errs);
-    if (Object.keys(errs).length > 0) return;
+    const editErrors = withErrorSummary(errs);
+    setFormErrors(editErrors);
+    if (Object.keys(editErrors).length > 0) return;
+    // Cancelled goes through the cancel flow, which also cancels the Rental and
+    // reverses the money. So the save leaves the status out, then cancels.
+    const cancelling = bookingForm.status === 'cancelled' && activeBooking.status !== 'cancelled';
+    const status = cancelling ? undefined : bookingForm.status;
     try {
       setCreating(true);
       const payload = (paidLocked
@@ -705,6 +741,8 @@ export default function BookingsPage() {
             booking_guarantee: bookingGuarantee,
             security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
             institution: bookingForm.institution || undefined,
+            // The status moves no money, so a paid booking can change it too.
+            status,
             ...(canEditPaidLegacyItems(activeBooking)
               ? {
                   // The custom lines keep their prices; the Items share the rest of the paid total.
@@ -730,7 +768,7 @@ export default function BookingsPage() {
             security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
             institution: bookingForm.institution || undefined,
             notes: bookingForm.notes,
-            status: bookingForm.status,
+            status,
             payment_status: bookingForm.payment_status,
             payment_method: bookingForm.payment_method,
             fee_rule_id: bookingFeeRuleId || undefined,
@@ -758,6 +796,7 @@ export default function BookingsPage() {
       ) as unknown as import('@/types').CreateBookingRequest;
 
       const updated = await apiClient.updateBooking(activeBooking.id, payload as unknown as Partial<import('@/types').CreateBookingRequest>);
+      if (cancelling) await apiClient.cancelBooking(activeBooking.id);
       const previousPaid = activeBooking.paid_amount || 0;
       const issuedId = activeBooking.id;
       const paidNow = updated?.paid_amount ?? payNow;
@@ -1247,6 +1286,7 @@ export default function BookingsPage() {
         >
           <BookingFormFields
             bookingForm={bookingForm}
+            customerOption={editCustomerOption}
             availabilityNoteFor={availabilityNoteFor}
             catalogPriceFor={catalogPriceFor}
             formErrors={formErrors}
@@ -1468,6 +1508,7 @@ function BookingFormFields({
   itemLabels,
   availabilityNoteFor,
   catalogPriceFor,
+  customerOption,
   requireEventDate = false,
   fetchItemPage,
   fetchTrousersPage,
@@ -1515,6 +1556,8 @@ function BookingFormFields({
   itemLabels: Record<string, string>;
   /** Free, same-day handover, or booked, for an item on the form's dates. */
   availabilityNoteFor: (itemId: string) => { tone: AvailabilityTone; text: string } | null;
+  /** The customer saved on the booking, shown even when it is not on the loaded list. */
+  customerOption?: { value: string; label: string };
   /** The catalogue price of an Item, or null while it loads. The typed price may differ. */
   catalogPriceFor: (itemId: string) => number | null;
   /** New Booking: the event day comes first, because it sets the dates the items are checked on. */
@@ -1537,6 +1580,10 @@ function BookingFormFields({
   const needsEventDate = requireEventDate && !bookingForm.event_date;
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [createdCustomerOption, setCreatedCustomerOption] = useState<{ value: string; label: string } | null>(null);
+  const customerExtraOptions = useMemo(
+    () => [createdCustomerOption, customerOption].filter((o): o is { value: string; label: string } => !!o),
+    [createdCustomerOption, customerOption],
+  );
 
   // A discount that needs a code belongs to the customer who quotes it, so the
   // picker only offers the ones that apply on their own. Typing the code adds
@@ -1574,7 +1621,7 @@ function BookingFormFields({
           value={bookingForm.customer_id}
           onChange={(val) => updateBookingField('customer_id', val)}
           fetchOptions={fetchCustomerOptions}
-          extraOptions={createdCustomerOption ? [createdCustomerOption] : []}
+          extraOptions={customerExtraOptions}
           error={formErrors.customer_id}
           placeholder="Search name or phone"
         />
@@ -1921,7 +1968,6 @@ function BookingFormFields({
               { value: 'completed', label: 'Completed' },
               { value: 'cancelled', label: 'Cancelled' },
             ]}
-            disabled={locked}
           />
           <Select
             searchable={false}
@@ -2034,7 +2080,14 @@ function BookingFormTotals({
           <span>{isDownPayment ? 'Pay now (DP)' : 'Pay now (full)'}</span>
           <span className="tabular-nums">{formatCurrency(payNow)}</span>
         </div>
-        <TransactionFeeLines amount={chargeNow} method={paymentMethod} pot={pot} onPotChange={onPotChange} ruleId={feeRuleId} onRuleIdChange={onFeeRuleIdChange} />
+        {/* The bank is saved only with new money, so the picker shows only then. */}
+        <TransactionFeeLines amount={chargeNow} method={paymentMethod} pot={pot} onPotChange={chargeNow > 0 ? onPotChange : undefined} ruleId={feeRuleId} onRuleIdChange={onFeeRuleIdChange} />
+        {chargeNow <= 0 && BANK_POTS.some((bank) => bank.value === pot) && (
+          <div className="flex justify-between" data-testid="booking-saved-bank">
+            <span>Paid into</span>
+            <span>{BANK_POTS.find((bank) => bank.value === pot)?.label}</span>
+          </div>
+        )}
         <div className="flex justify-between">
           <span>Remaining at pickup</span>
           <span className="tabular-nums">{formatCurrency(remainingAmount)}</span>

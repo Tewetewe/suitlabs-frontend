@@ -373,7 +373,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
     </div>
     <div class="card">
       <h4 style="margin-top:0">Upgrade or downgrade a booking</h4>
-      <p>Use <b>Edit</b> to swap an Item for a dearer or a cheaper one before Pickup. This works on a fully paid booking too. An upgrade adds the difference to the remaining amount. A downgrade cannot go below the money the customer already paid: the shop does not refund the DP. After Pickup, edit is closed. Do not cancel and re-book to work around it.</p>
+      <p>Use <b>Edit</b> to swap an Item for a dearer or a cheaper one, in every status. This works on a fully paid booking and on an imported booking too. An upgrade adds the difference to the remaining amount. A downgrade cannot go below the money the customer already paid: the shop does not refund the DP. After Pickup, a swap changes the booking and its money only: the Rental keeps the Items that went out. Do not cancel and re-book to work around it.</p>
     </div>
   </div>
 
@@ -776,7 +776,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
       <tbody>
         <tr><td><code>pending</code></td><td>Nothing paid.</td><td>Take money — the DP invoice opens itself.</td></tr>
         <tr><td><code>partial</code></td><td>DP taken, balance owing.</td><td>Collect the rest; the full invoice opens itself.</td></tr>
-        <tr><td><code>completed</code></td><td>Paid in full.</td><td>Nothing — and the booking is now locked from editing.</td></tr>
+        <tr><td><code>completed</code></td><td>Paid in full.</td><td>Nothing. Edit still opens: an upgrade opens a balance again, and a downgrade cannot go below the money paid.</td></tr>
       </tbody>
     </table>
   </div>
