@@ -18,6 +18,22 @@ const nextConfig: NextConfig = {
   // which can delete/overwrite chunk files and cause runtime errors like:
   // "Cannot find module './331.js'" or "__webpack_modules__[moduleId] is not a function".
   distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
+  // The public "save contact" link: a phone opens the vCard in its native
+  // contact screen. /contact is the plain landing page, with no app code.
+  async headers() {
+    return [
+      {
+        source: '/suitlabs-bali.vcf',
+        headers: [
+          { key: 'Content-Type', value: 'text/vcard; charset=utf-8' },
+          { key: 'Content-Disposition', value: 'inline; filename="suitlabs-bali.vcf"' },
+        ],
+      },
+    ];
+  },
+  async rewrites() {
+    return [{ source: '/contact', destination: '/contact.html' }];
+  },
   images: {
     remotePatterns: [
       { protocol: 'http', hostname: '**' },
