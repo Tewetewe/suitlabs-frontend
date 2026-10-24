@@ -8,6 +8,9 @@ import {
   bookingItemsChanged,
   bookingPayNow,
   defaultTrousersCode,
+  extensionDayPrice,
+  extensionTotal,
+  nextDay,
   halfDownPayment,
   newBookingStatuses,
   repriceForLength,
@@ -127,5 +130,25 @@ describe('custom lines with a package', () => {
 
   it('sees a switch between included and add-on', () => {
     assert.equal(customLinesChanged(lines, [{ ...lines[0], is_addon: true }, lines[1]]), true);
+  });
+});
+
+describe('extension', () => {
+  const day = { kind: 'extension', total_price: 200_000 };
+  const tie = { kind: '', total_price: 50_000 };
+
+  it('charges half the amount before any extension, the same each day', () => {
+    assert.equal(extensionDayPrice(400_000, []), 200_000);
+    assert.equal(extensionDayPrice(600_000, [day, tie]), 200_000);
+  });
+
+  it('counts only the extension lines', () => {
+    assert.equal(extensionTotal([day, tie, day]), 400_000);
+    assert.equal(extensionTotal(undefined), 0);
+  });
+
+  it('moves the return date one calendar day, across a month end', () => {
+    assert.equal(nextDay('2026-08-31T00:00:00Z'), '2026-09-01');
+    assert.equal(nextDay('2026-12-31'), '2027-01-01');
   });
 });

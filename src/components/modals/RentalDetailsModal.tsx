@@ -40,6 +40,8 @@ interface RentalDetailsModalProps {
   sendingWAReminder?: boolean;
   /** Admin only: deletes a Rental that has no Booking. */
   onDelete?: () => void;
+  /** Admin only: waives the Late Fee of a returned Rental. */
+  onWaiveLateFee?: () => void;
 }
 
 function statusVariant(status: string): 'success' | 'warning' | 'primary' | 'default' | 'danger' {
@@ -73,6 +75,7 @@ export function RentalDetailsModal({
   onSendWAReminder,
   sendingWAReminder,
   onDelete,
+  onWaiveLateFee,
 }: RentalDetailsModalProps) {
   if (!rental) return null;
 
@@ -211,6 +214,11 @@ export function RentalDetailsModal({
             {(rental.late_fee || 0) > 0 && (
               <MoneyRow label="Late fee" value={`+${formatCurrency(rental.late_fee)}`} tone="danger" />
             )}
+            {onWaiveLateFee && (rental.late_fee || 0) > 0 && (
+              <Button variant="secondary" size="sm" onClick={onWaiveLateFee} data-testid="rental-waive-late-fee">
+                Waive Late Fee
+              </Button>
+            )}
             {(rental.damage_charges || 0) > 0 && (
               <MoneyRow label="Damage charge" value={`+${formatCurrency(rental.damage_charges)}`} tone="danger" />
             )}
@@ -231,7 +239,8 @@ export function RentalDetailsModal({
           </div>
         </DetailSection>
 
-        <FeeWaiverList rentalId={rental.id} />
+        {/* A new waiver lowers the Late Fee, so the key reloads the list. */}
+        <FeeWaiverList key={`${rental.id}:${rental.late_fee || 0}`} rentalId={rental.id} />
 
         {rental.identity_card_url && (
           <DetailSection label="Guarantee">

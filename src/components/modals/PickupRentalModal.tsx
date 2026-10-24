@@ -20,6 +20,7 @@ import { DEPOSIT_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { waDeliveryLabel } from '@/lib/wa-delivery';
 import { PickupPrep, Rental, SalePaymentMethod } from '@/types';
 import { customerItemName } from '@/lib/item-name';
+import { useDefaultBankPot } from '@/hooks/useDefaultBankPot';
 
 function rentalsFromUserResponse(payload: unknown): Rental[] {
   if (!payload || typeof payload !== 'object') return [];
@@ -70,6 +71,8 @@ export function PickupRentalModal({
   const [remainingFeeRuleId, setRemainingFeeRuleId] = useState('');
   const [remainingPot, setRemainingPot] = useState('');
   const [depositPot, setDepositPot] = useState('');
+  useDefaultBankPot(remainingMethod, remainingPot, setRemainingPot);
+  useDefaultBankPot(depositMethod, depositPot, setDepositPot);
   const [bankName, setBankName] = useState('');
   const [accountName, setAccountName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');

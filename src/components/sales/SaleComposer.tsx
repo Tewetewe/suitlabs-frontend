@@ -19,6 +19,7 @@ import NewCustomerModal from '@/components/modals/NewCustomerModal';
 import { TransactionFeeLines } from '@/components/payments/TransactionFeeLines';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import { customerItemName } from '@/lib/item-name';
+import { useDefaultBankPot } from '@/hooks/useDefaultBankPot';
 
 export type CartLine = {
   key: string;
@@ -90,6 +91,7 @@ export function SaleComposer({
   const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>('cash');
   const [feeRuleId, setFeeRuleId] = useState('');
   const [pot, setPot] = useState('');
+  useDefaultBankPot(paymentMethod, pot, setPot);
   const [discount, setDiscount] = useState('');
   const [notes, setNotes] = useState('');
   const [lostFees, setLostFees] = useState<Record<string, string>>({});

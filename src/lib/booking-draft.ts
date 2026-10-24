@@ -179,3 +179,34 @@ export function bookingItemsChanged(before: ItemLine[] | undefined, after: ItemL
       .join(',');
   return key(before || []) !== key(after);
 }
+
+/** The share of the booking amount that one more rental day costs, as `LateFeeDayShare` in the backend. */
+export const EXTENSION_DAY_SHARE = 0.5;
+
+type ExtensionLine = { kind?: string; total_price?: number; quantity?: number; unit_price?: number };
+
+/** True for the line of one more rental day. Only Extend adds one; Edit keeps it as it is. */
+export function isExtensionLine(line: { kind?: string }): boolean {
+  return line.kind === 'extension';
+}
+
+/** The price of the extra rental days on a booking. */
+export function extensionTotal(lines: ExtensionLine[] | undefined): number {
+  return (lines || [])
+    .filter(isExtensionLine)
+    .reduce((sum, line) => sum + (line.total_price ?? (line.quantity || 1) * (line.unit_price || 0)), 0);
+}
+
+/**
+ * One more rental day: half the booking amount before any extension, so
+ * every day costs the same. It mirrors `Booking.ExtensionDayPrice`.
+ */
+export function extensionDayPrice(finalAmount: number, lines: ExtensionLine[] | undefined): number {
+  return Math.round(Math.max(0, finalAmount - extensionTotal(lines)) * EXTENSION_DAY_SHARE);
+}
+
+/** The calendar day after an ISO date, as YYYY-MM-DD. */
+export function nextDay(iso: string): string {
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+}
