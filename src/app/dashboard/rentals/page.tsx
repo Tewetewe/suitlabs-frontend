@@ -19,6 +19,7 @@ import { CreateRentalModal } from '@/components/modals/CreateRentalModal';
 import { RentalInvoiceModal } from '@/components/modals/RentalInvoiceModal';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { RentalDetailsModal } from '@/components/modals/RentalDetailsModal';
+import { WaiveLateFeeModal } from '@/components/modals/WaiveLateFeeModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { EditRentalModal } from '@/components/modals/EditRentalModal';
 import { PickupRentalModal } from '@/components/modals/PickupRentalModal';
@@ -40,6 +41,7 @@ import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfinit
 import { useRememberedState } from '@/hooks/useRememberedState';
 import { itemDisplayName } from '@/lib/item-name';
 import { partyName } from '@/lib/booking-name';
+import { useDefaultBankPot } from '@/hooks/useDefaultBankPot';
 
 /** Whole days since the suit came back, or null when it has not. */
 function daysSinceReturn(rental: Rental): number | null {
@@ -53,6 +55,7 @@ export default function RentalsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [deletingRental, setDeletingRental] = useState<Rental | null>(null);
+  const [waivingLateFee, setWaivingLateFee] = useState(false);
   const [deletingRentalBusy, setDeletingRentalBusy] = useState(false);
   // A cancelled Rental Admin brings back, with the reason for the notes.
   const [reactivating, setReactivating] = useState<Rental | null>(null);
@@ -79,6 +82,7 @@ export default function RentalsPage() {
   const [chargePaymentMethod, setChargePaymentMethod] = useState<string>('cash');
   const [chargeFeeRuleId, setChargeFeeRuleId] = useState('');
   const [chargePot, setChargePot] = useState('');
+  useDefaultBankPot(chargePaymentMethod, chargePot, setChargePot);
   const [refundPot, setRefundPot] = useState('');
   const [depositRefundMethod, setDepositRefundMethod] = useState<string>('cash');
   const [refundProofFile, setRefundProofFile] = useState<File | null>(null);
@@ -760,6 +764,9 @@ export default function RentalsPage() {
           onCancel={() => selectedRental && handleCancelRental(selectedRental)}
           // A Rental from a Booking goes with its Booking, on the Bookings page.
           onDelete={isAdmin && selectedRental && !selectedRental.booking_id ? () => setDeletingRental(selectedRental) : undefined}
+          // A Late Fee waived at the Return needs no step here. This one is for
+          // a Late Fee found wrong afterwards, such as a Return marked late.
+          onWaiveLateFee={isAdmin && selectedRental?.status === 'completed' ? () => setWaivingLateFee(true) : undefined}
           onInvoice={() => {
             setShowDetailsModal(false);
             setShowInvoiceModal(true);
@@ -770,6 +777,23 @@ export default function RentalsPage() {
             if (!selectedRental) return;
             setShowDetailsModal(false);
             handleEditRental(selectedRental);
+          }}
+        />
+
+        <WaiveLateFeeModal
+          isOpen={waivingLateFee}
+          rental={selectedRental}
+          onClose={() => setWaivingLateFee(false)}
+          onWaived={async () => {
+            setWaivingLateFee(false);
+            if (selectedRental) {
+              try {
+                setSelectedRental(await apiClient.getRental(selectedRental.id));
+              } catch {
+                // The list reload below still shows the new Late Fee.
+              }
+            }
+            await reload();
           }}
         />
 

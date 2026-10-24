@@ -1086,6 +1086,8 @@ export interface BookingCustomLine {
   total_price?: number;
   /** With a package: true charges it on top, false includes it in the package price. */
   is_addon?: boolean;
+  /** 'extension' for one more rental day. Only Extend adds one; Edit keeps it. */
+  kind?: string;
 }
 
 /** One payment or refund of a Booking, read from the books. */

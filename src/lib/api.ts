@@ -590,6 +590,18 @@ class APIClient {
     return response.data.data?.waivers || [];
   }
 
+  /**
+   * Admin only: waives the Late Fee of a returned Rental, such as one charged
+   * because the cashier marked the Return late. Amount 0 waives all of it.
+   */
+  async waiveCompletedLateFee(rentalId: string, amount: number, reason: string): Promise<FeeWaiver> {
+    const response = await this.client.post<APIResponse<{ waiver: FeeWaiver }>>(
+      `/api/v1/rentals/${rentalId}/waive-late-fee`,
+      { amount, reason },
+    );
+    return this.handleResponse<{ waiver: FeeWaiver }>(response).waiver;
+  }
+
   /** Admin only: writes off a missing Item with no Sale. */
   async waiveReplacementFee(rentalId: string, itemId: string, reason: string): Promise<FeeWaiver> {
     const response = await this.client.post<APIResponse<{ waiver: FeeWaiver }>>(
@@ -810,6 +822,12 @@ class APIClient {
 
   async completeBooking(id: string): Promise<Booking> {
     const response = await this.client.put<APIResponse<Booking>>(`/api/v1/bookings/${id}/complete`);
+    return response.data.data!;
+  }
+
+  /** Keeps the Items one more day. The day opens as balance to collect. */
+  async extendBooking(id: string): Promise<Booking> {
+    const response = await this.client.put<APIResponse<Booking>>(`/api/v1/bookings/${id}/extend`);
     return response.data.data!;
   }
 

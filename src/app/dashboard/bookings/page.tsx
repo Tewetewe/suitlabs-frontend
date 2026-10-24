@@ -27,7 +27,7 @@ import { formatDateShort } from '@/lib/date';
 import { RENTAL_LENGTHS, type RentalLength, rentalPrice, rentalWindow } from '@/lib/rental-window';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
 import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS } from '@/lib/select-options';
-import { Booking, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing, SalePaymentMethod } from '@/types';
+import { Booking, BookingCustomLine, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing, SalePaymentMethod } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
@@ -35,7 +35,7 @@ import { itemDisplayName } from '@/lib/item-name';
 import type { AvailabilityTone } from '@/lib/item-availability';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
 import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
-import { Plus, Edit, Calendar, Eye, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus, Trash2 } from 'lucide-react';
+import { Plus, Edit, Calendar, CalendarPlus, Eye, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus, Trash2 } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { BookingDetailsModal } from '@/components/modals/BookingDetailsModal';
@@ -47,9 +47,10 @@ import { useRememberedState } from '@/hooks/useRememberedState';
 import { currentMonthRange } from '@/lib/date';
 import { useToast } from '@/contexts/ToastContext';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
-import { bookingGross, bookingItemsChanged, customLinesChanged, customLinesForRequest, customLinesTotal, type CustomLineDraft, bookingPayNow, defaultTrousersCode, newBookingStatuses, repriceForLength, typedSubtotal as readTypedSubtotal } from '@/lib/booking-draft';
+import { bookingGross, bookingItemsChanged, customLinesChanged, customLinesForRequest, customLinesTotal, type CustomLineDraft, bookingPayNow, defaultTrousersCode, extensionDayPrice, extensionTotal, isExtensionLine, newBookingStatuses, nextDay, repriceForLength, typedSubtotal as readTypedSubtotal } from '@/lib/booking-draft';
 import { useBookingDiscountPick } from '@/hooks/useBookingDiscountPick';
 import { partyName } from '@/lib/booking-name';
+import { useDefaultBankPot } from '@/hooks/useDefaultBankPot';
 
 type BookingFormItem = {
   item_id: string;
@@ -202,9 +203,13 @@ export default function BookingsPage() {
   // money already paid.
   const canChangePaidItems = (b: Booking | null) =>
     !!b && b.payment_status === 'completed' && !b.legacy_ref;
-  // Every booking opens Edit, in every status, imported ones too. The form
-  // itself locks the money of a paid booking: paidLocked below.
-  const canEditBooking = (b: Booking) => Boolean(b.id);
+  // Every booking opens Edit, imported ones too. The form itself locks the
+  // money of a paid booking: paidLocked below. A completed booking opens Edit
+  // for Admin only, to reconcile it: the save rewrites its completed Rental too.
+  const canEditBooking = (b: Booking) => Boolean(b.id) && (b.status !== 'completed' || isAdmin);
+  // A booking that is not Completed or Cancelled can keep its Items one more day.
+  const canExtend = (b: Booking) =>
+    b.status !== 'completed' && b.status !== 'cancelled' && !!b.appointment_date && (b.items?.length || 0) > 0;
   // A fully paid legacy booking can import with no Item. Staff add or swap it
   // here; the backend spreads the paid total over the lines, so money stays.
   const canEditPaidLegacyItems = (b: Booking | null) =>
@@ -247,6 +252,8 @@ export default function BookingsPage() {
   const [payMethod, setPayMethod] = useState<SalePaymentMethod>('cash');
   const feeRules = useTransactionFeeRules();
   const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
+  const [extendingBooking, setExtendingBooking] = useState<Booking | null>(null);
+  const [extending, setExtending] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   // Previous static options states no longer used; keeping for future caching if needed
   const [bookingForm, setBookingForm] = useState<{
@@ -281,6 +288,9 @@ export default function BookingsPage() {
     .reduce((sum, it) => sum + (it.discount_amount || 0), 0);
   // A fully paid booking that cannot change its Items keeps its money as it is.
   const paidLocked = activeBooking?.payment_status === 'completed' && !canChangePaidItems(activeBooking);
+  // A paid legacy booking keeps its paid total. Add-on lines charge on top of
+  // it, and a package sets the total itself, at or above the money paid.
+  const paidLegacy = isEditModalOpen && canEditPaidLegacyItems(activeBooking);
   // A typed Subtotal above the Items charges items not in the catalogue yet.
   // A package sets its own price, and a paid booking keeps its money.
   const canEditSubtotal = !selectedPackageId
@@ -296,7 +306,11 @@ export default function BookingsPage() {
     canEditSubtotal ? Number(subtotalInput) || 0 : 0,
     linesSubtotal,
   );
-  const bookingTotal = linesSubtotal + extraCharge;
+  // Extend adds the extension days; Edit keeps them, outside the form lines.
+  const editExtensionTotal = isEditModalOpen ? extensionTotal(activeBooking?.custom_lines) : 0;
+  const bookingTotal = paidLegacy && !selectedPackageId
+    ? (activeBooking?.final_amount || 0) + addonSubtotal + customLinesTotal(bookingForm.custom_lines, true)
+    : linesSubtotal + extraCharge + editExtensionTotal;
   // The Items as saved: the extra of a typed Subtotal sits on the main line.
   const pricedItems = (items: BookingFormState['items']) => {
     const lines = items.map((it) => ({ quantity: it.quantity, unit_price: it.unit_price }));
@@ -345,17 +359,27 @@ export default function BookingsPage() {
   const alreadyPaid = isEditModalOpen ? activeBooking?.paid_amount || 0 : 0;
   // An edit may upgrade or downgrade the Items, but the total stays at or
   // above the money already paid: the shop does not refund the DP.
-  const belowPaid = alreadyPaid > 0 && !paidLocked && alreadyPaid - bookingFinal > 0.009;
+  const belowPaid = alreadyPaid > 0 && (!paidLocked || paidLegacy) && alreadyPaid - bookingFinal > 0.009;
   const belowPaidMessage = `The customer already paid ${formatCurrency(alreadyPaid)}. A downgrade cannot go below it.`;
   // A down payment takes the amount Staff typed. With none typed, a new
   // booking takes half and an edit keeps what was already paid.
   const typedDownPayment = isDownPayment ? Number(dpInput) || 0 : 0;
   const downPaymentTooHigh = typedDownPayment > bookingFinal;
-  const payNow = bookingPayNow({ total: bookingFinal, downPayment: isDownPayment, typedDownPayment, alreadyPaid });
+  // A paid legacy edit takes no money: an add-on or a package stays remaining,
+  // and Staff collect it with Take payment.
+  const payNow = paidLegacy
+    ? alreadyPaid
+    : bookingPayNow({ total: bookingFinal, downPayment: isDownPayment, typedDownPayment, alreadyPaid });
   const remainingAmount = bookingFinal - payNow;
   // Only the money taken on this save is charged now, so an edit counts the
   // Transaction Fee on the top-up alone.
   const chargeNow = Math.max(0, payNow - alreadyPaid);
+  // A paid booking with no bank on record, such as a legacy import, may name
+  // one on Edit. A bank already on record stays: the books carry it.
+  const bankToRecord = isEditModalOpen && alreadyPaid > 0 && !savedBankPot(activeBooking?.payment_pot);
+  // A transfer starts on BCA. Staff can still tap BNI.
+  useDefaultBankPot(bookingForm.payment_method, bookingPot, setBookingPot);
+  useDefaultBankPot(payMethod, payPot, setPayPot);
   const chargeNowFee = transactionFee(chargeNow, bookingForm.payment_method, feeRules, bookingFeeRuleId, bookingPot);
   const downPaymentField = isDownPayment && !(isEditModalOpen && paidLocked)
     ? {
@@ -509,8 +533,8 @@ export default function BookingsPage() {
   };
 
   const addCustomLine = () => {
-    // With a package a new line starts as a charged add-on, so a price is never lost by mistake.
-    setBookingForm(prev => ({ ...prev, custom_lines: [...prev.custom_lines, { name: '', quantity: 1, unit_price: 0, is_addon: !!selectedPackageId }] }));
+    // With a package, or on a paid legacy booking, a new line starts as a charged add-on, so a price is never lost by mistake.
+    setBookingForm(prev => ({ ...prev, custom_lines: [...prev.custom_lines, { name: '', quantity: 1, unit_price: 0, is_addon: !!selectedPackageId || paidLegacy }] }));
   };
   const updateCustomLine = (index: number, patch: Partial<CustomLineDraft>) => {
     setBookingForm(prev => ({
@@ -661,6 +685,9 @@ export default function BookingsPage() {
     setActiveBooking(booking);
     // A saved booking keeps its lines as they are: a Suit-only line gets no trousers on edit.
     pairedSuitIdsRef.current = new Set((booking.items || []).map(it => it.item_id));
+    // On a paid legacy booking the paid total covers every saved line, so each
+    // one opens as part of it. Only a line marked on this edit charges on top.
+    const keepAddons = !canEditPaidLegacyItems(booking) || !!booking.package_pricing_id;
     setBookingForm({
       customer_id: booking.customer_id,
       booking_date: booking.booking_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
@@ -681,13 +708,13 @@ export default function BookingsPage() {
         unit_price: it.unit_price || it.final_price || 0,
         discount_amount: it.discount_amount || 0,
         catalogue: it.item?.type === 'trousers' ? 'trousers' as const : 'any' as const,
-        is_addon: !!it.is_addon,
+        is_addon: keepAddons && !!it.is_addon,
       })),
-      custom_lines: (booking.custom_lines || []).map((line) => ({
+      custom_lines: (booking.custom_lines || []).filter((line) => !isExtensionLine(line)).map((line) => ({
         name: line.name,
         quantity: line.quantity,
         unit_price: line.unit_price,
-        is_addon: !!line.is_addon,
+        is_addon: keepAddons && !!line.is_addon,
       })),
     });
     setItemLabels(prev => {
@@ -751,9 +778,13 @@ export default function BookingsPage() {
             institution: bookingForm.institution || undefined,
             // The status moves no money, so a paid booking can change it too.
             status,
-            ...(canEditPaidLegacyItems(activeBooking)
+            // A bank is saved only on a booking that has none on record.
+            pot: bankToRecord ? potForRequest(bookingForm.payment_method, bookingPot) : undefined,
+            ...(paidLegacy
               ? {
-                  // The custom lines keep their prices; the Items share the rest of the paid total.
+                  // A package sets the total itself. With none, the lines share
+                  // the paid total and the add-ons charge on top of it.
+                  package_pricing_id: selectedPackageId || '',
                   custom_lines: customLinesForRequest(bookingForm.custom_lines),
                   items: validItems.map(it => ({
                     item_id: it.item_id,
@@ -761,7 +792,7 @@ export default function BookingsPage() {
                     unit_price: it.unit_price,
                     total_price: it.unit_price * it.quantity,
                     discount_amount: 0,
-                    is_addon: false,
+                    is_addon: !!it.is_addon,
                   })),
                 }
               : {}),
@@ -812,13 +843,16 @@ export default function BookingsPage() {
         ?? (remainingAmount <= 0 ? 'completed' : paidNow > 0 ? 'partial' : 'pending');
       // An upgrade, a downgrade, or a swap of Items issues a new receipt, so
       // it opens and sends the invoice as a new booking does. A legacy fix by
-      // Admin keeps the money and the receipt as they are.
+      // Admin keeps the money and the receipt as they are; an add-on or a
+      // package on it changes the money, so it issues one.
       const previousFinal = activeBooking.final_amount
         ?? Math.max(0, (activeBooking.total_amount || 0) - (activeBooking.discount_amount || 0));
       const newFinal = updated?.final_amount ?? bookingFinal;
-      const receiptChanged = !paidLocked
-        && (Math.abs(newFinal - previousFinal) > 0.009 || bookingItemsChanged(activeBooking.items, validItems)
-          || customLinesChanged(activeBooking.custom_lines, bookingForm.custom_lines));
+      const finalChanged = Math.abs(newFinal - previousFinal) > 0.009;
+      const receiptChanged = paidLocked
+        ? paidLegacy && finalChanged
+        : finalChanged || bookingItemsChanged(activeBooking.items, validItems)
+          || customLinesChanged(activeBooking.custom_lines?.filter((line) => !isExtensionLine(line)), bookingForm.custom_lines);
       setIsEditModalOpen(false);
       setActiveBooking(null);
       resetDiscountPick();
@@ -1034,6 +1068,26 @@ export default function BookingsPage() {
     }
   };
 
+  // One more day costs half the booking amount before any extension. The
+  // day opens as balance, so the collect step opens next.
+  const submitExtendBooking = async () => {
+    if (!extendingBooking) return;
+    try {
+      setExtending(true);
+      const updated = await apiClient.extendBooking(extendingBooking.id);
+      await reload();
+      setExtendingBooking(null);
+      success('Booking extended', 'Collect the extra day now, or later with Collect balance.');
+      if (updated?.remaining_amount > 0) {
+        setPayFeeRuleId(''); setPayPot(savedBankPot(updated.payment_pot)); setPayMethod(payChannelOf(updated.payment_method)); setPayingBooking(updated);
+      }
+    } catch (err) {
+      toastError('Could not extend booking', apiErrorMessage(err, 'Please try again.'));
+    } finally {
+      setExtending(false);
+    }
+  };
+
   const submitCancelBooking = async () => {
     if (!cancellingBooking) return;
     try {
@@ -1198,6 +1252,11 @@ export default function BookingsPage() {
                             Add-on sale
                           </OverflowMenuItem>
                         )}
+                        {canExtend(booking) && (
+                          <OverflowMenuItem icon={<CalendarPlus className="h-4 w-4 text-slate-400" />} onClick={() => setExtendingBooking(booking)}>
+                            Extend 1 day
+                          </OverflowMenuItem>
+                        )}
                         {booking.status !== 'cancelled' && (
                           <OverflowMenuItem
                             danger
@@ -1274,6 +1333,7 @@ export default function BookingsPage() {
             onFeeRuleIdChange={setBookingFeeRuleId}
             pot={bookingPot}
             onPotChange={setBookingPot}
+            bankToRecord={bankToRecord}
             remainingAmount={remainingAmount}
             customSubtotal={customSubtotal}
             proofFile={bookingProofFile}
@@ -1292,6 +1352,11 @@ export default function BookingsPage() {
           title="Edit Booking"
           onClose={() => { setIsEditModalOpen(false); setActiveBooking(null); }}
         >
+          {activeBooking?.status === 'completed' && (
+            <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="booking-reconcile-note">
+              This booking is completed. Save also updates its Rental: the dates, the Items, and the amount. The pickup and return times, the Late Fee, the deposit, and the damage stay as the Return recorded them.
+            </p>
+          )}
           <BookingFormFields
             bookingForm={bookingForm}
             customerOption={editCustomerOption}
@@ -1310,9 +1375,10 @@ export default function BookingsPage() {
             chargeNow={chargeNow}
             chargeNowFee={chargeNowFee}
             locked={paidLocked}
-            itemsLocked={paidLocked && !canEditPaidLegacyItems(activeBooking)}
-            paidTotal={canEditPaidLegacyItems(activeBooking) ? activeBooking?.paid_amount : undefined}
-            paidFloor={!paidLocked && alreadyPaid > 0 ? { amount: alreadyPaid, below: belowPaid } : undefined}
+            itemsLocked={paidLocked && !paidLegacy}
+            paidTotal={paidLegacy ? activeBooking?.paid_amount : undefined}
+            extensionLines={activeBooking?.custom_lines?.filter(isExtensionLine)}
+            paidFloor={(!paidLocked || (paidLegacy && !!selectedPackageId)) && alreadyPaid > 0 ? { amount: alreadyPaid, below: belowPaid } : undefined}
             fetchCustomerOptions={fetchCustomerOptions}
             itemLabels={itemLabels}
             fetchItemPage={fetchItemPage}
@@ -1346,6 +1412,7 @@ export default function BookingsPage() {
             onFeeRuleIdChange={setBookingFeeRuleId}
             pot={bookingPot}
             onPotChange={setBookingPot}
+            bankToRecord={bankToRecord}
             remainingAmount={remainingAmount}
             customSubtotal={customSubtotal}
             proofFile={bookingProofFile}
@@ -1443,6 +1510,32 @@ export default function BookingsPage() {
           description="The linked pending rental will cancel with it. This cannot be undone."
         />
         <ConfirmModal
+          isOpen={!!extendingBooking}
+          title="Extend 1 day"
+          confirmLabel="Extend"
+          cancelLabel="Keep dates"
+          loading={extending}
+          onClose={() => setExtendingBooking(null)}
+          onConfirm={submitExtendBooking}
+          description={
+            extendingBooking?.appointment_date ? (
+              <div className="space-y-2 text-sm text-slate-600" data-testid="booking-extend-summary">
+                <p>
+                  The return date moves from {formatDateShort(extendingBooking.appointment_date)} to{' '}
+                  {formatDateShort(nextDay(extendingBooking.appointment_date))}.
+                </p>
+                <p>
+                  The day costs{' '}
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(extensionDayPrice(extendingBooking.final_amount || 0, extendingBooking.custom_lines))}
+                  </span>
+                  : half of {formatCurrency((extendingBooking.final_amount || 0) - extensionTotal(extendingBooking.custom_lines))}, the booking before any extension. It adds to the balance.
+                </p>
+              </div>
+            ) : undefined
+          }
+        />
+        <ConfirmModal
           isOpen={!!payingBooking}
           title="Record full payment"
           confirmLabel="Take payment"
@@ -1510,6 +1603,7 @@ function BookingFormFields({
   locked,
   itemsLocked = locked,
   paidTotal,
+  extensionLines = [],
   paidFloor,
   showStatus = true,
   fetchCustomerOptions,
@@ -1556,6 +1650,8 @@ function BookingFormFields({
   itemsLocked?: boolean;
   /** The paid total that a paid legacy booking keeps when its Items change. */
   paidTotal?: number;
+  /** The extra rental days. Only Extend adds one, so the form shows them without a change. */
+  extensionLines?: BookingCustomLine[];
   /** The money a booking already took. An upgrade or a downgrade keeps the total at or above it. */
   paidFloor?: { amount: number; below: boolean };
   /** The Status pickers. A new booking takes its statuses from the money, so it hides them. */
@@ -1696,7 +1792,7 @@ function BookingFormFields({
       <FieldGroup title="Items">
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => addItemLine('trousers')} disabled={itemsLocked || needsEventDate}>Add trousers</Button>
-          {selectedPackageId && (
+          {(selectedPackageId || paidTotal != null) && (
             <Button size="sm" variant="secondary" onClick={() => addItemLine('any', true)} disabled={itemsLocked || needsEventDate}>Add add-on</Button>
           )}
           <Button size="sm" onClick={() => addItemLine()} disabled={itemsLocked || needsEventDate}>Add item</Button>
@@ -1710,17 +1806,30 @@ function BookingFormFields({
         <p className="text-xs text-slate-500">
           Trousers are a separate catalogue item. If the default pair does not fit, add or swap another pair. Remove the trousers line to book the Suit only.
           {selectedPackageId ? ' Mark extras as add-ons to charge them on top of the package.' : ''}
+          {!selectedPackageId && paidTotal != null ? ' Mark extras as add-ons to charge them on top of the paid total.' : ''}
         </p>
-        {paidTotal != null && (() => {
-          const linesTotal = bookingForm.items.reduce((sum, it) => sum + (it.item_id ? it.unit_price * it.quantity : 0), 0)
-            + customLinesTotal(bookingForm.custom_lines, !!selectedPackageId);
+        {paidTotal != null && selectedPackageId && (
+          <p className="text-xs text-slate-500" data-testid="booking-paid-split">
+            This booking is fully paid. The package and its add-ons set the new total. It cannot go below the {formatCurrency(paidTotal)} paid, and the customer pays the rest.
+          </p>
+        )}
+        {paidTotal != null && !selectedPackageId && (() => {
+          // Add-ons charge on top; the other lines share the paid total.
+          const shared = bookingForm.items.filter((it) => !it.is_addon);
+          const linesTotal = shared.reduce((sum, it) => sum + (it.item_id ? it.unit_price * it.quantity : 0), 0)
+            + customLinesTotal(bookingForm.custom_lines.filter((line) => !line.is_addon));
+          const addonsTotal = bookingForm.items
+            .filter((it) => it.is_addon)
+            .reduce((sum, it) => sum + (it.item_id ? it.unit_price * it.quantity : 0), 0)
+            + customLinesTotal(bookingForm.custom_lines, true);
           const gap = paidTotal - linesTotal;
           return (
-            <p className={`text-xs ${Math.abs(gap) > 0.009 ? 'text-amber-700' : 'text-slate-500'}`} data-testid="booking-paid-split">
+            <p className={`text-xs ${Math.abs(gap) > 0.009 && shared.length > 0 ? 'text-amber-700' : 'text-slate-500'}`} data-testid="booking-paid-split">
               This booking is fully paid. The paid total of {formatCurrency(paidTotal)} stays. Type the price of each line to split it: one line may carry the price of other Items.
-              {' '}The lines add up to {formatCurrency(linesTotal)}.
-              {gap > 0.009 && ` The Suit line takes the other ${formatCurrency(gap)} when you save.`}
-              {gap < -0.009 && ` That is ${formatCurrency(-gap)} over the paid total, so Save brings the lines down to it.`}
+              {shared.length > 0 && ` The lines add up to ${formatCurrency(linesTotal)}.`}
+              {shared.length > 0 && gap > 0.009 && ` The Suit line takes the other ${formatCurrency(gap)} when you save.`}
+              {shared.length > 0 && gap < -0.009 && ` That is ${formatCurrency(-gap)} over the paid total, so Save brings the lines down to it.`}
+              {addonsTotal > 0.009 && ` The add-ons charge ${formatCurrency(addonsTotal)} on top: the customer pays it.`}
             </p>
           );
         })()}
@@ -1777,15 +1886,15 @@ function BookingFormFields({
                     disabled={packageLocked || locked}
                   />
                 </div>
-                {selectedPackageId && (
+                {(selectedPackageId || paidTotal != null) && (
                   <label className="flex min-h-11 items-center gap-2 text-sm text-slate-600">
                     <input
                       type="checkbox"
                       checked={!!it.is_addon}
-                      disabled={locked}
+                      disabled={itemsLocked}
                       onChange={(e) => updateItemField(idx, 'is_addon', e.target.checked)}
                     />
-                    Add-on — charge on top of the package
+                    {selectedPackageId ? 'Add-on — charge on top of the package' : 'Add-on — charge on top of the paid total'}
                   </label>
                 )}
               </div>
@@ -1827,7 +1936,7 @@ function BookingFormFields({
                     helperText={selectedPackageId && !line.is_addon ? 'Included in the package' : undefined}
                   />
                 </div>
-                {selectedPackageId && (
+                {(selectedPackageId || paidTotal != null) && (
                   <label className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
                     <input
                       type="checkbox"
@@ -1843,6 +1952,17 @@ function BookingFormFields({
                 </Button>
               </div>
             ))}
+          </div>
+        )}
+        {extensionLines.length > 0 && (
+          <div className="space-y-1 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600" data-testid="booking-extension-lines">
+            {extensionLines.map((line, idx) => (
+              <div key={line.id || idx} className="flex justify-between gap-2">
+                <span>{line.name}</span>
+                <span className="tabular-nums">{formatCurrency(line.total_price ?? line.unit_price * line.quantity)}</span>
+              </div>
+            ))}
+            <p className="text-xs text-slate-500">Extend adds these days. They stay as they are on Edit.</p>
           </div>
         )}
       </FieldGroup>
@@ -1875,7 +1995,7 @@ function BookingFormFields({
             value={selectedPackageId}
             onChange={(e) => handleSelectPackage(e.target.value)}
             options={packageOptions.map((o) => ({ value: o.value, label: o.label }))}
-            disabled={locked}
+            disabled={locked && paidTotal == null}
           />
         </div>
 
@@ -2018,6 +2138,7 @@ function BookingFormTotals({
   feeRuleId,
   onFeeRuleIdChange,
   pot,
+  bankToRecord = false,
   onPotChange,
   remainingAmount,
   customSubtotal = 0,
@@ -2042,6 +2163,8 @@ function BookingFormTotals({
   feeRuleId: string;
   onFeeRuleIdChange: (ruleId: string) => void;
   pot: string;
+  /** A paid booking with no bank on record: the picker shows without new money. */
+  bankToRecord?: boolean;
   onPotChange: (pot: string) => void;
   remainingAmount: number;
   /** The custom lines, added on top of the package or the Items. */
@@ -2096,7 +2219,7 @@ function BookingFormTotals({
           <span className="tabular-nums">{formatCurrency(payNow)}</span>
         </div>
         {/* The bank is saved only with new money, so the picker shows only then. */}
-        <TransactionFeeLines amount={chargeNow} method={paymentMethod} pot={pot} onPotChange={chargeNow > 0 ? onPotChange : undefined} ruleId={feeRuleId} onRuleIdChange={onFeeRuleIdChange} />
+        <TransactionFeeLines amount={chargeNow} method={paymentMethod} pot={pot} onPotChange={chargeNow > 0 || bankToRecord ? onPotChange : undefined} ruleId={feeRuleId} onRuleIdChange={onFeeRuleIdChange} />
         {chargeNow <= 0 && BANK_POTS.some((bank) => bank.value === pot) && (
           <div className="flex justify-between" data-testid="booking-saved-bank">
             <span>Paid into</span>

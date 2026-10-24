@@ -43,6 +43,20 @@ export function potForRequest(method?: string | null, pot?: string | null): stri
   return isNonCashMethod(method) && (pot === 'bca' || pot === 'bni') ? pot : undefined;
 }
 
+/** True for a bank transfer, a DP or a full payment. */
+export function isTransferMethod(method?: string | null): boolean {
+  return String(method ?? '').trim().toLowerCase().replace(/^dp_/, '').replace(/^full_/, '') === 'transfer';
+}
+
+/**
+ * The bank to pick when none is picked yet: BCA for a transfer. Empty when a
+ * bank is already picked, or for any other method.
+ */
+export function defaultBankPot(method?: string | null, pot?: string | null): '' | 'bca' {
+  if (pot === 'bca' || pot === 'bni') return '';
+  return isTransferMethod(method) ? 'bca' : '';
+}
+
 /** A saved bank Pot (bca or bni) to show again in a picker; anything else is no pick. */
 export function savedBankPot(pot?: string | null): '' | 'bca' | 'bni' {
   return pot === 'bca' || pot === 'bni' ? pot : '';

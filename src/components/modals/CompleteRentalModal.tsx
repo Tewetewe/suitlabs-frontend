@@ -19,6 +19,7 @@ import { formatCurrency } from '@/lib/currency';
 import { feeMethodOf, TRANSACTION_FEE_HINT } from '@/lib/transaction-fee';
 import { SALE_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { FEE_WAIVER_REASON_MIN, LateFeePreview, Rental } from '@/types';
+import { useDefaultBankPot } from '@/hooks/useDefaultBankPot';
 
 /** Matches usecase.DepositReleaseGraceDays on the backend. */
 export const DEPOSIT_GRACE_DAYS = 7;
@@ -56,6 +57,7 @@ export function CompleteRentalModal({
   const [chargePaymentMethod, setChargePaymentMethod] = useState('cash');
   const [chargeFeeRuleId, setChargeFeeRuleId] = useState('');
   const [chargePot, setChargePot] = useState('');
+  useDefaultBankPot(chargePaymentMethod, chargePot, setChargePot);
   const [actualReturnDate, setActualReturnDate] = useState('');
   const [sendToMaintenance, setSendToMaintenance] = useState(false);
   const [submitting, setSubmitting] = useState(false);

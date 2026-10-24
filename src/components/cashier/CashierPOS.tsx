@@ -70,6 +70,7 @@ import { discountCodeHelp, discountOptionLabel, discountPickerHelp, offeredDisco
 import { useBookingDiscountPick } from '@/hooks/useBookingDiscountPick';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
 import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
+import { useDefaultBankPot } from '@/hooks/useDefaultBankPot';
 import {
   BookingInstitution,
   BookingPaymentMethod,
@@ -269,6 +270,7 @@ export function CashierPOS() {
   // fee the customer pays on top; the backend works it out on its own.
   const chargeNow = mode === 'rental' ? paidAmount : total;
   const chargeMethod = mode === 'rental' ? toBookingPayment(payCoverage, payChannel) : payChannel;
+  useDefaultBankPot(chargeMethod, pot, setPot);
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
 
   const loadItems = useCallback(async (nextPage: number, append: boolean) => {
