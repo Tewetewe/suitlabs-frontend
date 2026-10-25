@@ -1090,6 +1090,21 @@ export interface BookingCustomLine {
   kind?: string;
 }
 
+/** Money the shop gave back during or after the rental: a percent of the subtotal. It lowers the booking revenue; the booking amounts stay. */
+export interface BookingCashback {
+  id: string;
+  booking_id: string;
+  /** The share of the booking subtotal. */
+  percent: number;
+  amount: number;
+  method: 'cash' | 'transfer';
+  /** The bank a transfer left from: bca or bni. */
+  pot?: string;
+  reason: string;
+  given_by: string;
+  given_at: string;
+}
+
 /** One payment or refund of a Booking, read from the books. */
 export interface BookingPayment {
   /** The shop day the money moved (YYYY-MM-DD). */
@@ -1140,6 +1155,8 @@ export interface Booking {
   package_pricing?: PackagePricing;
   rental_id?: string; // Link to rental
   rental?: Rental; // Link to rental details
+  /** Money given back after the Return, if any. One per booking. */
+  cashback?: BookingCashback;
   notes?: string;
   created_by: string; // User who created the booking
   updated_by?: string; // User who last updated the booking

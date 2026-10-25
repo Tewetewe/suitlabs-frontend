@@ -35,7 +35,7 @@ import { itemDisplayName } from '@/lib/item-name';
 import type { AvailabilityTone } from '@/lib/item-availability';
 import { useItemAvailability } from '@/hooks/useItemAvailability';
 import { AvailabilityNote } from '@/components/ui/AvailabilityNote';
-import { Plus, Edit, Calendar, CalendarPlus, Eye, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus, Trash2 } from 'lucide-react';
+import { Plus, Edit, Calendar, CalendarPlus, Eye, HandCoins, FileText, Download, ShoppingBag, CreditCard, Ban, UserPlus, Trash2 } from 'lucide-react';
 import { BookingInvoiceModal } from '@/components/modals/BookingInvoiceModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { BookingDetailsModal } from '@/components/modals/BookingDetailsModal';
@@ -51,6 +51,8 @@ import { bookingGross, bookingItemsChanged, customLinesChanged, customLinesForRe
 import { useBookingDiscountPick } from '@/hooks/useBookingDiscountPick';
 import { partyName } from '@/lib/booking-name';
 import { useDefaultBankPot } from '@/hooks/useDefaultBankPot';
+import { CashbackModal } from '@/components/modals/CashbackModal';
+import { canGiveCashback } from '@/lib/cashback';
 
 type BookingFormItem = {
   item_id: string;
@@ -207,9 +209,10 @@ export default function BookingsPage() {
   // money of a paid booking: paidLocked below. A completed booking opens Edit
   // for Admin only, to reconcile it: the save rewrites its completed Rental too.
   const canEditBooking = (b: Booking) => Boolean(b.id) && (b.status !== 'completed' || isAdmin);
-  // A booking that is not Completed or Cancelled can keep its Items one more day.
+  // A booking that is not Cancelled can keep its Items one more day. A
+  // Completed one extends for Admin only, to reconcile a day already passed.
   const canExtend = (b: Booking) =>
-    b.status !== 'completed' && b.status !== 'cancelled' && !!b.appointment_date && (b.items?.length || 0) > 0;
+    b.status !== 'cancelled' && (b.status !== 'completed' || isAdmin) && !!b.appointment_date && (b.items?.length || 0) > 0;
   // A fully paid legacy booking can import with no Item. Staff add or swap it
   // here; the backend spreads the paid total over the lines, so money stays.
   const canEditPaidLegacyItems = (b: Booking | null) =>
@@ -254,6 +257,7 @@ export default function BookingsPage() {
   const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
   const [extendingBooking, setExtendingBooking] = useState<Booking | null>(null);
   const [extending, setExtending] = useState(false);
+  const [cashbackBooking, setCashbackBooking] = useState<Booking | null>(null);
   const [cancelling, setCancelling] = useState(false);
   // Previous static options states no longer used; keeping for future caching if needed
   const [bookingForm, setBookingForm] = useState<{
@@ -1252,6 +1256,11 @@ export default function BookingsPage() {
                             Add-on sale
                           </OverflowMenuItem>
                         )}
+                        {canGiveCashback(booking, new Date(), isAdmin) && (
+                          <OverflowMenuItem icon={<HandCoins className="h-4 w-4 text-slate-400" />} onClick={() => setCashbackBooking(booking)}>
+                            Cashback
+                          </OverflowMenuItem>
+                        )}
                         {canExtend(booking) && (
                           <OverflowMenuItem icon={<CalendarPlus className="h-4 w-4 text-slate-400" />} onClick={() => setExtendingBooking(booking)}>
                             Extend 1 day
@@ -1508,6 +1517,15 @@ export default function BookingsPage() {
           onClose={() => setCancellingBooking(null)}
           onConfirm={submitCancelBooking}
           description="The linked pending rental will cancel with it. This cannot be undone."
+        />
+        <CashbackModal
+          isOpen={!!cashbackBooking}
+          booking={cashbackBooking}
+          onClose={() => setCashbackBooking(null)}
+          onGiven={async () => {
+            setCashbackBooking(null);
+            await reload();
+          }}
         />
         <ConfirmModal
           isOpen={!!extendingBooking}
