@@ -1256,7 +1256,7 @@ export default function BookingsPage() {
                             Add-on sale
                           </OverflowMenuItem>
                         )}
-                        {canGiveCashback(booking, new Date(), isAdmin) && (
+                        {canGiveCashback(booking) && (
                           <OverflowMenuItem icon={<HandCoins className="h-4 w-4 text-slate-400" />} onClick={() => setCashbackBooking(booking)}>
                             Cashback
                           </OverflowMenuItem>
