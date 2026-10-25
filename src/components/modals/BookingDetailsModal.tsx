@@ -229,6 +229,13 @@ export function BookingDetailsModal({
               value={formatCurrency(remaining)}
               tone={remaining > 0 ? 'danger' : 'success'}
             />
+            {booking.cashback && (
+              <MoneyRow
+                label={`Cashback ${booking.cashback.percent}% · ${booking.cashback.reason}`}
+                value={`−${formatCurrency(booking.cashback.amount)}`}
+                tone="muted"
+              />
+            )}
           </div>
         </DetailSection>
 

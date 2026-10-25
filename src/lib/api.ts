@@ -825,6 +825,12 @@ class APIClient {
     return response.data.data!;
   }
 
+  /** Gives a percent of the subtotal back, from the pickup to 7 days after it. One per booking. */
+  async giveCashback(id: string, body: { percent: number; payment_method: 'cash' | 'transfer'; pot?: string; reason: string }): Promise<Booking> {
+    const response = await this.client.post<APIResponse<Booking>>(`/api/v1/bookings/${id}/cashback`, body);
+    return response.data.data!;
+  }
+
   /** Keeps the Items one more day. The day opens as balance to collect. */
   async extendBooking(id: string): Promise<Booking> {
     const response = await this.client.put<APIResponse<Booking>>(`/api/v1/bookings/${id}/extend`);
