@@ -10,9 +10,8 @@ import { useToast } from '@/contexts/ToastContext';
 import { useDefaultBankPot } from '@/hooks/useDefaultBankPot';
 import { apiClient } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/api-utils';
-import { cashbackAmount, cashbackLastDay, cashbackWindowClosed } from '@/lib/cashback';
+import { cashbackAmount } from '@/lib/cashback';
 import { formatCurrency } from '@/lib/currency';
-import { formatDateShort } from '@/lib/date';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import type { Booking } from '@/types';
 
@@ -30,8 +29,8 @@ const METHODS = [
 
 /**
  * Staff give a percent of the booking subtotal back, during the rental or
- * after it, up to 7 days after the pickup. The books lower the booking
- * revenue; the booking amounts stay. One per booking.
+ * after it. The books lower the booking revenue; the booking amounts stay.
+ * One per booking.
  */
 export function CashbackModal({ isOpen, booking, onClose, onGiven }: CashbackModalProps) {
   const { success, error: toastError } = useToast();
@@ -97,10 +96,7 @@ export function CashbackModal({ isOpen, booking, onClose, onGiven }: CashbackMod
         <div className="space-y-4" data-testid="cashback-form">
           <p className="text-sm text-slate-700">
             The cashback is a percent of the booking subtotal of <b>{formatCurrency(subtotal)}</b>. It lowers the
-            booking revenue in the books; the booking amounts stay. One cashback per booking,{' '}
-            {cashbackWindowClosed(booking)
-              ? `past the 7 days after the pickup (${formatDateShort(cashbackLastDay(booking))}): Admin reconciles a completed booking.`
-              : `until ${formatDateShort(cashbackLastDay(booking))}.`}
+            booking revenue in the books; the booking amounts stay. One cashback per booking.
           </p>
           <NumberInput
             label="Percent of the subtotal"
