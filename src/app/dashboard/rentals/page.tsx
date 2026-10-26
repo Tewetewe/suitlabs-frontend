@@ -11,7 +11,7 @@ import ClientOnly from '@/components/ClientOnly';
 import { apiClient } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/api-utils';
 import { formatCurrency } from '@/lib/currency';
-import { currentMonthRange, formatDateShort } from '@/lib/date';
+import { currentMonthRange, formatDateShort, nextDaysRange } from '@/lib/date';
 import { InvoiceData, Rental } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Edit, FileText, Eye, Printer, ShoppingBag, Calendar, MessageCircle } from 'lucide-react';
@@ -31,7 +31,7 @@ import { depositLeft, refundableDeposit } from '@/lib/deposit';
 import { POT_MISSING_MESSAGE, potForRequest, potMissing } from '@/lib/pots';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem, QuickViews, QuickView } from '@/components/ui/DataDisplay';
 import { useToast } from '@/contexts/ToastContext';
 import { SALE_PAYMENT_METHOD_OPTIONS, DEPOSIT_PAYMENT_METHOD_OPTIONS } from '@/lib/payment-methods';
 import { waDeliveryLabel } from '@/lib/wa-delivery';
@@ -42,6 +42,25 @@ import { useRememberedState } from '@/hooks/useRememberedState';
 import { itemDisplayName } from '@/lib/item-name';
 import { partyName } from '@/lib/booking-name';
 import { useDefaultBankPot } from '@/hooks/useDefaultBankPot';
+
+type RentalDateField = 'pickup' | 'return';
+type RentalStatusFilter = '' | Rental['status'];
+type DepositStateFilter = '' | 'held' | 'awaiting_check' | 'released' | 'auto_released';
+interface RentalViewFilters {
+  status: RentalStatusFilter;
+  deposit: DepositStateFilter;
+  field: RentalDateField;
+  range: { from: string; to: string };
+}
+
+const RENTAL_STATUS_OPTIONS: Array<{ value: RentalStatusFilter; label: string }> = [
+  { value: '', label: 'All Status' },
+  { value: 'pending', label: 'Waiting pickup' },
+  { value: 'active', label: 'Active' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
 
 /** Whole days since the suit came back, or null when it has not. */
 function daysSinceReturn(rental: Rental): number | null {
@@ -92,9 +111,12 @@ export default function RentalsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { enabled: depositEnabled } = useDepositSettings();
   const [showReleaseModal, setShowReleaseModal] = useState(false);
-  const [depositState, setDepositState] = useRememberedState<'' | 'held' | 'awaiting_check' | 'released' | 'auto_released'>('rentals.depositState', '');
-  // The list opens on the rentals picked up this month. Empty dates show all rentals.
-  const [pickupRange, setPickupRange] = useRememberedState<{ from: string; to: string }>('rentals.pickupRange', () => currentMonthRange());
+  const [depositState, setDepositState] = useRememberedState<DepositStateFilter>('rentals.depositState', '');
+  // The list opens on the rentals picked up this month. Empty dates show all
+  // rentals. dateField says which date the range reads: Pickup or return.
+  const [dateRange, setDateRange] = useRememberedState<{ from: string; to: string }>('rentals.pickupRange', () => currentMonthRange());
+  const [dateField, setDateField] = useRememberedState<RentalDateField>('rentals.dateField', 'pickup');
+  const [statusFilter, setStatusFilter] = useRememberedState<RentalStatusFilter>('rentals.status', '');
   const [sendingAgreementId, setSendingAgreementId] = useState<string | null>(null);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
 
@@ -189,9 +211,11 @@ export default function RentalsPage() {
         page,
         limit: LIST_PAGE_SIZE,
         search: debouncedSearch || undefined,
+        status: statusFilter || undefined,
         deposit_state: depositState || undefined,
-        rental_from: pickupRange.from || undefined,
-        rental_to: pickupRange.to || undefined,
+        ...(dateField === 'return'
+          ? { return_from: dateRange.from || undefined, return_to: dateRange.to || undefined }
+          : { rental_from: dateRange.from || undefined, rental_to: dateRange.to || undefined }),
       });
       const data = response?.data?.data?.rentals || [];
       const pagination = response?.data?.pagination;
@@ -201,7 +225,7 @@ export default function RentalsPage() {
       warning('Unable to load rentals', 'Backend may be offline. Please try again.');
       return { items: [], hasMore: false, total: 0 };
     }
-  }, [debouncedSearch, depositState, pickupRange, warning]);
+  }, [debouncedSearch, statusFilter, depositState, dateField, dateRange, warning]);
 
   const {
     items: rentals,
@@ -211,7 +235,48 @@ export default function RentalsPage() {
     total,
     reload,
     sentinelRef,
-  } = useInfiniteList(loadRentalsPage, { cacheKey: `rentals:${debouncedSearch}:${depositState}:${pickupRange.from}:${pickupRange.to}` });
+  } = useInfiniteList(loadRentalsPage, { cacheKey: `rentals:${debouncedSearch}:${statusFilter}:${depositState}:${dateField}:${dateRange.from}:${dateRange.to}` });
+
+  // A view sets every filter but the search, so the list shows only that job.
+  const viewFilters = (key: string): RentalViewFilters | null => {
+    const today = nextDaysRange(0);
+    const none = { from: '', to: '' };
+    switch (key) {
+      case 'pickup_today': return { status: 'pending', deposit: '', field: 'pickup', range: today };
+      case 'return_today': return { status: 'active', deposit: '', field: 'return', range: today };
+      case 'overdue':      return { status: 'overdue', deposit: '', field: 'pickup', range: none };
+      case 'out_now':      return { status: 'active', deposit: '', field: 'pickup', range: none };
+      case 'deposit_check': return { status: '', deposit: 'awaiting_check', field: 'pickup', range: none };
+      case 'this_month':   return { status: '', deposit: '', field: 'pickup', range: currentMonthRange() };
+      default:             return null;
+    }
+  };
+  const rentalViews: QuickView[] = [
+    { key: 'pickup_today', label: 'Pickup today' },
+    { key: 'return_today', label: 'Return today' },
+    { key: 'overdue', label: 'Overdue' },
+    { key: 'out_now', label: 'Out now' },
+    ...(depositEnabled ? [{ key: 'deposit_check', label: 'Deposit to check' }] : []),
+    { key: 'this_month', label: 'This month' },
+  ];
+  const activeView = rentalViews.find(({ key }) => {
+    const view = viewFilters(key);
+    return view !== null
+      && view.status === statusFilter
+      && view.deposit === depositState
+      && view.range.from === dateRange.from
+      && view.range.to === dateRange.to
+      // With no dates, the date field changes nothing.
+      && (view.field === dateField || (!dateRange.from && !dateRange.to));
+  })?.key ?? null;
+  const selectView = (key: string) => {
+    const view = viewFilters(key);
+    if (!view) return;
+    setStatusFilter(view.status);
+    setDepositState(view.deposit);
+    setDateField(view.field);
+    setDateRange(view.range);
+  };
 
   const rentalStatusVariant = (s: string): 'success' | 'warning' | 'default' | 'danger' => {
     switch (s) {
@@ -436,6 +501,7 @@ export default function RentalsPage() {
         }
       >
         <ClientOnly>
+          <QuickViews views={rentalViews} active={activeView} onSelect={selectView} label="Rental views" testIdPrefix="rentals-view" />
           <FilterBar>
             <InvoiceSearchField
               value={searchTerm}
@@ -463,7 +529,7 @@ export default function RentalsPage() {
               <Select
                 searchable={false}
                 value={depositState}
-                onChange={(e) => setDepositState(e.target.value as '' | 'held' | 'awaiting_check' | 'released' | 'auto_released')}
+                onChange={(e) => setDepositState(e.target.value as DepositStateFilter)}
                 options={[
                   { value: '', label: 'Any deposit' },
                   { value: 'held', label: 'Deposit held' },
@@ -473,26 +539,43 @@ export default function RentalsPage() {
                 ]}
               />
             )}
+            <Select
+              searchable={false}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as RentalStatusFilter)}
+              options={RENTAL_STATUS_OPTIONS}
+              data-testid="rentals-status"
+            />
+            <Select
+              searchable={false}
+              value={dateField}
+              onChange={(e) => setDateField(e.target.value as RentalDateField)}
+              options={[
+                { value: 'pickup', label: 'By Pickup date' },
+                { value: 'return', label: 'By return date' },
+              ]}
+              data-testid="rentals-date-field"
+            />
             <Input
-              label="Pickup from"
+              label={dateField === 'return' ? 'Return from' : 'Pickup from'}
               type="date"
-              value={pickupRange.from}
-              max={pickupRange.to || undefined}
-              onChange={(e) => setPickupRange((prev) => ({ ...prev, from: e.target.value }))}
+              value={dateRange.from}
+              max={dateRange.to || undefined}
+              onChange={(e) => setDateRange((prev) => ({ ...prev, from: e.target.value }))}
               data-testid="rentals-pickup-from"
             />
             <Input
-              label="Pickup to"
+              label={dateField === 'return' ? 'Return to' : 'Pickup to'}
               type="date"
-              value={pickupRange.to}
-              min={pickupRange.from || undefined}
-              onChange={(e) => setPickupRange((prev) => ({ ...prev, to: e.target.value }))}
+              value={dateRange.to}
+              min={dateRange.from || undefined}
+              onChange={(e) => setDateRange((prev) => ({ ...prev, to: e.target.value }))}
               data-testid="rentals-pickup-to"
             />
             <Button
               variant="secondary"
-              onClick={() => setPickupRange({ from: '', to: '' })}
-              disabled={!pickupRange.from && !pickupRange.to}
+              onClick={() => setDateRange({ from: '', to: '' })}
+              disabled={!dateRange.from && !dateRange.to}
               data-testid="rentals-all-dates"
             >
               All dates

@@ -996,6 +996,9 @@ class APIClient {
     /** Pickup date range, YYYY-MM-DD, both days included. */
     rental_from?: string;
     rental_to?: string;
+    /** Return date range, YYYY-MM-DD, both days included. */
+    return_from?: string;
+    return_to?: string;
     deposit_refunded_from?: string;
     deposit_refunded_to?: string;
     /**

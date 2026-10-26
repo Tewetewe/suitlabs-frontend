@@ -291,6 +291,48 @@ export function FilterBar({ children, className }: FilterBarProps) {
 }
 
 // ---------------------------------------------------------------------------
+// QuickViews — one-tap presets for a FilterBar. The page marks a view active
+// when its filters match the preset, so a hand edit turns the chip off.
+// ---------------------------------------------------------------------------
+
+export interface QuickView {
+  key: string;
+  label: string;
+}
+
+interface QuickViewsProps {
+  views: QuickView[];
+  active: string | null;
+  onSelect: (key: string) => void;
+  label: string;
+  testIdPrefix?: string;
+}
+
+export function QuickViews({ views, active, onSelect, label, testIdPrefix }: QuickViewsProps) {
+  return (
+    <div className="mb-2 flex flex-wrap gap-2" role="group" aria-label={label}>
+      {views.map((view) => (
+        <button
+          key={view.key}
+          type="button"
+          aria-pressed={active === view.key}
+          onClick={() => onSelect(view.key)}
+          data-testid={testIdPrefix ? `${testIdPrefix}-${view.key}` : undefined}
+          className={clsx(
+            'inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font-medium touch-manipulation transition-colors',
+            active === view.key
+              ? 'bg-indigo-600 text-white'
+              : 'border border-black/10 bg-white/70 text-slate-700 hover:bg-white',
+          )}
+        >
+          {view.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // OverflowMenu — collapse secondary row actions into a ⋯ menu
 // ---------------------------------------------------------------------------
 

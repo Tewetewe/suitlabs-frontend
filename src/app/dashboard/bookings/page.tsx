@@ -41,10 +41,10 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { BookingDetailsModal } from '@/components/modals/BookingDetailsModal';
 import { issueBookingInvoice } from '@/lib/issue-invoice';
 import { PageShell } from '@/components/ui/PageShell';
-import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem } from '@/components/ui/DataDisplay';
+import { Badge, FilterBar, EmptyState, InfiniteScrollSentinel, SkeletonRow, OverflowMenu, OverflowMenuItem, QuickViews, QuickView } from '@/components/ui/DataDisplay';
 import { hasNextPage, LIST_PAGE_SIZE, useInfiniteList } from '@/hooks/useInfiniteList';
 import { useRememberedState } from '@/hooks/useRememberedState';
-import { currentMonthRange } from '@/lib/date';
+import { currentMonthRange, nextDaysRange } from '@/lib/date';
 import { useToast } from '@/contexts/ToastContext';
 import { unitPricesForSubtotal } from '@/lib/subtotal-override';
 import { bookingGross, bookingItemsChanged, customLinesChanged, customLinesForRequest, customLinesTotal, type CustomLineDraft, bookingPayNow, defaultTrousersCode, extensionDayPrice, extensionTotal, isExtensionLine, newBookingStatuses, nextDay, repriceForLength, typedSubtotal as readTypedSubtotal } from '@/lib/booking-draft';
@@ -111,6 +111,31 @@ function emptyBookingForm(): BookingFormState {
 function currentMonthEventRange(): BookingFilters {
   const { from, to } = currentMonthRange();
   return { event_from: from, event_to: to };
+}
+
+const BOOKING_VIEWS: QuickView[] = [
+  { key: 'event_week', label: 'Event this week' },
+  { key: 'balance_due', label: 'Balance due' },
+  { key: 'this_month', label: 'This month' },
+];
+
+// The filters of a view, without the search. Balance due reads every date, so
+// an old booking that still owes money shows too.
+function bookingViewFilters(key: string): BookingFilters | null {
+  switch (key) {
+    case 'event_week': {
+      const { from, to } = nextDaysRange(7);
+      return { event_from: from, event_to: to };
+    }
+    case 'balance_due': return { payment_status: 'unpaid' };
+    case 'this_month':  return currentMonthEventRange();
+    default:            return null;
+  }
+}
+
+function sameBookingFilters(a: BookingFilters, b: BookingFilters): boolean {
+  const keys: Array<keyof BookingFilters> = ['status', 'payment_status', 'event_from', 'event_to'];
+  return keys.every((key) => (a[key] || '') === (b[key] || ''));
 }
 
 // The names of the fields a save checks, for the message next to Save.
@@ -921,6 +946,7 @@ export default function BookingsPage() {
 
   const paymentStatusOptions = [
     { value: '', label: 'All Payments' },
+    { value: 'unpaid', label: 'Balance due' },
     { value: 'pending', label: 'Pending' },
     { value: 'partial', label: 'Partial' },
     { value: 'completed', label: 'Completed' },
@@ -1067,6 +1093,19 @@ export default function BookingsPage() {
         }
       >
         <ClientOnly>
+          <QuickViews
+            views={BOOKING_VIEWS}
+            active={BOOKING_VIEWS.find(({ key }) => {
+              const view = bookingViewFilters(key);
+              return view !== null && sameBookingFilters(view, filters);
+            })?.key ?? null}
+            onSelect={(key) => {
+              const view = bookingViewFilters(key);
+              if (view) setFilters((prev) => ({ ...view, search: prev.search }));
+            }}
+            label="Booking views"
+            testIdPrefix="bookings-view"
+          />
           <FilterBar>
             <InvoiceSearchField
               value={searchInput}
