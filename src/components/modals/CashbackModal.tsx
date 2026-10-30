@@ -95,8 +95,8 @@ export function CashbackModal({ isOpen, booking, onClose, onGiven }: CashbackMod
       {booking && (
         <div className="space-y-4" data-testid="cashback-form">
           <p className="text-sm text-slate-700">
-            The cashback is a percent of the booking subtotal of <b>{formatCurrency(subtotal)}</b>. It lowers the
-            booking revenue in the books; the booking amounts stay. One cashback per booking.
+            The cashback is a percent of the booking subtotal of <b>{formatCurrency(subtotal)}</b>. It shows on
+            Expenses as a Cashback expense; the booking revenue and amounts stay. One cashback per booking.
           </p>
           <NumberInput
             label="Percent of the subtotal"
