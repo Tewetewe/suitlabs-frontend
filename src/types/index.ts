@@ -1090,7 +1090,7 @@ export interface BookingCustomLine {
   kind?: string;
 }
 
-/** Money the shop gave back during or after the rental: a percent of the subtotal. It lowers the booking revenue; the booking amounts stay. */
+/** Money the shop gave back during or after the rental: a percent of the subtotal. A Cashback Expense records the money; the booking revenue and amounts stay. */
 export interface BookingCashback {
   id: string;
   booking_id: string;
@@ -1103,6 +1103,8 @@ export interface BookingCashback {
   reason: string;
   given_by: string;
   given_at: string;
+  /** The Cashback Expense that records the money. */
+  expense_id?: string;
 }
 
 /** One payment or refund of a Booking, read from the books. */
@@ -1391,7 +1393,9 @@ export type ExpenseCategory =
   | 'maintenance'
   | 'transport'
   | 'tax'
-  | 'other';
+  | 'other'
+  /** Recorded by the cashback of a Booking only; it changes only with its Booking. */
+  | 'cashback';
 
 export type ExpenseStatus = 'recorded' | 'voided';
 export type ExpensePaymentMethod = 'cash' | 'transfer' | 'qris' | 'card' | 'other';
@@ -1448,6 +1452,8 @@ export interface ExpensePaginatedResponse {
   data: {
     data: {
       expenses: Expense[];
+      /** The sum of every Expense the filter matches, on every page. Recorded only when no status is picked. */
+      total_amount?: number;
     };
     pagination: PaginationMeta;
   };

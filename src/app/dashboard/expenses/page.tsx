@@ -46,6 +46,13 @@ const CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+// A Booking cashback records a Cashback Expense. Nobody picks it by hand, so it
+// shows in the list and the filter only, and it changes only with its Booking.
+const ALL_CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
+  ...CATEGORY_OPTIONS,
+  { value: 'cashback', label: 'Cashback' },
+];
+
 const PAYMENT_OPTIONS: { value: ExpensePaymentMethod; label: string }[] = [
   { value: 'cash', label: 'Cash' },
   { value: 'transfer', label: 'Transfer' },
@@ -53,6 +60,8 @@ const PAYMENT_OPTIONS: { value: ExpensePaymentMethod; label: string }[] = [
   { value: 'card', label: 'Card' },
   { value: 'other', label: 'Other' },
 ];
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -96,7 +105,7 @@ function monthBounds(year: number, month: number) {
 }
 
 function categoryLabel(value: string) {
-  return CATEGORY_OPTIONS.find((c) => c.value === value)?.label || value;
+  return ALL_CATEGORY_OPTIONS.find((c) => c.value === value)?.label || value;
 }
 
 function dateLabel(value?: string) {
@@ -192,9 +201,31 @@ export default function ExpensesPage() {
     cacheKey: `expenses:${range.start}:${range.end}:${debouncedSearch}:${category}:${status}`,
   });
 
+  // The total of the filter, on every page. It loads on its own, because the
+  // list may show its rows from the last visit with no request.
+  const [filteredTotal, setFilteredTotal] = useState<number | null>(null);
+  const loadFilteredTotal = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const list = await apiClient.getExpenses({
+        start_date: range.start,
+        end_date: range.end,
+        search: debouncedSearch || undefined,
+        category: category || undefined,
+        status: status || undefined,
+        page: 1,
+        limit: 1,
+      });
+      setFilteredTotal(list.data?.data?.total_amount ?? null);
+    } catch {
+      setFilteredTotal(null);
+    }
+  }, [isAuthenticated, range.start, range.end, debouncedSearch, category, status]);
+  useEffect(() => { void loadFilteredTotal(); }, [loadFilteredTotal]);
+
   const refreshAll = useCallback(async () => {
-    await Promise.all([reload(), loadMeta()]);
-  }, [reload, loadMeta]);
+    await Promise.all([reload(), loadMeta(), loadFilteredTotal()]);
+  }, [reload, loadMeta, loadFilteredTotal]);
 
   useEffect(() => {
     if (isAuthenticated) void loadMeta();
@@ -481,7 +512,7 @@ export default function ExpensesPage() {
             searchable={false}
             value={String(selectedMonth)}
             onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            options={['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((name, i) => ({
+            options={MONTHS.map((name, i) => ({
               value: String(i + 1),
               label: name,
             }))}
@@ -492,7 +523,7 @@ export default function ExpensesPage() {
             onChange={(e) => setCategory(e.target.value as ExpenseCategory | '')}
             options={[
               { value: '', label: 'All categories' },
-              ...CATEGORY_OPTIONS,
+              ...ALL_CATEGORY_OPTIONS,
             ]}
           />
           <Select
@@ -506,6 +537,22 @@ export default function ExpensesPage() {
             ]}
           />
         </FilterBar>
+
+        {filteredTotal !== null && !loading && expenses.length > 0 && (
+          <div
+            className="mb-3 flex flex-wrap items-baseline justify-between gap-2 rounded-2xl border border-black/5 bg-white/60 px-4 py-3"
+            data-testid="expenses-filtered-total"
+          >
+            <span className="text-sm text-slate-600">
+              {total} {total === 1 ? 'expense' : 'expenses'} in {MONTHS[selectedMonth - 1] ?? ''} {selectedYear}
+              {category ? ` · ${categoryLabel(category)}` : ''}
+              {debouncedSearch ? ` · “${debouncedSearch}”` : ''}
+            </span>
+            <span className="text-base font-semibold tabular-nums text-slate-900">
+              {status === 'voided' ? 'Voided total' : 'Total'} {formatCurrency(filteredTotal)}
+            </span>
+          </div>
+        )}
 
         {loading ? (
           <div className="rounded-2xl border border-black/5 bg-white/40 px-4 py-10 text-center text-sm text-slate-500">
@@ -552,7 +599,9 @@ export default function ExpensesPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
-                        {expense.status === 'recorded' && (
+                        {expense.category === 'cashback' ? (
+                          <span className="text-xs text-slate-400">From a booking cashback</span>
+                        ) : expense.status === 'recorded' && (
                           <>
                             <Button size="sm" variant="secondary" onClick={() => openEdit(expense)}>
                               Edit
@@ -562,7 +611,7 @@ export default function ExpensesPage() {
                             </Button>
                           </>
                         )}
-                        {isAdmin && (
+                        {isAdmin && expense.category !== 'cashback' && (
                           <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setDeletingExpense(expense)}>
                             Delete
                           </Button>
