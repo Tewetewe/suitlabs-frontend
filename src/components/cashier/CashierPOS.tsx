@@ -75,6 +75,7 @@ import {
   BookingInstitution,
   BookingPaymentMethod,
   CreateBookingRequest,
+  BookingDraftForm,
   CreateSaleRequest,
   Customer,
   InvoiceData,
@@ -210,6 +211,7 @@ export function CashierPOS() {
   const { enabled: depositEnabled } = useDepositSettings();
   const [occasion, setOccasion] = useState<BookingInstitution>('wedding');
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [datesOpen, setDatesOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -629,6 +631,60 @@ export function CashierPOS() {
     setNewCustomerOpen(false);
   };
 
+  // The rental on the ticket as a booking request, without the money. A draft
+  // keeps this, and Charge booking adds the payment to it.
+  const rentalRequest = (): BookingDraftForm => {
+    const lineDiscounts = spreadDiscount(
+      pricedCart.map((line) => line.unit_price * line.quantity),
+      packageId ? 0 : discountAmount,
+    );
+    return {
+      customer_id: customer?.id,
+      booking_date: rentalDate ? new Date(rentalDate).toISOString() : undefined,
+      appointment_date: returnDate ? new Date(returnDate).toISOString() : undefined,
+      event_date: eventDate ? new Date(eventDate).toISOString() : undefined,
+      rental_length: rentalLength,
+      booking_guarantee: guarantee,
+      security_deposit_waived: depositEnabled ? !takeDeposit : undefined,
+      institution: occasion,
+      notes,
+      package_pricing_id: packageId || undefined,
+      ...(packageId ? {} : { total_amount: gross }),
+      discount_amount: packageId ? 0 : discountAmount,
+      discount_id: discountPick.discountId || undefined,
+      custom_lines: customLinesForRequest(customLines),
+      items: pricedCart.map((line, index) => ({
+        item_id: line.item.id,
+        quantity: line.quantity,
+        unit_price: line.unit_price,
+        total_price: line.unit_price * line.quantity,
+        discount_amount: lineDiscounts[index],
+        is_addon: !!packageId && !!line.is_addon,
+      })),
+    };
+  };
+
+  // Save as draft keeps a rental for a customer who has not paid. It takes no
+  // money and holds no items. Staff open it on Bookings to take the payment.
+  const handleSaveDraft = async () => {
+    if (mode !== 'rental' || cart.length === 0) return;
+    if (!customer) {
+      error('Customer required', 'Pick or add a customer before you save a draft.');
+      setCartOpen(true);
+      return;
+    }
+    try {
+      setSavingDraft(true);
+      await apiClient.saveBookingDraft(null, { amount: total, request: rentalRequest() });
+      resetTicket();
+      success('Draft saved', 'It holds no items. Open it on Bookings when the customer pays.');
+    } catch (e) {
+      error('Draft not saved', e instanceof Error ? e.message : 'Try again.');
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   const handleCharge = async () => {
     if (cart.length === 0) return;
     if (downPaymentTooHigh) {
@@ -705,41 +761,16 @@ export function CashierPOS() {
             error('Proof upload failed', 'The booking is still charged. Attach the proof from Bookings.');
           }
         }
-        const lineDiscounts = spreadDiscount(
-          pricedCart.map((line) => line.unit_price * line.quantity),
-          packageId ? 0 : discountAmount,
-        );
         const payload = {
-          customer_id: customer!.id,
-          booking_date: new Date(rentalDate).toISOString(),
-          appointment_date: returnDate ? new Date(returnDate).toISOString() : undefined,
-          event_date: eventDate ? new Date(eventDate).toISOString() : undefined,
-          rental_length: rentalLength,
-          booking_guarantee: guarantee,
-          security_deposit_waived: depositEnabled ? !takeDeposit : undefined,
-          institution: occasion,
-          notes,
+          ...rentalRequest(),
           ...statuses,
           payment_method: toBookingPayment(payCoverage, payChannel),
           fee_rule_id: feeRuleId || undefined,
           pot: potForRequest(chargeMethod, pot),
-          package_pricing_id: packageId || undefined,
-          ...(packageId ? {} : { total_amount: gross }),
           paid_amount: paidAmount,
           payment_proof_url: proofUrl,
-          discount_amount: packageId ? 0 : discountAmount,
-          discount_id: discountPick.discountId || undefined,
           remaining_amount: remaining,
           created_by: user?.id,
-          custom_lines: customLinesForRequest(customLines),
-          items: pricedCart.map((line, index) => ({
-            item_id: line.item.id,
-            quantity: line.quantity,
-            unit_price: line.unit_price,
-            total_price: line.unit_price * line.quantity,
-            discount_amount: lineDiscounts[index],
-            is_addon: !!packageId && !!line.is_addon,
-          })),
         } as unknown as CreateBookingRequest;
         const booking = await apiClient.createBooking(payload);
         const bookingId = booking?.id;
@@ -1252,12 +1283,24 @@ export function CashierPOS() {
           size="xl"
           className="w-full min-h-14 text-base"
           onClick={handleCharge}
-          disabled={submitting || cart.length === 0}
+          disabled={submitting || savingDraft || cart.length === 0}
           loading={submitting}
           data-testid="pos-charge"
         >
           {mode === 'rental' ? 'Charge booking' : 'Complete sale'}
         </Button>
+        {mode === 'rental' && (
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={handleSaveDraft}
+            disabled={submitting || cart.length === 0}
+            loading={savingDraft}
+            data-testid="pos-save-draft"
+          >
+            Save as draft · not paid
+          </Button>
+        )}
       </div>
     </div>
   );

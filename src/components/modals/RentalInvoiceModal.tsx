@@ -7,7 +7,7 @@ import { printRentalInvoice } from '@/lib/print-router';
 import { RECEIPT_STYLES } from '@/lib/receipt-styles';
 import { invoiceBarcodeValue, rentalInvoiceNumber } from '@/lib/barcode';
 import { refundableDeposit as refundableAfterCharges } from '@/lib/deposit';
-import { customLineCharged } from '@/lib/booking-draft';
+import { rentalReceiptPricing } from '@/lib/rental-receipt';
 import { formatCurrency } from '@/lib/currency';
 import { TRANSACTION_FEE_LABEL } from '@/lib/transaction-fee';
 import { InvoicePrintActions } from '@/components/print/InvoicePrintActions';
@@ -16,7 +16,7 @@ import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
-import { customerLineName, customerItemName } from '@/lib/item-name';
+import { customerItemName } from '@/lib/item-name';
 
 interface RentalInvoiceModalProps {
   isOpen: boolean;
@@ -56,14 +56,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
     total_price: number;
     discount_amount?: number;
   }>;
-  // Custom lines of the Booking charge things not in the catalogue, such as a tie.
-  const customLines = rental.booking?.custom_lines || [];
-  const hasPackage = Boolean(rental.booking?.package_pricing_id);
-  const itemsSubtotal = items.reduce((sum, item) => sum + (item.total_price || (item.unit_price || 0) * (item.quantity || 1)), 0)
-    + customLines
-      .filter((line) => customLineCharged(line, hasPackage))
-      .reduce((sum, line) => sum + (line.total_price ?? line.quantity * line.unit_price), 0);
-  const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
+  const { lines: receiptItems, subtotal: itemsSubtotal, discount: itemsDiscount } = rentalReceiptPricing(rental);
   const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
   const refundableDeposit = refundableAfterCharges(rental);
   const rackItems = items.map((line) => ({
@@ -158,37 +151,20 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
               <div className="receipt-divider"></div>
 
               <div className="receipt-label">ITEMS:</div>
-              {items.length > 0 ? (
-                items.map((item, idx) => {
-                  // The customer name carries the size already.
-                  const description = customerLineName(item.item) || 'Item';
-                  const quantity = item.quantity || 1;
-                  const unitPrice = item.unit_price || item.total_price || 0;
-                  const itemTotal = item.total_price || unitPrice * quantity;
-                  return (
-                    <div key={idx} className="receipt-item">
-                      <div className="receipt-line">  {description}</div>
-                      <div className="receipt-line">    {quantity} x {formatCurrency(unitPrice)} = {formatCurrency(itemTotal)}</div>
-                    </div>
-                  );
-                })
-              ) : customLines.length === 0 ? (
-                <div className="receipt-line">Rental Package</div>
-              ) : null}
-              {customLines.map((line, idx) => (
-                <div key={`custom-${idx}`} className="receipt-item">
+              {receiptItems.map((line, idx) => (
+                <div key={idx} className="receipt-item">
                   <div className="receipt-line">  {line.name}</div>
                   <div className="receipt-line">
-                    {customLineCharged(line, hasPackage)
-                      ? `    ${line.quantity} x ${formatCurrency(line.unit_price)} = ${formatCurrency(line.total_price ?? line.quantity * line.unit_price)}`
-                      : `    ${line.quantity} x included in package`}
+                    {line.included
+                      ? `    ${line.quantity} x included in package`
+                      : `    ${line.quantity} x ${formatCurrency(line.unitPrice)} = ${formatCurrency(line.total)}`}
                   </div>
                 </div>
               ))}
 
               <div className="receipt-divider"></div>
 
-              <div className="receipt-line">Subtotal: {formatCurrency(itemsSubtotal || rental.total_cost || 0)}</div>
+              <div className="receipt-line">Subtotal: {formatCurrency(itemsSubtotal)}</div>
               {itemsDiscount > 0 && (
                 <div className="receipt-line receipt-discount">Discount: ({formatCurrency(itemsDiscount)})</div>
               )}

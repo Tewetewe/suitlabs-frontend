@@ -15,7 +15,7 @@ import {
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
 import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from './branch-scope';
-import { customLineCharged } from './booking-draft';
+import { rentalReceiptPricing } from './rental-receipt';
 import { refundableDeposit as refundableAfterCharges } from './deposit';
 import { TRANSACTION_FEE_LABEL } from './transaction-fee';
 import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
@@ -593,23 +593,7 @@ export class ThermalPrinterService {
       )
       .lineFeed();
 
-    const items = (rental.items || rental.booking?.items || []) as Array<{
-      item?: { name?: string; size?: { label?: string } };
-      quantity: number;
-      unit_price: number;
-      total_price: number;
-      discount_amount?: number;
-    }>;
-    // Custom lines of the Booking charge things not in the catalogue, such as a tie.
-    const customLines = rental.booking?.custom_lines || [];
-    const hasPackage = Boolean(rental.booking?.package_pricing_id);
-    const itemsSubtotal = items.reduce(
-      (sum, item) => sum + (item.total_price || (item.unit_price || 0) * (item.quantity || 1)),
-      0
-    ) + customLines
-      .filter((line) => customLineCharged(line, hasPackage))
-      .reduce((sum, line) => sum + (line.total_price ?? line.quantity * line.unit_price), 0);
-    const itemsDiscount = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
+    const { lines: receiptItems, subtotal: itemsSubtotal, discount: itemsDiscount } = rentalReceiptPricing(rental);
     const total = (rental.total_cost || 0) + (rental.late_fee || 0) + (rental.damage_charges || 0);
     const refundableDeposit = refundableAfterCharges(rental);
 
@@ -624,31 +608,16 @@ export class ThermalPrinterService {
     generator.separator();
     generator.setBold(true).text('ITEMS:').lineFeed().setBold(false);
 
-    if (items.length > 0) {
-      items.forEach((item) => {
-        // The customer name carries the size already, and hides the supplier.
-        const description = customerLineName(item.item) || 'Item';
-        const quantity = item.quantity || 1;
-        const unitPrice = item.unit_price || item.total_price || 0;
-        const itemTotal = item.total_price || unitPrice * quantity;
-        generator.text(`  ${description}`).lineFeed();
-        generator
-          .text(`    ${quantity} x ${formatCurrencyForPrint(unitPrice)} = ${formatCurrencyForPrint(itemTotal)}`)
-          .lineFeed();
-      });
-    } else if (customLines.length === 0) {
-      generator.text('Rental Package').lineFeed();
-    }
-    customLines.forEach((line) => {
+    receiptItems.forEach((line) => {
       generator.text(`  ${line.name}`).lineFeed();
-      const priced = customLineCharged(line, hasPackage)
-        ? `    ${line.quantity} x ${formatCurrencyForPrint(line.unit_price)} = ${formatCurrencyForPrint(line.total_price ?? line.quantity * line.unit_price)}`
-        : `    ${line.quantity} x included in package`;
+      const priced = line.included
+        ? `    ${line.quantity} x included in package`
+        : `    ${line.quantity} x ${formatCurrencyForPrint(line.unitPrice)} = ${formatCurrencyForPrint(line.total)}`;
       generator.text(priced).lineFeed();
     });
 
     generator.separator();
-    generator.text(`Subtotal: ${formatCurrencyForPrint(itemsSubtotal || rental.total_cost || 0)}`).lineFeed();
+    generator.text(`Subtotal: ${formatCurrencyForPrint(itemsSubtotal)}`).lineFeed();
     if (itemsDiscount > 0) {
       generator.text(`Discount: (${formatCurrencyForPrint(itemsDiscount)})`).lineFeed();
     }

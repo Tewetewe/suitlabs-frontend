@@ -39,6 +39,8 @@ import {
   LoginResponse,
   CreateItemRequest,
   CreateBookingRequest,
+  BookingDraft,
+  BookingDraftForm,
   CreateCustomerRequest,
   ItemFilters,
   BookingFilters,
@@ -803,6 +805,29 @@ class APIClient {
   async createBooking(booking: CreateBookingRequest): Promise<Booking> {
     const response = await this.client.post<CreateResponse<Booking>>('/api/v1/bookings', booking);
     return response.data.data;
+  }
+
+  /** The Booking Drafts of the Branch, the last changed first. */
+  async listBookingDrafts(): Promise<BookingDraft[]> {
+    const response = await this.client.get<APIResponse<{ drafts: BookingDraft[] }>>('/api/v1/booking-drafts');
+    return response.data.data?.drafts || [];
+  }
+
+  async getBookingDraft(id: string): Promise<BookingDraft> {
+    const response = await this.client.get<APIResponse<BookingDraft>>(`/api/v1/booking-drafts/${encodeURIComponent(id)}`);
+    return response.data.data!;
+  }
+
+  /** Saves a New Booking form before the Customer pays. With an id it replaces that draft. */
+  async saveBookingDraft(id: string | null, body: { amount: number; request: BookingDraftForm }): Promise<BookingDraft> {
+    const response = id
+      ? await this.client.put<APIResponse<BookingDraft>>(`/api/v1/booking-drafts/${encodeURIComponent(id)}`, body)
+      : await this.client.post<APIResponse<BookingDraft>>('/api/v1/booking-drafts', body);
+    return response.data.data!;
+  }
+
+  async deleteBookingDraft(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/booking-drafts/${encodeURIComponent(id)}`);
   }
 
   async updateBooking(id: string, booking: Partial<CreateBookingRequest>): Promise<Booking> {

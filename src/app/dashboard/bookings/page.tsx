@@ -27,7 +27,7 @@ import { formatDateShort } from '@/lib/date';
 import { RENTAL_LENGTHS, type RentalLength, rentalPrice, rentalWindow } from '@/lib/rental-window';
 import { BOOKING_PAYMENT_METHOD_OPTIONS, formatPaymentMethod } from '@/lib/payment-methods';
 import { BOOKING_GUARANTEE_OPTIONS, BOOKING_OCCASION_OPTIONS } from '@/lib/select-options';
-import { Booking, BookingCustomLine, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing, SalePaymentMethod } from '@/types';
+import { Booking, BookingCustomLine, BookingDraft, BookingDraftForm, BookingFilters, BookingInstitution, Discount, InvoiceData, Customer, Item, PackagePricing, SalePaymentMethod } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { customerOptionLabel } from '@/lib/branch-scope';
 import AutoCompleteSelect, { AutoPageResult } from '@/components/ui/AutoCompleteSelect';
@@ -175,6 +175,22 @@ function linePriceHint(unitPrice: number, locked: boolean, catalog: number | nul
   return `Catalogue ${formatCurrency(catalog)}`;
 }
 
+// A day from a saved draft as YYYY-MM-DD. The backend sends an empty day as
+// year 1, which is no day.
+function draftDay(iso?: string): string | undefined {
+  return iso && !iso.startsWith('0001-') ? iso.slice(0, 10) : undefined;
+}
+
+function draftCaption(draft: BookingDraft) {
+  const lines = (draft.request.items?.length || 0) + (draft.request.custom_lines?.length || 0);
+  const event = draftDay(draft.event_date);
+  return [
+    event ? `Event ${formatDateShort(event)}` : '',
+    lines > 0 ? `${lines} ${lines === 1 ? 'line' : 'lines'}` : '',
+    `Saved ${formatDateShort(draft.updated_at)}`,
+  ].filter(Boolean).join(' · ');
+}
+
 function bookingCustomerName(booking: Booking) {
   return partyName(booking, booking.customer) || `Booking #${booking.id.slice(-8)}`;
 }
@@ -278,6 +294,23 @@ export default function BookingsPage() {
   const [extending, setExtending] = useState(false);
   const [cashbackBooking, setCashbackBooking] = useState<Booking | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  // Booking Drafts: New Booking forms saved before the customer paid. The
+  // form keeps the id of the draft it opened, so Create turns that draft
+  // into the Booking and a second save replaces it.
+  const [drafts, setDrafts] = useState<BookingDraft[]>([]);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftCustomerOption, setDraftCustomerOption] = useState<{ value: string; label: string } | undefined>();
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [deletingDraft, setDeletingDraft] = useState<BookingDraft | null>(null);
+  const [deletingDraftBusy, setDeletingDraftBusy] = useState(false);
+  const loadDrafts = useCallback(async () => {
+    try {
+      setDrafts(await apiClient.listBookingDrafts());
+    } catch {
+      setDrafts([]);
+    }
+  }, []);
+  useEffect(() => { void loadDrafts(); }, [loadDrafts]);
   // Previous static options states no longer used; keeping for future caching if needed
   const [bookingForm, setBookingForm] = useState<{
     customer_id: string;
@@ -573,6 +606,62 @@ export default function BookingsPage() {
     }
   };
 
+  // The New Booking form as a request, without the money. A draft keeps
+  // this, and Create adds the payment to it.
+  const bookingFormRequest = (): BookingDraftForm => {
+    // Optional: '' is no guarantee left.
+    const bookingGuarantee = (bookingForm.booking_guarantee === 'Other'
+      ? bookingForm.booking_guarantee_other?.trim()
+      : bookingForm.booking_guarantee) || '';
+    const validItems = bookingForm.items.filter(it => it.item_id && it.item_id.trim() !== '');
+    return {
+      customer_id: bookingForm.customer_id,
+      booking_date: bookingForm.booking_date ? new Date(bookingForm.booking_date).toISOString() : undefined,
+      appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
+      event_date: bookingForm.event_date ? new Date(bookingForm.event_date).toISOString() : undefined,
+      rental_length: bookingForm.rental_length,
+      booking_guarantee: bookingGuarantee,
+      security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
+      institution: (bookingForm.institution || undefined) as BookingInstitution | undefined,
+      notes: bookingForm.notes,
+      package_pricing_id: selectedPackageId || undefined,
+      // Don't send total_amount when package pricing is used - let backend calculate it
+      ...(selectedPackageId ? {} : { total_amount: bookingTotal }),
+      discount_amount: bookingDiscount,
+      discount_id: discountId || undefined,
+      custom_lines: customLinesForRequest(bookingForm.custom_lines),
+      items: pricedItems(validItems).map(it => ({
+        item_id: it.item_id,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+        total_price: it.unit_price * it.quantity,
+        discount_amount: it.discount_amount || 0,
+        is_addon: !!selectedPackageId && !!it.is_addon,
+      })),
+    };
+  };
+
+  // Save as draft keeps the form for a customer who has not paid. It needs
+  // only the customer. It takes no money and holds no items.
+  const saveDraft = async () => {
+    if (!bookingForm.customer_id) {
+      setFormErrors(withErrorSummary({ customer_id: 'Pick a customer to save a draft' }));
+      return;
+    }
+    try {
+      setSavingDraft(true);
+      await apiClient.saveBookingDraft(draftId, { amount: bookingFinal, request: bookingFormRequest() });
+      setIsCreateModalOpen(false);
+      clearBookingDraft();
+      await loadDrafts();
+      success('Draft saved', 'It holds no items. Open it from Drafts when the customer pays.');
+    } catch (e) {
+      setFormErrors({ submit: apiErrorMessage(e, 'Failed to save the draft. Please try again.') });
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   const submitCreateBooking = async () => {
     // basic validation
     const errs: Record<string, string> = {};
@@ -580,19 +669,14 @@ export default function BookingsPage() {
     if (!bookingForm.event_date) errs.event_date = 'Event day is required';
     if (!bookingForm.booking_date) errs.booking_date = 'Pickup date is required';
     if (chargeNow > 0 && potMissing(bookingForm.payment_method, bookingPot)) errs.submit = POT_MISSING_MESSAGE;
-    // Optional: '' is no guarantee left.
-    const bookingGuarantee = (bookingForm.booking_guarantee === 'Other'
-      ? bookingForm.booking_guarantee_other?.trim()
-      : bookingForm.booking_guarantee) || '';
     if (!bookingForm.institution) errs.institution = 'Occasion is required';
     if (bookingForm.items.length === 0) errs.items = 'At least one item is required';
     if (subtotalTooLow) errs.subtotal = SUBTOTAL_TOO_LOW;
     if (downPaymentTooHigh) errs.down_payment = DOWN_PAYMENT_TOO_HIGH;
-    
+
     // Validate that all items have valid item_id
-    const validItems = bookingForm.items.filter(it => it.item_id && it.item_id.trim() !== '');
-    if (validItems.length === 0) errs.items = 'At least one valid item is required';
-    
+    if (!bookingForm.items.some(it => it.item_id && it.item_id.trim() !== '')) errs.items = 'At least one valid item is required';
+
     // An empty line is skipped on save, so only a filled line needs a quantity.
     bookingForm.items.forEach((it, idx) => {
       if (it.item_id && (!it.quantity || it.quantity < 1)) errs[`item_qty_${idx}`] = 'Quantity >= 1';
@@ -609,44 +693,25 @@ export default function BookingsPage() {
       }
 
       const payload = {
-        customer_id: bookingForm.customer_id,
-        booking_date: new Date(bookingForm.booking_date).toISOString(),
-        appointment_date: bookingForm.appointment_date ? new Date(bookingForm.appointment_date).toISOString() : undefined,
-        event_date: bookingForm.event_date ? new Date(bookingForm.event_date).toISOString() : undefined,
-        rental_length: bookingForm.rental_length,
-        booking_guarantee: bookingGuarantee,
-        security_deposit_waived: depositEnabled ? !bookingForm.take_deposit : undefined,
-        institution: bookingForm.institution,
-        notes: bookingForm.notes,
+        ...bookingFormRequest(),
         // Money taken confirms the booking, as in the cashier POS.
         ...newBookingStatuses(payNow, bookingFinal),
         payment_method: bookingForm.payment_method,
         fee_rule_id: bookingFeeRuleId || undefined,
         pot: potForRequest(bookingForm.payment_method, bookingPot),
-        package_pricing_id: selectedPackageId || undefined,
-        // Don't send total_amount when package pricing is used - let backend calculate it
-        ...(selectedPackageId ? {} : { total_amount: bookingTotal }),
         paid_amount: payNow,
-        discount_amount: bookingDiscount,
         remaining_amount: remainingAmount,
-        discount_id: discountId || undefined,
         payment_proof_url: await uploadBookingProof(),
         created_by: user.id, // Add the current user ID
-        custom_lines: customLinesForRequest(bookingForm.custom_lines),
-        items: pricedItems(validItems).map(it => ({
-          item_id: it.item_id,
-          quantity: it.quantity,
-          unit_price: it.unit_price,
-          total_price: it.unit_price * it.quantity,
-          discount_amount: it.discount_amount || 0,
-          is_addon: !!selectedPackageId && !!it.is_addon,
-        })),
+        draft_id: draftId || undefined,
       } as unknown as import('@/types').CreateBookingRequest;
 
       const created = await apiClient.createBooking(payload as unknown as import('@/types').CreateBookingRequest);
+      const fromDraft = !!draftId;
       setIsCreateModalOpen(false);
       clearBookingDraft();
       await reload();
+      if (fromDraft) await loadDrafts();
       if (created?.id && (created.paid_amount || payNow) > 0) {
         await openIssuedInvoice({
           id: created.id,
@@ -673,6 +738,8 @@ export default function BookingsPage() {
     setBookingFeeRuleId(''); setBookingPot('');
     setBookingProofFile(null);
     setFormErrors({});
+    setDraftId(null);
+    setDraftCustomerOption(undefined);
   };
 
   // The saved customer, so Edit shows the name even when the customer is not
@@ -687,6 +754,56 @@ export default function BookingsPage() {
   const openCreate = () => {
     setActiveBooking(null);
     clearBookingDraft();
+    setIsCreateModalOpen(true);
+  };
+
+  // Open draft fills the New Booking form from the draft. Create then takes
+  // the payment and turns the draft into the Booking.
+  const openDraft = (draft: BookingDraft) => {
+    const form = draft.request || {};
+    const standardGuarantees: string[] = BOOKING_GUARANTEE_OPTIONS.map((option) => option.value);
+    const guarantee = form.booking_guarantee || '';
+    const isStandardGuarantee = !guarantee || standardGuarantees.includes(guarantee);
+    const blank = emptyBookingForm();
+    setActiveBooking(null);
+    clearBookingDraft();
+    // The draft keeps its lines as they are: a Suit-only line gets no trousers.
+    pairedSuitIdsRef.current = new Set((form.items || []).map(it => it.item_id));
+    setBookingForm({
+      ...blank,
+      customer_id: draft.customer_id,
+      booking_date: draftDay(form.booking_date) || blank.booking_date,
+      appointment_date: draftDay(form.appointment_date),
+      event_date: draftDay(form.event_date),
+      rental_length: form.rental_length || blank.rental_length,
+      booking_guarantee: isStandardGuarantee ? guarantee : 'Other',
+      booking_guarantee_other: isStandardGuarantee ? '' : guarantee,
+      take_deposit: form.security_deposit_waived === undefined ? blank.take_deposit : !form.security_deposit_waived,
+      institution: form.institution || blank.institution,
+      notes: form.notes || '',
+      items: form.items?.length
+        ? form.items.map(it => ({
+          item_id: it.item_id,
+          quantity: it.quantity,
+          unit_price: it.unit_price,
+          discount_amount: it.discount_amount || 0,
+          catalogue: 'any' as const,
+          is_addon: !!it.is_addon,
+        }))
+        : blank.items,
+      custom_lines: (form.custom_lines || []).map((line) => ({
+        name: line.name,
+        quantity: line.quantity,
+        unit_price: line.unit_price,
+        is_addon: !!line.is_addon,
+      })),
+    });
+    setSelectedPackageId(form.package_pricing_id || '');
+    if (form.discount_id) setDiscountId(form.discount_id);
+    setDraftId(draft.id);
+    setDraftCustomerOption(draft.customer
+      ? { value: draft.customer_id, label: customerOptionLabel(draft.customer) }
+      : undefined);
     setIsCreateModalOpen(true);
   };
 
@@ -911,6 +1028,17 @@ export default function BookingsPage() {
     const q = new URLSearchParams(window.location.search).get('q');
     if (q) setSearchInput(q);
   }, [setSearchInput]);
+
+  // The cashier POS links a draft it just saved as ?draft=<id>.
+  const openDraftRef = useRef(openDraft);
+  openDraftRef.current = openDraft;
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('draft');
+    if (!id) return;
+    apiClient.getBookingDraft(id)
+      .then((draft) => { if (draft) openDraftRef.current(draft); })
+      .catch(() => warning('Draft not found', 'It may be paid or deleted already.'));
+  }, [warning]);
 
   const handleSearch = (search: string) => {
     setSearchInput(search);
@@ -1155,6 +1283,43 @@ export default function BookingsPage() {
           </FilterBar>
         </ClientOnly>
 
+        {drafts.length > 0 && (
+          <section className="mb-4 space-y-2" data-testid="booking-drafts">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-700">Drafts · not paid ({drafts.length})</h2>
+              <p className="text-xs text-slate-500">A draft holds no items: another booking can take them. Open it and take the payment to make the booking.</p>
+            </div>
+            {drafts.map((draft) => (
+              <Card key={draft.id} padding="sm" className="relative z-0 [&:has(details[open])]:z-30" data-testid="booking-draft-row">
+                <CardContent className="flex items-start gap-3">
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openDraft(draft)}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-900">{partyName({}, draft.customer) || 'Customer'}</span>
+                      <Badge variant="default" dot>Draft</Badge>
+                    </div>
+                    <p className="mt-0.5 truncate text-sm text-slate-500">{draftCaption(draft)}</p>
+                    {draft.request.notes?.trim() && <p className="mt-0.5 truncate text-xs text-slate-400">{draft.request.notes.trim()}</p>}
+                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <div className="text-right">
+                      <p className="text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(draft.amount || 0)}</p>
+                      <p className="text-[11px] text-slate-400">Unpaid</p>
+                    </div>
+                    <OverflowMenu>
+                      <OverflowMenuItem icon={<CreditCard className="h-4 w-4 text-slate-400" />} onClick={() => openDraft(draft)}>
+                        Open and take payment
+                      </OverflowMenuItem>
+                      <OverflowMenuItem danger icon={<Trash2 className="h-4 w-4" />} onClick={() => setDeletingDraft(draft)}>
+                        Delete draft
+                      </OverflowMenuItem>
+                    </OverflowMenu>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </section>
+        )}
+
         {/* Bookings List */}
         <div className="space-y-2">
           {loading ? (
@@ -1266,11 +1431,12 @@ export default function BookingsPage() {
         {/* Create Booking Modal */}
         <SimpleModal
           isOpen={isCreateModalOpen}
-          title="New Booking"
+          title={draftId ? 'New Booking from draft' : 'New Booking'}
           onClose={() => setIsCreateModalOpen(false)}
         >
           <BookingFormFields
             bookingForm={bookingForm}
+            customerOption={draftCustomerOption}
             availabilityNoteFor={availabilityNoteFor}
             catalogPriceFor={catalogPriceFor}
             requireEventDate
@@ -1331,6 +1497,8 @@ export default function BookingsPage() {
             submitLabel="Create"
             onCancel={() => setIsCreateModalOpen(false)}
             onSubmit={submitCreateBooking}
+            onSaveDraft={saveDraft}
+            savingDraft={savingDraft}
           />
         </SimpleModal>
 
@@ -1433,6 +1601,29 @@ export default function BookingsPage() {
               : undefined
           }
           onDelete={isAdmin && activeBooking ? () => setDeletingBooking(activeBooking) : undefined}
+        />
+
+        <ConfirmModal
+          isOpen={!!deletingDraft}
+          title="Delete draft"
+          description={deletingDraft ? `Delete the draft for ${partyName({}, deletingDraft.customer) || 'this customer'}? It took no money, so nothing else changes.` : undefined}
+          confirmLabel="Delete draft"
+          variant="danger"
+          loading={deletingDraftBusy}
+          onClose={() => setDeletingDraft(null)}
+          onConfirm={async () => {
+            if (!deletingDraft) return;
+            try {
+              setDeletingDraftBusy(true);
+              await apiClient.deleteBookingDraft(deletingDraft.id);
+              setDeletingDraft(null);
+              await loadDrafts();
+            } catch (err) {
+              toastError('Could not delete draft', apiErrorMessage(err, 'Please try again.'));
+            } finally {
+              setDeletingDraftBusy(false);
+            }
+          }}
         />
 
         <ConfirmModal
@@ -2113,6 +2304,8 @@ function BookingFormTotals({
   submitLabel,
   onCancel,
   onSubmit,
+  onSaveDraft,
+  savingDraft = false,
 }: {
   selectedPackageId: string;
   packagePrice: number;
@@ -2141,6 +2334,9 @@ function BookingFormTotals({
   submitLabel: string;
   onCancel: () => void;
   onSubmit: () => void;
+  /** Keeps the form as a draft for a customer who has not paid. New Booking only. */
+  onSaveDraft?: () => void;
+  savingDraft?: boolean;
 }) {
   return (
     <div className="mt-6 space-y-3 border-t border-black/5 pt-4">
@@ -2207,7 +2403,12 @@ function BookingFormTotals({
       {submitError && <div className="text-sm text-red-600">{submitError}</div>}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-        <Button onClick={onSubmit} loading={loading}>{submitLabel}</Button>
+        {onSaveDraft && (
+          <Button variant="secondary" onClick={onSaveDraft} loading={savingDraft} disabled={loading} data-testid="booking-save-draft">
+            Save as draft
+          </Button>
+        )}
+        <Button onClick={onSubmit} loading={loading} disabled={savingDraft}>{submitLabel}</Button>
       </div>
     </div>
   );
