@@ -1951,6 +1951,8 @@ export interface CreateBookingRequest {
   payment_proof_url?: string;
   /** A discount to apply before the payment is taken. */
   discount_id?: string;
+  /** The Booking Draft this Booking comes from. The backend deletes it once the Booking is saved. */
+  draft_id?: string;
   items: Array<{
     item_id: string;
     quantity: number;
@@ -1959,6 +1961,30 @@ export interface CreateBookingRequest {
     discount_amount?: number;
     is_addon?: boolean;
   }>;
+}
+
+/** The New Booking form without the money fields, as a Booking Draft keeps it. */
+export type BookingDraftForm = Partial<Omit<CreateBookingRequest,
+  'status' | 'payment_status' | 'payment_method' | 'fee_rule_id' | 'pot' | 'paid_amount' | 'remaining_amount' | 'payment_proof_url' | 'draft_id'>>;
+
+/**
+ * A New Booking form saved before the Customer paid. It is not a Booking: it
+ * holds no Items, posts no money, and gets no invoice. The first payment
+ * creates the Booking and deletes the draft.
+ */
+export interface BookingDraft {
+  id: string;
+  branch_id: string;
+  customer_id: string;
+  customer?: Customer;
+  event_date?: string;
+  /** The amount due the form showed when it was saved. */
+  amount: number;
+  request: BookingDraftForm;
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Address {
