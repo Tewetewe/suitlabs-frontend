@@ -1,8 +1,8 @@
 'use client';
 
-import { useLayoutEffect, useRef } from 'react';
+import { useState } from 'react';
 import { Input } from '@/components/ui/Input';
-import { formatNumber, parseCurrency } from '@/lib/currency';
+import { currencyDraft, formatCurrency, formatNumber, parseCurrency } from '@/lib/currency';
 
 type CurrencyInputProps = {
   label?: string;
@@ -19,18 +19,14 @@ type CurrencyInputProps = {
   onChange: (value: number) => void;
 };
 
-function caretFromDigitCount(formatted: string, digitsBefore: number): number {
-  if (digitsBefore <= 0) return formatted.startsWith('-') ? 1 : 0;
-  let seen = 0;
-  for (let i = 0; i < formatted.length; i++) {
-    if (/\d/.test(formatted[i])) {
-      seen += 1;
-      if (seen >= digitsBefore) return i + 1;
-    }
-  }
-  return formatted.length;
-}
-
+/**
+ * A Rupiah amount. While the field has focus it shows the plain digits and
+ * never moves the caret: an Android keyboard (Samsung, Gboard) that composes
+ * digits puts each one at the caret, and a caret moved back by the field put
+ * each new digit in front, so 125 came out as 521. The line under the field
+ * shows the amount with dots while typing, and the field shows them again on
+ * blur.
+ */
 export function CurrencyInput({
   label,
   error,
@@ -45,42 +41,41 @@ export function CurrencyInput({
   value,
   onChange,
 }: CurrencyInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const caretDigits = useRef<number | null>(null);
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState('');
   const empty = value === '' || value === undefined || value === null;
   const numeric = empty ? 0 : parseCurrency(String(value));
-  const display = empty ? '' : formatNumber(numeric);
-
-  useLayoutEffect(() => {
-    const el = inputRef.current;
-    if (!el || caretDigits.current == null) return;
-    const pos = caretFromDigitCount(el.value, caretDigits.current);
-    el.setSelectionRange(pos, pos);
-    caretDigits.current = null;
-  }, [display]);
+  const display = focused ? draft : empty ? '' : formatNumber(numeric);
+  const typed = focused && draft.length > 3 ? `= ${formatCurrency(Number(draft))}` : '';
 
   return (
     <Input
-      ref={inputRef}
       id={id}
       name={name}
       label={label}
       error={error}
-      helperText={helperText}
+      helperText={[typed, helperText].filter(Boolean).join(' · ') || undefined}
       fullWidth={fullWidth}
       disabled={disabled}
       required={required}
       inputMode="numeric"
+      pattern="[0-9]*"
       autoComplete="off"
       data-form-type="other"
       placeholder={placeholder}
       className={className}
       prefixIcon={<span className="text-xs font-semibold text-slate-500">Rp</span>}
       value={display}
+      onFocus={(e) => {
+        setDraft(empty || numeric === 0 ? '' : String(Math.round(numeric)));
+        setFocused(true);
+        e.target.select();
+      }}
+      onBlur={() => setFocused(false)}
       onChange={(e) => {
-        const el = e.target;
-        caretDigits.current = el.value.slice(0, el.selectionStart ?? el.value.length).replace(/\D/g, '').length;
-        onChange(parseCurrency(el.value));
+        const next = currencyDraft(e.target.value);
+        setDraft(next);
+        onChange(next === '' ? 0 : Number(next));
       }}
     />
   );

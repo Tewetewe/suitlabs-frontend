@@ -28,9 +28,10 @@ interface PageShellProps {
 export function PageShell({ title, subtitle, action, toolbar, children, className }: PageShellProps) {
   return (
     <div className={clsx('space-y-4 animate-slide-up', className)}>
-      {/* Header row */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
+      {/* Header row. It wraps: the title keeps room to read, and a wide
+          toolbar moves to its own line instead of squeezing the title. */}
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-start md:justify-between">
+        <div className="min-w-0 md:min-w-[14rem] md:flex-1">
           <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-slate-900 break-words">{title}</h1>
           {subtitle && (
             <p className="mt-1 text-sm text-slate-500 max-w-2xl">{subtitle}</p>
@@ -38,7 +39,7 @@ export function PageShell({ title, subtitle, action, toolbar, children, classNam
         </div>
 
         {(action || toolbar) && (
-          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end shrink-0">
+          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:max-w-full md:justify-end">
             {toolbar}
             {action}
           </div>

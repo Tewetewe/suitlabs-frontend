@@ -113,6 +113,45 @@ function dateLabel(value?: string) {
   return value.slice(0, 10);
 }
 
+// The buttons of one Expense. A Cashback Expense changes only with its Booking,
+// so it shows where it came from instead.
+function ExpenseActions({
+  expense,
+  isAdmin,
+  onEdit,
+  onVoid,
+  onDelete,
+}: {
+  expense: Expense;
+  isAdmin: boolean;
+  onEdit: (expense: Expense) => void;
+  onVoid: (expense: Expense) => void;
+  onDelete: (expense: Expense) => void;
+}) {
+  if (expense.category === 'cashback') {
+    return <p className="text-xs text-slate-400 lg:text-right">From a booking cashback</p>;
+  }
+  return (
+    <div className="flex flex-wrap gap-2 lg:justify-end">
+      {expense.status === 'recorded' && (
+        <>
+          <Button size="sm" variant="secondary" onClick={() => onEdit(expense)}>
+            Edit
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => onVoid(expense)}>
+            Void
+          </Button>
+        </>
+      )}
+      {isAdmin && (
+        <Button size="sm" variant="ghost" className="text-red-600" onClick={() => onDelete(expense)}>
+          Delete
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function ExpensesPage() {
   const today = useMemo(() => new Date(), []);
   const { isAuthenticated, loading: authLoading, user } = useAuth();
@@ -566,63 +605,86 @@ export default function ExpensesPage() {
             action={<Button onClick={openCreate}><Plus className="h-4 w-4" /> Add Expense</Button>}
           />
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-black/5">
-            <table className="min-w-full text-sm">
-              <thead className="bg-white/60">
-                <tr className="text-left text-slate-600">
-                  <th className="px-4 py-3 font-semibold">Date</th>
-                  <th className="px-4 py-3 font-semibold">Number</th>
-                  <th className="px-4 py-3 font-semibold">Shop</th>
-                  <th className="px-4 py-3 font-semibold">Category</th>
-                  <th className="px-4 py-3 font-semibold">Description</th>
-                  <th className="px-4 py-3 font-semibold text-right">Amount</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/5 bg-white/30">
-                {expenses.map((expense) => (
-                  <tr key={expense.id} className="text-slate-800">
-                    <td className="px-4 py-3 whitespace-nowrap">{dateLabel(expense.expense_date)}</td>
-                    <td className="px-4 py-3 font-medium">{expense.expense_number}</td>
-                    <td className="px-4 py-3"><BranchBadge branch={expense.branch} always /></td>
-                    <td className="px-4 py-3">{categoryLabel(expense.category)}</td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{expense.description}</div>
-                      {expense.vendor && <div className="text-xs text-slate-500">{expense.vendor}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium">{formatCurrency(expense.amount)}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={expense.status === 'recorded' ? 'success' : 'danger'}>
-                        {expense.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        {expense.category === 'cashback' ? (
-                          <span className="text-xs text-slate-400">From a booking cashback</span>
-                        ) : expense.status === 'recorded' && (
-                          <>
-                            <Button size="sm" variant="secondary" onClick={() => openEdit(expense)}>
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="danger" onClick={() => setVoiding(expense)}>
-                              Void
-                            </Button>
-                          </>
-                        )}
-                        {isAdmin && expense.category !== 'cashback' && (
-                          <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setDeletingExpense(expense)}>
-                            Delete
-                          </Button>
-                        )}
+          <>
+            {/* Phone and portrait tablet: one card per Expense, so nothing
+                scrolls sideways and the buttons stay in reach. */}
+            <div className="space-y-2 lg:hidden" data-testid="expense-cards">
+              {expenses.map((expense) => (
+                <Card key={expense.id} padding="sm" data-testid="expense-card">
+                  <CardContent className="space-y-2">
+                    <div className="flex items-start gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-slate-900">{expense.description}</span>
+                          {expense.status !== 'recorded' && <Badge variant="danger">{expense.status}</Badge>}
+                        </div>
+                        <p className="mt-0.5 text-sm text-slate-500">
+                          {[dateLabel(expense.expense_date), categoryLabel(expense.category), expense.vendor].filter(Boolean).join(' · ')}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {expense.expense_number}{viewingAll && expense.branch?.name ? ` · ${expense.branch.name}` : ''}
+                        </p>
                       </div>
-                    </td>
+                      <p className="shrink-0 text-base font-semibold tabular-nums text-slate-900">{formatCurrency(expense.amount)}</p>
+                    </div>
+                    <ExpenseActions
+                      expense={expense}
+                      isAdmin={isAdmin}
+                      onEdit={openEdit}
+                      onVoid={setVoiding}
+                      onDelete={setDeletingExpense}
+                    />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-2xl border border-black/5 lg:block">
+              <table className="min-w-full text-sm">
+                <thead className="bg-white/60">
+                  <tr className="text-left text-slate-600">
+                    <th className="px-4 py-3 font-semibold">Date</th>
+                    <th className="px-4 py-3 font-semibold">Number</th>
+                    <th className="px-4 py-3 font-semibold">Shop</th>
+                    <th className="px-4 py-3 font-semibold">Category</th>
+                    <th className="px-4 py-3 font-semibold">Description</th>
+                    <th className="px-4 py-3 font-semibold text-right">Amount</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-black/5 bg-white/30">
+                  {expenses.map((expense) => (
+                    <tr key={expense.id} className="text-slate-800">
+                      <td className="px-4 py-3 whitespace-nowrap">{dateLabel(expense.expense_date)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap font-medium">{expense.expense_number}</td>
+                      <td className="px-4 py-3"><BranchBadge branch={expense.branch} always /></td>
+                      <td className="px-4 py-3">{categoryLabel(expense.category)}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{expense.description}</div>
+                        {expense.vendor && <div className="text-xs text-slate-500">{expense.vendor}</div>}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right font-medium">{formatCurrency(expense.amount)}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={expense.status === 'recorded' ? 'success' : 'danger'}>
+                          {expense.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <ExpenseActions
+                          expense={expense}
+                          isAdmin={isAdmin}
+                          onEdit={openEdit}
+                          onVoid={setVoiding}
+                          onDelete={setDeletingExpense}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <InfiniteScrollSentinel

@@ -226,12 +226,12 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
 
   return (
     <div className={clsx(isCashier ? 'h-dvh overflow-hidden bg-transparent' : 'min-h-screen bg-transparent')}>
-      {/* ── Drawer overlay (mobile always; cashier also on tablet) ── */}
+      {/* ── Drawer overlay (phone and portrait tablet; cashier always) ── */}
       {sidebarOpen && (
         <div
           className={clsx(
             'fixed inset-0 z-40 bg-black/40 backdrop-blur-sm animate-fade-in',
-            !isCashier && 'md:hidden'
+            !isCashier && 'lg:hidden'
           )}
           onClick={() => setSidebarOpen(false)}
         />
@@ -243,7 +243,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
           'fixed inset-y-0 left-0 z-50 flex w-72 flex-col',
           'glass-panel-strong',
           'transform transition-transform duration-300 ease-in-out',
-          !isCashier && 'md:translate-x-0',
+          !isCashier && 'lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -263,7 +263,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
           <button
             className={clsx(
               'ml-auto text-slate-500 hover:text-slate-900 touch-manipulation min-h-11 min-w-11 flex items-center justify-center',
-              !isCashier && 'md:hidden'
+              !isCashier && 'lg:hidden'
             )}
             aria-label="Close menu"
             onClick={() => setSidebarOpen(false)}
@@ -320,7 +320,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
       </aside>
 
       {/* ── Main area ─────────────────────────────────────────────── */}
-      <div className={clsx(!isCashier && 'md:pl-72', isCashier && 'flex h-dvh flex-col')}>
+      <div className={clsx(!isCashier && 'lg:pl-72', isCashier && 'flex h-dvh flex-col')}>
         {/* Topbar */}
         <header className="app-topbar sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white px-3 sm:gap-3 sm:px-6 landscape:h-11 landscape:px-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -330,7 +330,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
               data-testid="open-nav"
               className={clsx(
                 '-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-indigo-50 touch-manipulation landscape:h-9 landscape:w-9',
-                !isCashier && 'md:hidden'
+                !isCashier && 'lg:hidden'
               )}
             >
               <Menu className="h-5 w-5" />
@@ -466,17 +466,18 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
           className={clsx(
             isCashier
               ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-0'
-              : 'p-4 pb-24 sm:p-6 sm:pb-24 md:pb-8 md:p-6 lg:p-8'
+              : 'p-4 pb-24 sm:p-6 sm:pb-24 lg:pb-8 lg:p-8'
           )}
         >
           {children}
         </main>
       </div>
 
-      {/* ── Mobile bottom nav. Phone cashier keeps it so staff can leave POS. ─ */}
+      {/* ── Bottom nav on phone and portrait tablet. Phone cashier keeps it so staff can leave POS. ─ */}
       <nav className={clsx(
-        'app-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white px-2 pb-safe pt-1 md:hidden transition-transform duration-200',
-        isCashier && !cashierPhone && 'hidden'
+        'app-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white px-2 pb-safe pt-1 transition-transform duration-200',
+        // The cashier keeps its grid tall on a tablet: its menu button leaves the POS.
+        isCashier ? (cashierPhone ? 'md:hidden' : 'hidden') : 'lg:hidden'
       )}>
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
           {mobileNavigation.map((item) => {
