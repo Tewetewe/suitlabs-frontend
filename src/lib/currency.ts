@@ -50,3 +50,8 @@ export const formatPrice = (amount: number, unit?: string): string => {
   const formatted = formatCurrency(amount);
   return unit ? `${formatted}/${unit}` : formatted;
 };
+
+/** The digits of a money field while it is typed, without a leading zero. */
+export function currencyDraft(raw: string): string {
+  return raw.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+}

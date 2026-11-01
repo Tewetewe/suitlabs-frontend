@@ -1433,6 +1433,19 @@ export default function BookingsPage() {
           isOpen={isCreateModalOpen}
           title={draftId ? 'New Booking from draft' : 'New Booking'}
           onClose={() => setIsCreateModalOpen(false)}
+          footer={
+            <BookingFormActions
+              bookingFinal={bookingFinal}
+              chargeNow={chargeNow}
+              submitError={formErrors.submit}
+              loading={creating}
+              submitLabel="Create"
+              onCancel={() => setIsCreateModalOpen(false)}
+              onSubmit={submitCreateBooking}
+              onSaveDraft={saveDraft}
+              savingDraft={savingDraft}
+            />
+          }
         >
           <BookingFormFields
             bookingForm={bookingForm}
@@ -1492,13 +1505,7 @@ export default function BookingsPage() {
             customSubtotal={customSubtotal}
             proofFile={bookingProofFile}
             onProofChange={setBookingProofFile}
-            submitError={formErrors.submit}
             loading={creating}
-            submitLabel="Create"
-            onCancel={() => setIsCreateModalOpen(false)}
-            onSubmit={submitCreateBooking}
-            onSaveDraft={saveDraft}
-            savingDraft={savingDraft}
           />
         </SimpleModal>
 
@@ -1507,6 +1514,17 @@ export default function BookingsPage() {
           isOpen={isEditModalOpen}
           title="Edit Booking"
           onClose={() => { setIsEditModalOpen(false); setActiveBooking(null); }}
+          footer={
+            <BookingFormActions
+              bookingFinal={bookingFinal}
+              chargeNow={chargeNow}
+              submitError={formErrors.submit}
+              loading={creating}
+              submitLabel="Save"
+              onCancel={() => { setIsEditModalOpen(false); setActiveBooking(null); }}
+              onSubmit={submitEditBooking}
+            />
+          }
         >
           {activeBooking?.status === 'completed' && (
             <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="booking-reconcile-note">
@@ -1570,11 +1588,7 @@ export default function BookingsPage() {
             customSubtotal={customSubtotal}
             proofFile={bookingProofFile}
             onProofChange={setBookingProofFile}
-            submitError={formErrors.submit}
             loading={creating}
-            submitLabel="Save"
-            onCancel={() => { setIsEditModalOpen(false); setActiveBooking(null); }}
-            onSubmit={submitEditBooking}
           />
         </SimpleModal>
 
@@ -2299,13 +2313,7 @@ function BookingFormTotals({
   customSubtotal = 0,
   proofFile,
   onProofChange,
-  submitError,
   loading,
-  submitLabel,
-  onCancel,
-  onSubmit,
-  onSaveDraft,
-  savingDraft = false,
 }: {
   selectedPackageId: string;
   packagePrice: number;
@@ -2329,14 +2337,7 @@ function BookingFormTotals({
   /** The optional receipt for the money this save takes. */
   proofFile: File | null;
   onProofChange: (file: File | null) => void;
-  submitError?: string;
   loading: boolean;
-  submitLabel: string;
-  onCancel: () => void;
-  onSubmit: () => void;
-  /** Keeps the form as a draft for a customer who has not paid. New Booking only. */
-  onSaveDraft?: () => void;
-  savingDraft?: boolean;
 }) {
   return (
     <div className="mt-6 space-y-3 border-t border-black/5 pt-4">
@@ -2400,8 +2401,46 @@ function BookingFormTotals({
           hint="Attach the transfer or QRIS receipt when the customer pays online."
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * The buttons of the booking form. They sit in the dialog footer, so they stay
+ * in reach while the form scrolls, with the total and what this save charges.
+ */
+function BookingFormActions({
+  bookingFinal,
+  chargeNow,
+  submitError,
+  loading,
+  submitLabel,
+  onCancel,
+  onSubmit,
+  onSaveDraft,
+  savingDraft = false,
+}: {
+  bookingFinal: number;
+  chargeNow: number;
+  submitError?: string;
+  loading: boolean;
+  submitLabel: string;
+  onCancel: () => void;
+  onSubmit: () => void;
+  /** Keeps the form as a draft for a customer who has not paid. New Booking only. */
+  onSaveDraft?: () => void;
+  savingDraft?: boolean;
+}) {
+  return (
+    <div className="w-full space-y-2" data-testid="booking-form-actions">
       {submitError && <div className="text-sm text-red-600">{submitError}</div>}
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="mr-auto min-w-0 text-sm">
+          <span className="font-semibold tabular-nums text-slate-900">Total {formatCurrency(bookingFinal)}</span>
+          {chargeNow > 0 && (
+            <span className="block text-xs tabular-nums text-slate-500">Charge now {formatCurrency(chargeNow)}</span>
+          )}
+        </div>
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         {onSaveDraft && (
           <Button variant="secondary" onClick={onSaveDraft} loading={savingDraft} disabled={loading} data-testid="booking-save-draft">
