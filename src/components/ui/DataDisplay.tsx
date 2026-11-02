@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useId, useRef, useState } 
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { ChevronRight, MoreHorizontal } from 'lucide-react';
+import { ChevronRight, MoreHorizontal, SlidersHorizontal } from 'lucide-react';
 import { useAnchoredMenu } from './anchored-menu';
 
 // ---------------------------------------------------------------------------
@@ -266,9 +266,68 @@ export function InfiniteScrollSentinel({
 interface FilterBarProps {
   children: React.ReactNode;
   className?: string;
+  /**
+   * The first child (the search) gets its own row, and the other filters sit
+   * in an even grid below it, so a long list wraps cleanly at any width. On
+   * phones and portrait tablets the grid folds behind a Filters button.
+   */
+  collapsible?: boolean;
+  /** How many filters are changed from their default, shown on the Filters button. */
+  activeCount?: number;
 }
 
-export function FilterBar({ children, className }: FilterBarProps) {
+export function FilterBar({ children, className, collapsible = false, activeCount = 0 }: FilterBarProps) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const [first, ...rest] = React.Children.toArray(children);
+
+  if (collapsible && rest.length > 0) {
+    return (
+      <div
+        suppressHydrationWarning
+        className={clsx(
+          'rounded-2xl glass-panel px-3 py-3 sm:px-4 landscape:py-2',
+          className
+        )}
+      >
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1 [&>*]:w-full">{first}</div>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-controls={panelId}
+            aria-label={activeCount > 0 ? `Filters, ${activeCount} changed` : 'Filters'}
+            data-testid="filter-toggle"
+            className={clsx(
+              'flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold ring-1 transition-colors touch-manipulation lg:hidden',
+              open || activeCount > 0
+                ? 'bg-indigo-50 text-indigo-700 ring-indigo-200'
+                : 'bg-white text-slate-700 ring-black/10'
+            )}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            <span className="hidden sm:inline">Filters</span>
+            {activeCount > 0 && (
+              <span className="rounded-full bg-indigo-600 px-1.5 text-xs font-bold text-white tabular-nums">{activeCount}</span>
+            )}
+          </button>
+        </div>
+        <div
+          id={panelId}
+          className={clsx(
+            'mt-2 grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] items-end gap-2 sm:gap-3',
+            '[&>*]:w-full [&>*]:min-w-0',
+            'lg:grid',
+            !open && 'hidden'
+          )}
+        >
+          {rest}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       suppressHydrationWarning
