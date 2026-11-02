@@ -532,7 +532,9 @@ export default function ExpensesPage() {
           </Card>
         )}
 
-        <FilterBar>
+        {/* The month is always picked, so only the category and a status other
+            than Recorded count as changed filters. */}
+        <FilterBar collapsible activeCount={(category ? 1 : 0) + (status !== 'recorded' ? 1 : 0)}>
           <Input
             placeholder="Search description, vendor, number..."
             value={searchInput}

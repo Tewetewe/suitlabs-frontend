@@ -1234,7 +1234,10 @@ export default function BookingsPage() {
             label="Booking views"
             testIdPrefix="bookings-view"
           />
-          <FilterBar>
+          <FilterBar
+            collapsible
+            activeCount={[filters.status, filters.payment_status, filters.event_from || filters.event_to].filter(Boolean).length}
+          >
             <InvoiceSearchField
               value={searchInput}
               onChange={handleSearch}

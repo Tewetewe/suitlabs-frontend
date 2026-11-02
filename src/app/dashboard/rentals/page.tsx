@@ -502,7 +502,10 @@ export default function RentalsPage() {
       >
         <ClientOnly>
           <QuickViews views={rentalViews} active={activeView} onSelect={selectView} label="Rental views" testIdPrefix="rentals-view" />
-          <FilterBar>
+          <FilterBar
+            collapsible
+            activeCount={[depositState, statusFilter, dateRange.from || dateRange.to].filter(Boolean).length}
+          >
             <InvoiceSearchField
               value={searchTerm}
               onChange={setSearchTerm}
