@@ -158,7 +158,7 @@ export default function TransactionFeesPage() {
                 const example = ruleFee({ ...rule, ...toInput(draft) }, 1_000_000);
                 return (
                   <div key={rule.id} className="grid gap-3 rounded-xl px-3 py-3 ring-1 ring-black/5 md:grid-cols-12 md:items-end" data-testid="fee-rule-row">
-                    <div className="md:col-span-4">
+                    <div className="md:col-span-4 xl:col-span-3">
                       <Input id={`fee-label-${rule.id}`} label="Label" value={draft.label} onChange={(e) => setDraft(rule.id, { label: e.target.value })} />
                     </div>
                     <div className="md:col-span-2 text-sm">
@@ -168,7 +168,7 @@ export default function TransactionFeesPage() {
                         {rule.terminal ? ` · ${rule.terminal.toUpperCase()}` : ''}
                       </div>
                     </div>
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-3 xl:col-span-2">
                       <Input
                         id={`fee-rate-${rule.id}`}
                         label="Rate (%)"
@@ -178,7 +178,7 @@ export default function TransactionFeesPage() {
                         helperText={`Rp 1.000.000 → ${formatCurrency(example)}`}
                       />
                     </div>
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-3 xl:col-span-2">
                       <Input
                         id={`fee-min-${rule.id}`}
                         label="Only above (Rp)"
@@ -187,8 +187,12 @@ export default function TransactionFeesPage() {
                         onChange={(e) => setDraft(rule.id, { min_amount: Number(e.target.value.replace(/\D/g, '')) || 0 })}
                       />
                     </div>
-                    <div className="flex items-center justify-between gap-3 md:col-span-2 md:justify-end">
-                      <Switch checked={draft.active} onChange={(active) => setDraft(rule.id, { active })} label="Active" />
+                    {/* Switch and Save need about 200px. Below xl the row is too narrow for
+                        that, so they take their own line, or they spill over the amount box. */}
+                    <div className="flex items-center justify-between gap-3 md:col-span-12 md:justify-end xl:col-span-3">
+                      <div className="w-full md:w-48 xl:w-full">
+                        <Switch checked={draft.active} onChange={(active) => setDraft(rule.id, { active })} label="Active" />
+                      </div>
                       <Button size="sm" disabled={!dirty} loading={saving === rule.id} onClick={() => void saveRule(rule.id)}>
                         Save
                       </Button>
