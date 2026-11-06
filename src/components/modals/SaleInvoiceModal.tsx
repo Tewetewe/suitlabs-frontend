@@ -13,7 +13,7 @@ import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
-import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
+import { receiptAddress, receiptHours, receiptPhone, receiptSubtitleLines } from '@/lib/branch-scope';
 import { customerLineName, customerItemName } from '@/lib/item-name';
 
 interface SaleInvoiceModalProps {
@@ -38,7 +38,7 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
     fromDeposit: sale.deposit_applied,
     owed: sale.total_amount || 0,
   });
-  const shopSubtitle = receiptSubtitle(sale.branch?.receipt_subtitle);
+  const shopSubtitle = receiptSubtitleLines(sale.branch?.receipt_subtitle);
   const shopAddress = receiptAddress(sale.branch?.address);
   const shopPhone = receiptPhone(sale.branch?.phone);
   const shopHours = receiptHours(sale.branch?.opening_hours);
@@ -99,7 +99,7 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
               <div className="thermal-receipt" data-testid="thermal-receipt">
                 <div className="receipt-center">
                   <div className="receipt-title">SUITLABS BALI</div>
-                  <div className="receipt-subtitle">{shopSubtitle}</div>
+                  {shopSubtitle.map((line) => <div key={line} className="receipt-subtitle">{line}</div>)}
                   <div className="receipt-line">{shopAddress}</div>
                   {shopPhone && <div className="receipt-line">{shopPhone}</div>}
                   {shopHours.map((hours) => <div key={hours} className="receipt-line">{hours}</div>)}

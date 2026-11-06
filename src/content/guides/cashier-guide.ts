@@ -363,7 +363,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
   <div class="flag care">
     <span class="flag-t">QRIS and card payments can add a fee</span>
-    <p>A QRIS, debit, or credit card payment can carry a <b>Transaction fee</b> on top. Admin sets the rate for each EDC and card. When the shop has two terminals for the same card, the screen asks <b>EDC terminal and card</b>: pick the BCA or BNI machine you will tap, and the kind of card. Then the screen shows <b>Charge by QRIS</b> or <b>Charge on EDC</b> — that is the amount to enter on the machine. The receipt prints the fee too. It is not shop revenue, so do not add it to any amount you type.</p>
+    <p>A QRIS, debit, or credit card payment can carry a <b>Transaction fee</b> on top. Admin sets the rate for each EDC and card. When the shop has two terminals for the same card, the screen asks <b>EDC terminal and card</b>: pick the BCA or BNI machine you will tap, and the kind of card. Then the screen shows <b>Charge by QRIS</b> or <b>Charge on EDC</b> — that is the amount to enter on the machine. The receipt prints the fee as <b>Service fee</b>, so the customer sees that name. It is not shop revenue, so do not add it to any amount you type.</p>
   </div>
 
   <div class="cols two">

@@ -14,10 +14,10 @@ import {
 } from './escpos';
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
-import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from './branch-scope';
+import { receiptAddress, receiptHours, receiptPhone, receiptSubtitleLines } from './branch-scope';
 import { rentalReceiptPricing } from './rental-receipt';
 import { refundableDeposit as refundableAfterCharges } from './deposit';
-import { TRANSACTION_FEE_LABEL } from './transaction-fee';
+import { RECEIPT_FEE_LABEL } from './transaction-fee';
 import { receiptTotals, type ReceiptTotalLine } from './receipt-totals';
 import { itemTags, customerLineName } from './item-name';
 
@@ -405,9 +405,11 @@ export class ThermalPrinterService {
       .text('SUITLABS BALI')
       .lineFeed()
       .setFontSize(1, 1)
-      .setBold(false)
-      .text(receiptSubtitle(invoice.company?.subtitle))
-      .lineFeed(2);
+      .setBold(false);
+    for (const line of receiptSubtitleLines(invoice.company?.subtitle)) {
+      generator.text(line).lineFeed();
+    }
+    generator.lineFeed();
 
     // Company Info (optimized for 58mm paper width)
     generator
@@ -529,7 +531,7 @@ export class ThermalPrinterService {
   async printRentalInvoice(rental: Rental): Promise<void> {
     const generator = new ESCPOSGenerator();
     const invoiceNumber = rentalInvoiceNumber(rental);
-    const shopSubtitle = receiptSubtitle(rental.branch?.receipt_subtitle);
+    const shopSubtitle = receiptSubtitleLines(rental.branch?.receipt_subtitle);
     const shopAddress = receiptAddress(rental.branch?.address);
     const shopPhone = receiptPhone(rental.branch?.phone);
     const shopHours = receiptHours(rental.branch?.opening_hours);
@@ -545,9 +547,11 @@ export class ThermalPrinterService {
       .text('SUITLABS BALI')
       .lineFeed()
       .setFontSize(1, 1)
-      .setBold(false)
-      .text(shopSubtitle)
-      .lineFeed(2);
+      .setBold(false);
+    for (const line of shopSubtitle) {
+      generator.text(line).lineFeed();
+    }
+    generator.lineFeed();
 
     // Company Info (optimized for 58mm paper width)
     generator
@@ -629,7 +633,7 @@ export class ThermalPrinterService {
     }
     generator.setBold(true).text(`GRAND TOTAL: ${formatCurrencyForPrint(total)}`).lineFeed().setBold(false);
     if ((rental.transaction_fee || 0) > 0) {
-      generator.text(`${TRANSACTION_FEE_LABEL}: ${formatCurrencyForPrint(rental.transaction_fee || 0)}`).lineFeed();
+      generator.text(`${RECEIPT_FEE_LABEL}: ${formatCurrencyForPrint(rental.transaction_fee || 0)}`).lineFeed();
     }
 
     if ((rental.security_deposit || 0) > 0) {
@@ -672,7 +676,7 @@ export class ThermalPrinterService {
   async printSaleInvoice(sale: Sale): Promise<void> {
     const generator = new ESCPOSGenerator();
     const invoiceNumber = saleInvoiceNumber(sale);
-    const shopSubtitle = receiptSubtitle(sale.branch?.receipt_subtitle);
+    const shopSubtitle = receiptSubtitleLines(sale.branch?.receipt_subtitle);
     const shopAddress = receiptAddress(sale.branch?.address);
     const shopPhone = receiptPhone(sale.branch?.phone);
     const shopHours = receiptHours(sale.branch?.opening_hours);
@@ -688,9 +692,11 @@ export class ThermalPrinterService {
       .text('SUITLABS BALI')
       .lineFeed()
       .setFontSize(1, 1)
-      .setBold(false)
-      .text(shopSubtitle)
-      .lineFeed(2);
+      .setBold(false);
+    for (const line of shopSubtitle) {
+      generator.text(line).lineFeed();
+    }
+    generator.lineFeed();
 
     generator
       .setFontSize(1, 1)
