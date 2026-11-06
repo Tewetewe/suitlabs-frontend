@@ -13,6 +13,9 @@ import type { FeeMethod, TransactionFeeRule } from '@/types';
 
 export const TRANSACTION_FEE_LABEL = 'Transaction fee';
 
+/** The same fee on customer receipts and invoices. Backend: entity.ReceiptFeeLabel. */
+export const RECEIPT_FEE_LABEL = 'Service fee';
+
 /** For a form where the amount is not known until the backend prices it. */
 export const TRANSACTION_FEE_HINT = 'QRIS and card payments may add a transaction fee on top.';
 

@@ -13,7 +13,7 @@ import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
-import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
+import { receiptAddress, receiptHours, receiptPhone, receiptSubtitleLines } from '@/lib/branch-scope';
 
 interface BookingInvoiceModalProps {
   isOpen: boolean;
@@ -106,7 +106,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
                   {/* Company Header - same as bprint */}
                   <div className="receipt-center">
                     <div className="receipt-title">SUITLABS BALI</div>
-                    <div className="receipt-subtitle">{receiptSubtitle(invoice.company?.subtitle)}</div>
+                    {receiptSubtitleLines(invoice.company?.subtitle).map((line) => <div key={line} className="receipt-subtitle">{line}</div>)}
                     <div className="receipt-line">{receiptAddress(invoice.company?.address)}</div>
                     {shopPhone && <div className="receipt-line">{shopPhone}</div>}
                     {shopHours.map((hours) => <div key={hours} className="receipt-line">{hours}</div>)}

@@ -9,13 +9,13 @@ import { invoiceBarcodeValue, rentalInvoiceNumber } from '@/lib/barcode';
 import { refundableDeposit as refundableAfterCharges } from '@/lib/deposit';
 import { rentalReceiptPricing } from '@/lib/rental-receipt';
 import { formatCurrency } from '@/lib/currency';
-import { TRANSACTION_FEE_LABEL } from '@/lib/transaction-fee';
+import { RECEIPT_FEE_LABEL } from '@/lib/transaction-fee';
 import { InvoicePrintActions } from '@/components/print/InvoicePrintActions';
 import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
-import { receiptAddress, receiptHours, receiptPhone, receiptSubtitle } from '@/lib/branch-scope';
+import { receiptAddress, receiptHours, receiptPhone, receiptSubtitleLines } from '@/lib/branch-scope';
 import { customerItemName } from '@/lib/item-name';
 
 interface RentalInvoiceModalProps {
@@ -33,7 +33,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
 
   // Generate invoice number
   const invoiceNumber = rentalInvoiceNumber(rental);
-  const shopSubtitle = receiptSubtitle(rental.branch?.receipt_subtitle);
+  const shopSubtitle = receiptSubtitleLines(rental.branch?.receipt_subtitle);
   const shopAddress = receiptAddress(rental.branch?.address);
   const shopPhone = receiptPhone(rental.branch?.phone);
   const shopHours = receiptHours(rental.branch?.opening_hours);
@@ -110,7 +110,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
               {/* Company Header - same as bprint/booking */}
               <div className="receipt-center">
                 <div className="receipt-title">SUITLABS BALI</div>
-                <div className="receipt-subtitle">{shopSubtitle}</div>
+                {shopSubtitle.map((line) => <div key={line} className="receipt-subtitle">{line}</div>)}
                 <div className="receipt-line">{shopAddress}</div>
                 {shopPhone && <div className="receipt-line">{shopPhone}</div>}
                 {shopHours.map((hours) => <div key={hours} className="receipt-line">{hours}</div>)}
@@ -176,7 +176,7 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
               )}
               <div className="receipt-total">GRAND TOTAL: {formatCurrency(total)}</div>
               {(rental.transaction_fee || 0) > 0 && (
-                <div className="receipt-line">{TRANSACTION_FEE_LABEL}: {formatCurrency(rental.transaction_fee || 0)}</div>
+                <div className="receipt-line">{RECEIPT_FEE_LABEL}: {formatCurrency(rental.transaction_fee || 0)}</div>
               )}
               {(rental.security_deposit || 0) > 0 && (
                 <>

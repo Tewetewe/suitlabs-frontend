@@ -214,7 +214,7 @@ export default function BranchesPage() {
           <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
           <div className="md:col-span-2">
-            <Input label="Receipt subtitle" value={form.receipt_subtitle} onChange={(e) => setForm({ ...form, receipt_subtitle: e.target.value })} />
+            <Input label="Receipt subtitle" value={form.receipt_subtitle} onChange={(e) => setForm({ ...form, receipt_subtitle: e.target.value })} helperText="Printed under SUITLABS BALI. Separate receipt lines with |; a line holds 32 characters." />
           </div>
           <div className="md:col-span-2">
             <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
