@@ -53,17 +53,15 @@ export function headerBranchId(method?: string): string | undefined {
 }
 
 /**
- * The shop block printed on every receipt and invoice. The subtitle and the
- * address fall back to the Jimbaran shop, because a receipt with a blank
- * address is worse than a receipt with the wrong one. The phone stays empty
- * when the branch has none, so no receipt prints a number nobody answers.
- * These mirror entity.Branch.ReceiptInfo on the backend — change both together.
+ * The shop block printed on every receipt and invoice: the brand, the
+ * subtitle, the phone and the hours. Receipts print no address. The subtitle
+ * falls back to the shared tagline. The phone stays empty when the branch has
+ * none, so no receipt prints a number nobody answers. These mirror
+ * entity.Branch.ReceiptInfo on the backend — change both together.
  */
 export const RECEIPT_BRAND_NAME = 'SUITLABS BALI';
 /** One tagline for every shop; "|" splits it into two lines that fit 58 mm. */
-export const RECEIPT_FALLBACK_SUBTITLE = 'The Finest Suit & Tux Rentals | based in South Kuta - Bali';
-export const RECEIPT_FALLBACK_ADDRESS =
-  'Jl. Bukit Sari No.2, Jimbaran, Kec. Kuta Sel., Kabupaten Badung, Bali 80361';
+export const RECEIPT_FALLBACK_SUBTITLE = 'The Finest Suit & Tux Rentals | South Kuta - Bali';
 export const RECEIPT_FALLBACK_HOURS = 'MON-FRI: 12.00-20.00 | SAT-SUN: 12.00-18.00';
 
 /** Split a compact Branch value at "|" or a newline into receipt lines. */
@@ -74,10 +72,6 @@ function receiptLines(value: string): string[] {
 /** The subtitle as the lines a 58 mm receipt prints, one per "|". */
 export function receiptSubtitleLines(subtitle?: string | null): string[] {
   return receiptLines(subtitle?.trim() || RECEIPT_FALLBACK_SUBTITLE);
-}
-
-export function receiptAddress(address?: string | null): string {
-  return address?.trim() || RECEIPT_FALLBACK_ADDRESS;
 }
 
 export function receiptPhone(phone?: string | null): string {

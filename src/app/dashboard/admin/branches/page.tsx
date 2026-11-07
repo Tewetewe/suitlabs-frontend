@@ -217,7 +217,7 @@ export default function BranchesPage() {
             <Input label="Receipt subtitle" value={form.receipt_subtitle} onChange={(e) => setForm({ ...form, receipt_subtitle: e.target.value })} helperText="Printed under SUITLABS BALI. Separate receipt lines with |; a line holds 32 characters." />
           </div>
           <div className="md:col-span-2">
-            <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} helperText="Used in WhatsApp reminders and the deposit agreement. Receipts do not print it." />
           </div>
           <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <Input label="Opening hours" value={form.opening_hours} onChange={(e) => setForm({ ...form, opening_hours: e.target.value })} helperText="Shown on receipts and in WhatsApp pickup and return reminders. Separate receipt lines with |. Leave empty to hide the line." />

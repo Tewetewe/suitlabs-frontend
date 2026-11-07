@@ -14,7 +14,7 @@ import {
 } from './escpos';
 import { InvoiceData, Rental, Sale } from '@/types';
 import { invoiceBarcodeValue, rentalInvoiceNumber, saleInvoiceNumber } from './barcode';
-import { receiptAddress, receiptHours, receiptPhone, receiptSubtitleLines } from './branch-scope';
+import { receiptHours, receiptPhone, receiptSubtitleLines } from './branch-scope';
 import { rentalReceiptPricing } from './rental-receipt';
 import { refundableDeposit as refundableAfterCharges } from './deposit';
 import { RECEIPT_FEE_LABEL } from './transaction-fee';
@@ -412,11 +412,7 @@ export class ThermalPrinterService {
     generator.lineFeed();
 
     // Company Info (optimized for 58mm paper width)
-    generator
-      .setFontSize(1, 1)
-      .text(receiptAddress(invoice.company?.address))
-      .lineFeed();
-    
+    generator.setFontSize(1, 1);
     if (shopPhone) {
       generator.text(shopPhone).lineFeed();
     }
@@ -532,7 +528,6 @@ export class ThermalPrinterService {
     const generator = new ESCPOSGenerator();
     const invoiceNumber = rentalInvoiceNumber(rental);
     const shopSubtitle = receiptSubtitleLines(rental.branch?.receipt_subtitle);
-    const shopAddress = receiptAddress(rental.branch?.address);
     const shopPhone = receiptPhone(rental.branch?.phone);
     const shopHours = receiptHours(rental.branch?.opening_hours);
 
@@ -554,10 +549,7 @@ export class ThermalPrinterService {
     generator.lineFeed();
 
     // Company Info (optimized for 58mm paper width)
-    generator
-      .setFontSize(1, 1)
-      .text(shopAddress)
-      .lineFeed();
+    generator.setFontSize(1, 1);
     if (shopPhone) {
       generator.text(shopPhone).lineFeed();
     }
@@ -677,7 +669,6 @@ export class ThermalPrinterService {
     const generator = new ESCPOSGenerator();
     const invoiceNumber = saleInvoiceNumber(sale);
     const shopSubtitle = receiptSubtitleLines(sale.branch?.receipt_subtitle);
-    const shopAddress = receiptAddress(sale.branch?.address);
     const shopPhone = receiptPhone(sale.branch?.phone);
     const shopHours = receiptHours(sale.branch?.opening_hours);
     const customerName = sale.customer
@@ -698,10 +689,7 @@ export class ThermalPrinterService {
     }
     generator.lineFeed();
 
-    generator
-      .setFontSize(1, 1)
-      .text(shopAddress)
-      .lineFeed();
+    generator.setFontSize(1, 1);
     if (shopPhone) {
       generator.text(shopPhone).lineFeed();
     }
