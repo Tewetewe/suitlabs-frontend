@@ -15,7 +15,7 @@ import SimpleModal from '@/components/modals/SimpleModal';
 import { RackPullList } from '@/components/items/RackPullList';
 import { useToast } from '@/contexts/ToastContext';
 import Barcode from '@/components/ui/Barcode';
-import { receiptAddress, receiptHours, receiptPhone, receiptSubtitleLines } from '@/lib/branch-scope';
+import { receiptHours, receiptPhone, receiptSubtitleLines } from '@/lib/branch-scope';
 import { customerItemName } from '@/lib/item-name';
 
 interface RentalInvoiceModalProps {
@@ -34,7 +34,6 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
   // Generate invoice number
   const invoiceNumber = rentalInvoiceNumber(rental);
   const shopSubtitle = receiptSubtitleLines(rental.branch?.receipt_subtitle);
-  const shopAddress = receiptAddress(rental.branch?.address);
   const shopPhone = receiptPhone(rental.branch?.phone);
   const shopHours = receiptHours(rental.branch?.opening_hours);
 
@@ -111,7 +110,6 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
               <div className="receipt-center">
                 <div className="receipt-title">SUITLABS BALI</div>
                 {shopSubtitle.map((line) => <div key={line} className="receipt-subtitle">{line}</div>)}
-                <div className="receipt-line">{shopAddress}</div>
                 {shopPhone && <div className="receipt-line">{shopPhone}</div>}
                 {shopHours.map((hours) => <div key={hours} className="receipt-line">{hours}</div>)}
               </div>
