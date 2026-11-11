@@ -561,7 +561,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <h3>Return Check — every return, every day</h3>
   <ol class="steps">
     <li><b>Open Return Check.</b><span>It opens on <b>today</b>. Today's list also shows every older rental that is still not back, with a red <b>days late</b> badge.</span></li>
-    <li><b>Clear the reminders.</b><span><b>Pickups to remind</b> at the top lists today's Pickups. Each return card shows its WhatsApp state. After the 10:00 automatic run, tap <b>Send pickup WA</b> or <b>Send return WA</b> for each one that still reads <b>Not reminded</b>. The <b>To remind</b> count goes down as you work.</span></li>
+    <li><b>Clear the reminders.</b><span><b>Pickups to remind</b> at the top lists today's Pickups. Each return card shows its WhatsApp state. After the 12:00 automatic run, tap <b>Send pickup WA</b> or <b>Send return WA</b> for each one that still reads <b>Not reminded</b>. The <b>To remind</b> count goes down as you work.</span></li>
     <li><b>When the customer comes back, check each Item.</b><span>Scan the code or tick <b>Received</b>. Then tick <b>No damage</b> and <b>No stain</b>. <b>All OK</b> ticks all three at once.</span></li>
     <li><b>Mark a problem.</b><span><b>Damaged</b> or <b>Missing</b>, with a note. The check changes no Item status. Complete does that.</span></li>
     <li><b>Tap Complete return.</b><span>The Complete screen opens with your problem notes in <b>Damage notes</b>, and only the damaged Items ticked for maintenance. The invoice opens after Complete, the same as on Rentals.</span></li>
@@ -582,7 +582,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
 
   <div class="flag stop">
     <span class="flag-t">One reminder is enough</span>
-    <p>At <b>10:00</b> the system sends a reminder for every Pickup and every return due that day. After 10:00, send by hand only when the card reads <b>Not reminded</b> or <b>Last send failed</b>. A late rental from an earlier day gets no automatic reminder, so its card reads Not reminded until you send one. A card that reads <b>WhatsApp sent</b> is done. Two sends to the same customer need 15 seconds between them, so a double tap does not send twice. There is no limit per day.</p>
+    <p>At <b>12:00</b> the system sends a reminder for every Pickup and every return due that day. After 12:00, send by hand only when the card reads <b>Not reminded</b> or <b>Last send failed</b>. A late rental from an earlier day gets no automatic reminder, so its card reads Not reminded until you send one. A card that reads <b>WhatsApp sent</b> is done. Two sends to the same customer need 15 seconds between them, so a double tap does not send twice. There is no limit per day.</p>
   </div>
   <div class="flag care">
     <span class="flag-t">A missing Item is a Sale, not a damage charge</span>
@@ -665,7 +665,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
   <h3><span class="chip day">Every shift · open</span></h3>
   <ul class="plain">
     <li>Log in and <b>check the shop name in the top bar</b> is your shop.</li>
-    <li>Open <b>Return Check</b>. After 10:00, send a WhatsApp to every card that still reads <b>Not reminded</b>, until <b>To remind</b> is 0.</li>
+    <li>Open <b>Return Check</b>. After 12:00, send a WhatsApp to every card that still reads <b>Not reminded</b>, until <b>To remind</b> is 0.</li>
     <li>Look at the red <b>days late</b> cards on Return Check. Each one is a phone call you owe someone.</li>
     <li>Open <b>Pickup Prep</b> and start pulling tomorrow's Items from the rack.</li>
     <li>Check the printer is paired and the drawer opens. Check the float in the drawer.</li>

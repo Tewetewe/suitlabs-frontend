@@ -122,7 +122,7 @@ export default function WARemindersPage() {
   return (
     <PageShell
       title="WhatsApp Reminders"
-      subtitle="Every WhatsApp message the system sends through Wablas. Pickup and return reminders auto-send at 10:00 (shop timezone)."
+      subtitle="Every WhatsApp message the system sends through Wablas. Pickup and return reminders auto-send at 12:00 (shop timezone)."
     >
       <div className="space-y-4">
         <Card>

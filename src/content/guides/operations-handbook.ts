@@ -259,7 +259,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <tr><td><b>Assets</b></td><td>Inventory value plus fixed assets — racks, steamers, chairs — with buying price, purchase date, vendor, and how they were paid for. In use, or disposed.</td><td>Recording a purchase here moves real money. Paying by cash or bank reduces cash; on credit it creates a payable. Disposing an asset writes its remaining value off.</td></tr>
         <tr><td><b>Financial Report</b></td><td>P&amp;L, Balance Sheet, Cash Flow, per month or full year, per shop or the group. Opening Balance, Payables, Loans, Dividends. Excel export. Google Sheets export runs with retry. Lock month.</td><td>All of it is accrual. Reconcile before you lock, not after.</td></tr>
         <tr><td><b>Analytics</b></td><td>Owner decision board: booking value and outstanding, sales revenue, monthly volume, occasion and package mix, how money arrived, sales vs clearance, sizes and colours that move, hottest and idle stock, per shop — with advice cards.</td><td>This is operational demand and mix, not P&amp;L. Use Financial Report for the books. The sheet is a mirror, not the place to decide.</td></tr>
-        <tr><td><b>WA Reminders</b></td><td>The Wablas setup state, the recent reminder log, and <b>Send now</b> for the whole day's pickup and return reminders. The automatic run is at 10:00.</td><td>A row reads <code>sent</code> when Wablas takes the message, not when the customer gets it. Use Return Check for one customer; use Send now only when the 10:00 run did not go out.</td></tr>
+        <tr><td><b>WA Reminders</b></td><td>The Wablas setup state, the recent reminder log, and <b>Send now</b> for the whole day's pickup and return reminders. The automatic run is at 12:00, when the shops open.</td><td>A row reads <code>sent</code> when Wablas takes the message, not when the customer gets it. Use Return Check for one customer; use Send now only when the 12:00 run did not go out.</td></tr>
         <tr><td><b>Transaction Fees</b></td><td>The Transaction Fee rules for QRIS, debit and credit card.</td><td>The fee is not revenue and posts no Journal Entry. It covers the bank's MDR.</td></tr>
         <tr><td><b>Bulk Input Sync</b></td><td>Pull item changes in from the Google Sheet when someone has edited it in bulk.</td><td>The database is the source of truth. Blank cells in the sheet preserve the database value — they don't clear it.</td></tr>
       </tbody>
@@ -497,7 +497,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
 
   <div class="flag care">
     <span class="flag-t">Warm a new number up</span>
-    <p>A number that has never sent anything and then sends 60 messages at 10:00 is the classic restriction pattern. On a fresh number, lower <code>WABLAS_MAX_PER_RUN</code> for the first week and let the volume climb. The 60 cap is a ceiling, not a target.</p>
+    <p>A number that has never sent anything and then sends 60 messages at 12:00 is the classic restriction pattern. On a fresh number, lower <code>WABLAS_MAX_PER_RUN</code> for the first week and let the volume climb. The 60 cap is a ceiling, not a target.</p>
   </div>
 
   <div class="flag care">
@@ -957,7 +957,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <h3><span class="chip stf">Staff</span> <span class="chip day">Daily</span></h3>
   <ul class="plain">
     <li>Confirm the shop in the top bar before the first transaction.</li>
-    <li>Open <b>Return Check</b>: clear <b>To remind</b> after the 10:00 run, and phone every late rental.</li>
+    <li>Open <b>Return Check</b>: clear <b>To remind</b> after the 12:00 run, and phone every late rental.</li>
     <li>Fill <b>Pickup Prep</b> for tomorrow before close. Every card reads Ready, or has a note on the replacement Item.</li>
     <li>Run every transaction through the POS as it happens — no paper, no catching up later.</li>
     <li>ID photo on every hand-over; every return ticked on Return Check before <b>Complete return</b>.</li>
