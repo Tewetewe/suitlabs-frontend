@@ -55,7 +55,7 @@ export default function DepositAgreementPage() {
     <main className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-50 px-4 py-10">
       <div className="mx-auto w-full max-w-lg space-y-6">
         <header className="space-y-1 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">SuitLabs</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Suitlabs Bali</p>
           <h1 className="text-2xl font-semibold text-slate-900">
             {isEN ? 'Security Deposit Agreement' : 'Perjanjian Jaminan'}
           </h1>
@@ -122,8 +122,8 @@ export default function DepositAgreementPage() {
             {view.accepted ? (
               <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                 {isEN
-                  ? 'Accepted. Your rental may be collected at the shop.'
-                  : 'Telah disetujui. Sewaan Anda dapat diambil di toko.'}
+                  ? 'Thank you! The agreement is accepted, and your rental order is ready to pick up at the store. 🙏'
+                  : 'Terima kasih, Kak! Perjanjian sudah disetujui, dan pesanan sewa Anda dapat diambil di toko. 🙏'}
                 {view.accepted_at && (
                   <span className="mt-1 block text-xs opacity-80">{formatDateShort(view.accepted_at)}</span>
                 )}

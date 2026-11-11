@@ -191,7 +191,7 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
 
                   <div className="receipt-divider"></div>
                   <div className="receipt-center">
-                    <div className="receipt-line">Thank you for using SuitLabs!</div>
+                    <div className="receipt-line">Thank you for choosing Suitlabs Bali!</div>
                     <div className="receipt-line receipt-small">suitlabs.bali</div>
                   </div>
                 </div>

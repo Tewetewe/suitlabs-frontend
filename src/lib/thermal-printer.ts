@@ -33,8 +33,23 @@ const THERMAL_PRINTER_SERVICE_UUIDS = [
   '000018f0-0000-1000-8000-00805f9b34fb', // 18F0 (Star Micronics BLE)
 ];
 
-/** ESC p 0 50 100 — drawer pin 2, 100 ms on, 200 ms off. Matches the Android bridge. */
-const DRAWER_KICK = new Uint8Array([0x1b, 0x70, 0x00, 50, 100]);
+/**
+ * Drawer kick on-time. A shorter pulse drives the solenoid for less time, so
+ * the drawer opens with less force. 25 ms is the default of the Android bridge
+ * (ReceiptPrinter.DEFAULT_DRAWER_PULSE_MS). It is below the drawer's documented
+ * 50–200 ms range: the shop chose it because the 100 ms pulse was a danger to
+ * staff. Before 2026-11-11 the pulse was 100 ms.
+ */
+const DRAWER_PULSE_MS = 25;
+const DRAWER_OFF_MS = 200;
+/** ESC p 0 t1 t2 — drawer pin 2. t1 and t2 are in units of 2 ms. */
+const DRAWER_KICK = new Uint8Array([
+  0x1b,
+  0x70,
+  0x00,
+  DRAWER_PULSE_MS / 2,
+  Math.max(DRAWER_PULSE_MS, DRAWER_OFF_MS) / 2,
+]);
 const DRAWER_KICK_DEBOUNCE_MS = 1000;
 const DRAWER_SETTLE_MS = 250;
 
@@ -280,9 +295,9 @@ export class ThermalPrinterService {
   /**
    * Pop the cash drawer wired to the printer's DK port.
    *
-   * Byte-for-byte the pulse the Android Print Bridge sends (ReceiptPrinter.java:
-   * DRAWER_KICK) — pin 2, 100 ms on, 200 ms off — so a drawer that works at the
-   * counter tablet works the same from a laptop. The 1 s debounce is the same
+   * The same pulse as the default of the Android Print Bridge (ReceiptPrinter.java:
+   * drawerKick) — pin 2, 25 ms on, 200 ms off. The bridge lets the shop change
+   * its pulse on the setup screen; a laptop always sends 25 ms. The 1 s debounce is the same
    * guard: two kicks in quick succession can stall the solenoid.
    */
   async openCashDrawer(): Promise<void> {
@@ -510,7 +525,7 @@ export class ThermalPrinterService {
     generator.separator();
     generator
       .setAlign('center')
-      .text('Thank you for using SuitLabs!')
+      .text('Thank you for choosing Suitlabs Bali!')
       .lineFeed()
       .text('suitlabs.bali')
       .lineFeed();
@@ -654,7 +669,7 @@ export class ThermalPrinterService {
     generator.separator();
     generator
       .setAlign('center')
-      .text('Thank you for using SuitLabs!')
+      .text('Thank you for choosing Suitlabs Bali!')
       .lineFeed()
       .text('suitlabs.bali')
       .lineFeed();
@@ -757,7 +772,7 @@ export class ThermalPrinterService {
     generator.separator();
     generator
       .setAlign('center')
-      .text('Thank you for using SuitLabs!')
+      .text('Thank you for choosing Suitlabs Bali!')
       .lineFeed()
       .text('suitlabs.bali')
       .lineFeed();
