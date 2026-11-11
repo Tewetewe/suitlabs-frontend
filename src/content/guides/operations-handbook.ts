@@ -255,7 +255,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
       <thead><tr><th style="width:22%">Screen</th><th style="width:38%">What it is for</th><th>The thing people get wrong</th></tr></thead>
       <tbody>
         <tr><td><b>Users</b></td><td>Create accounts, set role, assign branches, deactivate leavers.</td><td>Deactivate, don't delete. And no shared logins.</td></tr>
-        <tr><td><b>Branches</b></td><td>Each shop's name, code, receipt subtitle, address, phone, <b>opening hours</b>, geofence, and Google Sheet.</td><td>Receipt text here is what prints on customers' invoices, and opening hours is what the WhatsApp reminders quote. Both reach customers, so check a real print and a real reminder after editing. The spreadsheet ID is this shop only — Jimbaran and Nusa Dua do not share a sheet.</td></tr>
+        <tr><td><b>Branches</b></td><td>Each shop's name, code, receipt subtitle, address, phone, <b>opening hours</b>, <b>Google Maps link</b>, geofence, and Google Sheet.</td><td>Receipt text here is what prints on customers' invoices, and the address and Google Maps link are what the WhatsApp reminders send. Both reach customers, so check a real print and a real reminder after editing. The spreadsheet ID is this shop only — Jimbaran and Nusa Dua do not share a sheet.</td></tr>
         <tr><td><b>Assets</b></td><td>Inventory value plus fixed assets — racks, steamers, chairs — with buying price, purchase date, vendor, and how they were paid for. In use, or disposed.</td><td>Recording a purchase here moves real money. Paying by cash or bank reduces cash; on credit it creates a payable. Disposing an asset writes its remaining value off.</td></tr>
         <tr><td><b>Financial Report</b></td><td>P&amp;L, Balance Sheet, Cash Flow, per month or full year, per shop or the group. Opening Balance, Payables, Loans, Dividends. Excel export. Google Sheets export runs with retry. Lock month.</td><td>All of it is accrual. Reconcile before you lock, not after.</td></tr>
         <tr><td><b>Analytics</b></td><td>Owner decision board: booking value and outstanding, sales revenue, monthly volume, occasion and package mix, how money arrived, sales vs clearance, sizes and colours that move, hottest and idle stock, per shop — with advice cards.</td><td>This is operational demand and mix, not P&amp;L. Use Financial Report for the books. The sheet is a mirror, not the place to decide.</td></tr>
@@ -475,7 +475,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   </div>
 
   <h3>What a reminder says</h3>
-  <p class="measure">Both reminders open with the customer's name, the shop, and today's date, then list the items, the branch name and address, the <b>opening hours</b> from the Branches page, and the branch phone. The return reminder adds the deadline and the late fee in plain numbers — back by 20:00 on the return date, then 50% of the rental for each day late — because a customer who reads a figure acts on it and a customer who reads "late fees apply" does not. A branch with no opening hours simply drops that line.</p>
+  <p class="measure">Both reminders open with the customer's name, the shop, and today's date, then list the items, the branch name and address, and the <b>Google Maps link</b> from the Branches page. The pickup reminder gives the pickup window, 14.00 to 20.00 WITA. The return reminder asks for the items back by 18.00 WITA. Both state the late fee in plain numbers — 50% of the rental for each day late — because a customer who reads a figure acts on it and a customer who reads "late fees apply" does not. The fee itself starts only after 20:00, so a customer who comes after 18.00 has two hours before any fee. A branch with no map link drops that line.</p>
 
   <h3>Protecting the shop's WhatsApp number</h3>
   <p class="measure">Reminders and the deposit agreement go out through Wablas from <b>one</b> WhatsApp number. If WhatsApp restricts that number, every reminder at both shops stops at once, and Pickup stops with it because the agreement cannot be sent. These are the controls in place.</p>
@@ -795,7 +795,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
         <tr>
           <td><b>Laptop + paired printer</b><br><span style="color:var(--ink-3);font-size:.85rem">Chrome or Edge, on the HTTPS address</span></td>
           <td>Open an invoice, press <b>Connect printer</b>, pick the Bluetooth printer. Lasts for that browser tab — the web platform will not let a page silently reconnect to it later.</td>
-          <td>Straight to 58&nbsp;mm paper, <b>and the drawer opens</b>, with the same pulse the Android bridge sends.</td>
+          <td>Straight to 58&nbsp;mm paper, <b>and the drawer opens</b>, with the default 25&nbsp;ms pulse of the Android bridge.</td>
         </tr>
       </tbody>
     </table>
@@ -805,7 +805,9 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
   <ul class="plain">
     <li>The drawer connects to the <b>printer's DK / RJ11 port</b> with the iWare CD-339 cable — not to the phone, not to a USB port, not to a computer.</li>
     <li>Check the printer's DK output voltage, current rating and pinout against the drawer <b>before</b> connecting it.</li>
-    <li>The bridge sends a 100&nbsp;ms on / 200&nbsp;ms off pulse on drawer pin 2, inside the drawer's documented 50–200&nbsp;ms range, then waits 250&nbsp;ms and prints.</li>
+    <li>The bridge sends a 25&nbsp;ms on / 200&nbsp;ms off pulse on drawer pin 2, then waits 250&nbsp;ms and prints. 25&nbsp;ms is below the drawer's documented 50–200&nbsp;ms range. The shop chose it because a 100&nbsp;ms pulse opened the drawer too hard for staff.</li>
+    <li>If the drawer does not open every time, open the Print Bridge app and pick a longer <b>Drawer pulse</b> (50, 75 or 100&nbsp;ms), then press <b>Test cash drawer</b>. Use the shortest pulse that opens the drawer every time. A laptop always sends 25&nbsp;ms.</li>
+    <li>The pulse only releases the latch. A spring pushes the tray out. If the tray still comes out too fast, fix the spring, not the pulse.</li>
   </ul>
 
   <h3>What is on a printed receipt</h3>
@@ -1015,7 +1017,7 @@ export const OPERATIONS_HANDBOOK_HTML = `<nav class="bar">
     <li><b>Access audit.</b> Every account, every role, every branch assignment. Deactivate the rest.</li>
     <li><b>Tax decision.</b> The tax pack is a seam that is currently switched off; if the business needs PPN handling, that is the moment to configure it — and it changes how every future entry posts.</li>
     <li><b>Reprint worn barcode labels</b> and check the printers, the drawer cable, and the bridge app on each device.</li>
-    <li><b>Branch details</b> — receipt text, address, phone, opening hours, geofence — still correct on every printed invoice and every WhatsApp reminder.</li>
+    <li><b>Branch details</b> — receipt text, address, phone, opening hours, Google Maps link, geofence — still correct on every printed invoice and every WhatsApp reminder.</li>
   </ul>
 
   <h3><span class="chip adm">Admin</span> <span class="chip ev">One-time · when something changes</span></h3>

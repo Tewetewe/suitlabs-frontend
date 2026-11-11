@@ -800,6 +800,7 @@ export interface Branch {
   address: string;
   phone: string;
   opening_hours?: string;
+  maps_url?: string;
   email: string;
   website: string;
   latitude: number;
