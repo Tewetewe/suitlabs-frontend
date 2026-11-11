@@ -1724,13 +1724,11 @@ export function CashierPOS() {
         isOpen={!!invoiceData}
         invoice={invoiceData}
         onClose={() => setInvoiceData(null)}
-        autoSendWhatsApp
       />
       <SaleInvoiceModal
         isOpen={!!saleInvoice}
         sale={saleInvoice}
         onClose={() => setSaleInvoice(null)}
-        autoSendWhatsApp
       />
     </div>
   );

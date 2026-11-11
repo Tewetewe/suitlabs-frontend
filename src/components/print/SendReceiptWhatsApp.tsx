@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { PhoneInput } from '@/components/ui/PhoneInput';
@@ -22,15 +22,11 @@ export type ReceiptWhatsAppTarget = {
    * record. A booking invoice has none; its customer is read from the Booking.
    */
   customerId?: string;
-  /**
-   * Sends the receipt to the customer phone once, as soon as it is on screen.
-   * Set it only right after a payment, not for a reprint.
-   */
-  autoSend?: boolean;
 };
 
 /**
- * Sends the receipt on screen to the customer's WhatsApp. With a phone on the
+ * Sends the receipt on screen to the customer's WhatsApp when Staff tap the
+ * button; nothing is sent by itself. With a phone on the
  * customer record, one tap sends it there. A number field opens in the
  * invoice footer, not as a pop-up, only when there is no number (a walk-in
  * sale) or when the send failed because of the number; Staff can then save
@@ -44,7 +40,6 @@ export function SendReceiptWhatsApp({ target }: { target: ReceiptWhatsAppTarget 
   const [saveToCustomer, setSaveToCustomer] = useState(true);
   const [customerId, setCustomerId] = useState(target.customerId || '');
   const [sending, setSending] = useState(false);
-  const autoSent = useRef(false);
 
   const customerPhone = target.customerPhone?.trim() || '';
 
@@ -63,7 +58,7 @@ export function SendReceiptWhatsApp({ target }: { target: ReceiptWhatsAppTarget 
   };
 
   /** Sends to `overridePhone`, or to the customer record phone when it is empty. */
-  const sendTo = async (overridePhone?: string, quiet = false): Promise<boolean> => {
+  const sendTo = async (overridePhone?: string): Promise<boolean> => {
     try {
       setSending(true);
       const image = await renderReceiptImage(`receipt_${target.invoiceNumber}.jpg`);
@@ -75,8 +70,7 @@ export function SendReceiptWhatsApp({ target }: { target: ReceiptWhatsAppTarget 
       const message = apiErrorMessage(err, 'Please try again.');
       switch (receiptSendFailure(message)) {
         case 'not_configured':
-          // A shop without Wablas sends no receipts, so the auto-send says nothing.
-          if (!quiet) toastError('WhatsApp is not set up', 'Wablas is not configured for this shop.');
+          toastError('WhatsApp is not set up', 'Wablas is not configured for this shop.');
           break;
         case 'opt_out':
           warning('Receipt not sent', 'The customer opted out of WhatsApp.');
@@ -104,18 +98,6 @@ export function SendReceiptWhatsApp({ target }: { target: ReceiptWhatsAppTarget 
       setSending(false);
     }
   };
-
-  useEffect(() => {
-    // The ref keeps the send to one, also when React runs the effect twice in
-    // development. There is no cleanup: Staff may close the modal while it sends.
-    if (!target.autoSend || !customerPhone || autoSent.current) return;
-    autoSent.current = true;
-    // No phone override, so the backend sends to the customer record phone
-    // and blocks a customer who opted out.
-    void sendTo(undefined, true);
-    // Send once for this receipt.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.autoSend, target.kind, target.id, target.invoiceNumber, customerPhone]);
 
   const onButton = () => {
     if (customerPhone) {

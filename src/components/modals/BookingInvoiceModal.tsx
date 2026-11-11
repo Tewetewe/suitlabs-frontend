@@ -19,11 +19,9 @@ interface BookingInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   invoice: InvoiceData | null;
-  /** Sends the receipt to the customer's WhatsApp on open. Set it right after a payment. */
-  autoSendWhatsApp?: boolean;
 }
 
-export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp = false }: BookingInvoiceModalProps) {
+export function BookingInvoiceModal({ isOpen, onClose, invoice}: BookingInvoiceModalProps) {
   const { error: toastError } = useToast();
 
   if (!isOpen || !invoice) return null;
@@ -91,7 +89,6 @@ export function BookingInvoiceModal({ isOpen, onClose, invoice, autoSendWhatsApp
               id: invoice.booking_id,
               invoiceNumber: invoice.invoice_number,
               customerPhone: invoice.customer_phone,
-              autoSend: autoSendWhatsApp,
             }}
           />
         }

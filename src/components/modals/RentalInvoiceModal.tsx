@@ -22,11 +22,9 @@ interface RentalInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   rental: Rental | null;
-  /** Sends the receipt to the customer's WhatsApp on open. Set it right after a payment. */
-  autoSendWhatsApp?: boolean;
 }
 
-export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp = false }: RentalInvoiceModalProps) {
+export function RentalInvoiceModal({ isOpen, onClose, rental}: RentalInvoiceModalProps) {
   const { error: toastError } = useToast();
 
   if (!isOpen || !rental) return null;
@@ -94,7 +92,6 @@ export function RentalInvoiceModal({ isOpen, onClose, rental, autoSendWhatsApp =
               invoiceNumber,
               customerPhone: rental.customer?.phone,
               customerId: rental.customer?.id,
-              autoSend: autoSendWhatsApp,
             }}
           />
         }
