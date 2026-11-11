@@ -808,7 +808,7 @@ export const CASHIER_GUIDE_HTML = `<nav class="bar">
         <tr><td>Customer asks for no messages</td><td>Tick <b>No WhatsApp</b> on their Customer record. Do not send anything more.</td></tr>
         <tr><td>Customer has No WhatsApp ticked and needs the agreement</td><td>Ask them face to face. Only if they agree, untick it and send.</td></tr>
         <tr><td>Reminders stopped for everyone</td><td>Tell your admin at once. The shop's number may be restricted.</td></tr>
-        <tr><td>Customer asks what the reminder said</td><td>It gives the date, the items, the shop address, and the shop's <b>Google Maps link</b>. The pickup reminder asks the customer to come between 14.00 and 20.00 WITA. The return reminder asks for the items back by 18.00 WITA. Both state the late fee: 50% of the rental for each day late. The fee itself starts only after 20:00.</td></tr>
+        <tr><td>Customer asks what the reminder said</td><td>It gives the date, the items, and the location: Suitlabs Bali with the shop's <b>Google Maps link</b>. Receipts never go out by themselves: Staff tap <b>Send receipt</b> in the invoice window. The pickup reminder asks the customer to come between 14.00 and 20.00 WITA. The return reminder asks for the items back by 18.00 WITA. Both state the late fee: 50% of the rental for each day late. The fee itself starts only after 20:00.</td></tr>
         <tr><td>The reminder shows the wrong address or map link</td><td>Tell your admin. The address and the Google Maps link are edited per shop on <b>Admin &rarr; Branches</b>, not in the message.</td></tr>
       </tbody>
     </table>

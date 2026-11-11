@@ -20,11 +20,9 @@ interface SaleInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   sale: Sale | null;
-  /** Sends the receipt to the customer's WhatsApp on open. Set it right after a payment. */
-  autoSendWhatsApp?: boolean;
 }
 
-export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = false }: SaleInvoiceModalProps) {
+export function SaleInvoiceModal({ isOpen, onClose, sale}: SaleInvoiceModalProps) {
   const { error: toastError } = useToast();
 
   if (!isOpen || !sale) return null;
@@ -84,7 +82,6 @@ export function SaleInvoiceModal({ isOpen, onClose, sale, autoSendWhatsApp = fal
               invoiceNumber,
               customerPhone: sale.customer?.phone,
               customerId: sale.customer?.id,
-              autoSend: autoSendWhatsApp,
             }}
           />
         }

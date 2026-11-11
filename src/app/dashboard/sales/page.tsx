@@ -88,8 +88,6 @@ function SalesPageInner() {
   const [deleting, setDeleting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [saleInvoice, setSaleInvoice] = useState<Sale | null>(null);
-  /** True when the open invoice is for a sale just paid, so it goes to WhatsApp. */
-  const [saleJustPaid, setSaleJustPaid] = useState(false);
   /** Bumped after a sale so the composer remounts empty. */
   const [composerKey, setComposerKey] = useState(0);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -146,7 +144,6 @@ function SalesPageInner() {
       setSubmitting(true);
       const sale = await apiClient.createSale(payload);
       success('Sale recorded', sale.sale_number);
-      setSaleJustPaid(true);
       setSaleInvoice(sale);
       setComposerKey((key) => key + 1);
       await reload();
@@ -180,7 +177,6 @@ function SalesPageInner() {
     setLookingUp(true);
     try {
       const sale = await apiClient.getSaleByBarcode(cleaned);
-      setSaleJustPaid(false);
       setSaleInvoice(sale);
       success('Sale found', sale.sale_number);
     } catch {
@@ -407,7 +403,6 @@ function SalesPageInner() {
       isOpen={!!saleInvoice}
       sale={saleInvoice}
       onClose={() => setSaleInvoice(null)}
-      autoSendWhatsApp={saleJustPaid}
     />
     </>
   );

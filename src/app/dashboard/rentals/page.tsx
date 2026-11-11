@@ -89,8 +89,6 @@ export default function RentalsPage() {
   const [showChangeDatesModal, setShowChangeDatesModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  /** True when the open rental invoice collected a Late Fee or Damage Charge, so it goes to WhatsApp. */
-  const [rentalInvoiceJustPaid, setRentalInvoiceJustPaid] = useState(false);
   /** The full booking invoice after a Pickup collects the remaining amount. */
   const [pickupInvoice, setPickupInvoice] = useState<InvoiceData | null>(null);
   const [showPickupModal, setShowPickupModal] = useState(false);
@@ -897,11 +895,9 @@ export default function RentalsPage() {
           isOpen={showInvoiceModal}
           onClose={() => {
             setShowInvoiceModal(false);
-            setRentalInvoiceJustPaid(false);
             setSelectedRental(null);
           }}
           rental={selectedRental}
-          autoSendWhatsApp={rentalInvoiceJustPaid}
         />
 
         {/* The paid invoice shows at Pickup, but nothing goes to WhatsApp by

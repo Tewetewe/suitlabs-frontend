@@ -271,8 +271,6 @@ export default function BookingsPage() {
   const [dpInput, setDpInput] = useState('');
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
-  /** True when the open invoice is for a payment just taken, so it goes to WhatsApp. */
-  const [invoiceJustPaid, setInvoiceJustPaid] = useState(false);
   const [payingBooking, setPayingBooking] = useState<Booking | null>(null);
   const [paying, setPaying] = useState(false);
   const [payProofFile, setPayProofFile] = useState<File | null>(null);
@@ -949,7 +947,7 @@ export default function BookingsPage() {
           id: issuedId,
           payment_status: issuedStatus,
           paid_amount: paidNow,
-        }, receiptChanged);
+        });
       }
     } catch (e) {
       console.error('Update booking failed', e);
@@ -1088,7 +1086,6 @@ export default function BookingsPage() {
       if (!invoice.items || !Array.isArray(invoice.items)) {
         invoice.items = [];
       }
-      setInvoiceJustPaid(false);
       setInvoiceData(invoice);
       setShowInvoiceModal(true);
     } catch (error) {
@@ -1097,16 +1094,14 @@ export default function BookingsPage() {
     }
   };
 
-  // autoSend sends the receipt to the customer's WhatsApp as soon as it opens.
-  // An edit leaves it off: Staff send the receipt from the modal when they want.
+  // The invoice opens after a payment. Nothing goes to WhatsApp by itself:
+  // Staff send the receipt from the invoice window when the customer wants it.
   const openIssuedInvoice = async (
     booking: { id: string; payment_status: string; paid_amount?: number },
-    autoSend = true,
   ) => {
     try {
       const invoice = await issueBookingInvoice(booking);
       if (!invoice) return;
-      setInvoiceJustPaid(autoSend);
       setInvoiceData(invoice);
       setShowInvoiceModal(true);
     } catch {
@@ -1689,7 +1684,6 @@ export default function BookingsPage() {
             setInvoiceData(null);
           }}
           invoice={invoiceData}
-          autoSendWhatsApp={invoiceJustPaid}
         />
         <ConfirmModal
           isOpen={!!cancellingBooking}
