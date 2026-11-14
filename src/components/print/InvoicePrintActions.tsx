@@ -4,6 +4,7 @@ import React from 'react';
 import { Button } from '@/components/ui/Button';
 import { ThermalPrinterButton } from '@/components/print/ThermalPrinterButton';
 import { SendReceiptWhatsApp, type ReceiptWhatsAppTarget } from '@/components/print/SendReceiptWhatsApp';
+import { useSaveInvoiceImage } from '@/components/print/useSaveInvoiceImage';
 import { useToast } from '@/contexts/ToastContext';
 import type { PrintOutcome } from '@/lib/print-router';
 
@@ -22,6 +23,8 @@ export function InvoicePrintActions({
   whatsapp?: ReceiptWhatsAppTarget;
 }) {
   const { error: toastError, success } = useToast();
+  // The WhatsApp reminder attaches this image.
+  useSaveInvoiceImage(whatsapp);
 
   const runPrint = async (print: () => Promise<PrintOutcome>) => {
     try {
