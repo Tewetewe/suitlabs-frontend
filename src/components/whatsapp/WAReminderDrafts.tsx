@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Copy, ExternalLink, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Copy, ExternalLink, FileImage, RefreshCw } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -68,7 +68,8 @@ export function WAReminderDrafts() {
           <div>
             <CardTitle size="lg">Today&apos;s reminders</CardTitle>
             <p className="mt-1 text-sm text-slate-600">
-              If Wablas does not send, copy each message to WhatsApp on the shop phone, then tap <b>Mark sent</b>.
+              If Wablas does not send, copy each message to WhatsApp on the shop phone, attach the invoice when
+              there is one, then tap <b>Mark sent</b>.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -120,6 +121,14 @@ export function WAReminderDrafts() {
                           Open WhatsApp
                         </Button>
                       </a>
+                      {draft.invoice_url && (
+                        <a href={draft.invoice_url} target="_blank" rel="noreferrer">
+                          <Button size="sm" variant="secondary">
+                            <FileImage className="h-3.5 w-3.5" />
+                            Open invoice
+                          </Button>
+                        </a>
+                      )}
                       <Button
                         size="sm"
                         variant={draft.sent_today ? 'ghost' : 'primary'}

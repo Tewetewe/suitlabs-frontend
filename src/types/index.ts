@@ -197,6 +197,8 @@ export interface WAReminderDraft {
   phone: string;
   language: string;
   message: string;
+  /** Verified invoice image that goes out with the message. Staff attach it when they send by hand. */
+  invoice_url?: string;
   /** Why no reminder goes to this Customer, for example an opt-out. */
   skip_reason?: string;
   /** True when a reminder already went out today, by Wablas or by hand. */
