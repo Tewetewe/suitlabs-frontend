@@ -955,6 +955,18 @@ class APIClient {
     return response.data.data!.receipt;
   }
 
+  /**
+   * Saves a rendered Booking or Rental invoice image with no WhatsApp send.
+   * The pickup and return reminders attach the newest saved image.
+   */
+  async saveInvoiceImage(kind: ReceiptKind, ownerId: string, image: File): Promise<void> {
+    const formData = new FormData();
+    formData.append('file', image);
+    await this.client.post(`/api/v1/receipts/${kind}/${ownerId}/image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  }
+
   async uploadPaymentProof(bookingId: string, file: File): Promise<void> {
     const formData = new FormData();
     formData.append('payment_proof', file);
