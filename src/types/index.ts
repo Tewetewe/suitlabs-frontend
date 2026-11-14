@@ -197,7 +197,7 @@ export interface WAReminderDraft {
   phone: string;
   language: string;
   message: string;
-  /** Verified invoice image that goes out with the message. Staff attach it when they send by hand. */
+  /** Invoice image that the message links to. Empty when the message has no invoice line. */
   invoice_url?: string;
   /** Why no reminder goes to this Customer, for example an opt-out. */
   skip_reason?: string;

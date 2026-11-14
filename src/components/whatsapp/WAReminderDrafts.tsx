@@ -68,8 +68,7 @@ export function WAReminderDrafts() {
           <div>
             <CardTitle size="lg">Today&apos;s reminders</CardTitle>
             <p className="mt-1 text-sm text-slate-600">
-              If Wablas does not send, copy each message to WhatsApp on the shop phone, attach the invoice when
-              there is one, then tap <b>Mark sent</b>.
+              If Wablas does not send, copy each message to WhatsApp on the shop phone, then tap <b>Mark sent</b>.
             </p>
           </div>
           <div className="flex items-center gap-2">
